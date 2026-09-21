@@ -24,6 +24,7 @@ set -euo pipefail
 
 REPO_URL="${JARVIS_REPO_URL:-https://github.com/mizaelcosta123/Projetosmzcosta}"
 OPENJARVIS_URL="${OPENJARVIS_URL:-https://github.com/open-jarvis/OpenJarvis}"
+BRASILTTS_URL="${BRASILTTS_URL:-https://github.com/felipefacundes/brasiltts}"
 ROOT="${JARVIS_HOME:-$HOME/jarvis}"
 VENV="$ROOT/venv"
 PY="$VENV/bin/python"
@@ -52,6 +53,13 @@ say "Installing system packages (this is the slow part)"
 pkg install -y python python-pip git rust clang binutils make libexpat openssl \
   || die "pkg install failed. Run it by hand to see which package is unavailable."
 
+# espeak-ng turns text into phonemes; MBROLA turns phonemes into a voice. With
+# both, the phone speaks Portuguese offline — and the face's mouth follows a
+# measured waveform instead of a guess.
+if ! pkg install -y espeak-ng >/dev/null 2>&1; then
+  warn "espeak-ng unavailable — local speech will not work; the cloud voice still will."
+fi
+
 # Optional, and worth having: without it the device tools cannot reach Android.
 if ! pkg install -y termux-api termux-am >/dev/null 2>&1; then
   warn "termux-api/termux-am not installed — device tools will be unavailable."
@@ -73,6 +81,7 @@ fetch() { # fetch <url> <dir> <label>
 }
 
 fetch "$OPENJARVIS_URL" "$ROOT/openjarvis" "OpenJarvis"
+fetch "$BRASILTTS_URL" "$ROOT/brasiltts" "Brazilian voices"
 fetch "$REPO_URL" "$ROOT/jarvis-mobile-repo" "jarvis-mobile"
 MOBILE="$ROOT/jarvis-mobile-repo/jarvis-mobile"
 [ -d "$MOBILE" ] || die "jarvis-mobile not found at $MOBILE"
@@ -141,7 +150,7 @@ default = "openrouter"
 default_agent = "orchestrator"
 max_turns = 8
 # Device tools need the Termux:API app. Drop any you would rather not grant.
-tools = "think,calculator,shell_exec,file_read,web_search,device_open,device_notify,device_clipboard,device_share,device_status,device_app_launch,set_display_mode"
+tools = "think,calculator,shell_exec,file_read,web_search,speak,device_open,device_notify,device_clipboard,device_share,device_status,device_app_launch,set_display_mode"
 context_from_memory = false
 
 [tools.storage]
@@ -182,6 +191,19 @@ ENVEOF
 fi
 
 # -- interface --------------------------------------------------------------
+
+# Only the voice data is taken: the mbrola binary in those packages is x86_64
+# Arch, while the databases are plain data that works on any architecture.
+say "Installing the Brazilian voices"
+if command -v mbrola >/dev/null 2>&1; then
+  "$PY" -m jarvis_mobile.speech.install_voices --source "$ROOT/brasiltts" \
+    || warn "Voice data did not install; run it by hand to see why."
+else
+  warn "MBROLA is not installed, so local speech is unavailable for now."
+  warn "Build it once for aarch64:  git clone https://github.com/numediart/MBROLA"
+  warn "  cd MBROLA && make && cp Bin/mbrola \$PREFIX/bin/"
+  warn "Then: $PY -m jarvis_mobile.speech.install_voices --source $ROOT/brasiltts"
+fi
 
 say "Installing the interface"
 "$PY" -m jarvis_mobile.deploy --source "$MOBILE/web" || die "Could not install the web interface"

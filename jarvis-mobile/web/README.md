@@ -147,10 +147,20 @@ the distinction that matters most and none of the rest.
 `SynthesisDriver` leaves spread at neutral: it has no audio to measure, and
 inventing a shape would be worse than admitting there isn't one.
 
-OpenJarvis has no TTS HTTP endpoint today: `text_to_speech` is an agent tool
-that writes a file, and `/v1/speech/*` is transcription only. So the browser
-voice is the default, and the analyser path activates the moment a server
-returns audio. Adding that endpoint is the upgrade that makes the sync exact.
+The analyser path is live. The `speak` tool synthesizes a clip, writes it into
+the directory the server already serves, and puts its URL in the tool-call
+event the interface is already listening to — so no new route and no CORS. Two
+backends sit behind it, and they exist together because they fail in opposite
+situations: **brasiltts** runs MBROLA locally and works with no signal at all,
+and **OpenRouter** sounds better when there is signal and a key.
+
+Measured against a real MBROLA clip in Chromium: 290 frames, level spanning
+0.000 to 1.000, 72% of frames carrying sound (the rest are the pauses between
+words), and lip spread ranging −1.00 to +0.51. The mouth is following Brazilian
+Portuguese vowels, not a syllable timer.
+
+The browser voice remains the fallback for a machine with neither backend
+ready.
 
 ## Tuning
 
