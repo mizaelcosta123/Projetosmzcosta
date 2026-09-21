@@ -1,0 +1,282 @@
+/* Dark by necessity, not fashion: the field is luminous dots on black, and a
+   light background would wash it out entirely.
+
+   The governing rule for everything else here: he is the interface. Chrome is
+   dim until touched, and nothing sits where it competes with his face. */
+:root {
+  --bg: #04060b;
+  --ink: #e8eff8;
+  --dim: #6b7d96;
+  --dimmer: #44546b;
+  --accent: #38bdf8;
+  --danger: #fb7185;
+  --sheet: rgba(10, 15, 24, 0.94);
+  --line: rgba(120, 150, 190, 0.18);
+  --gutter: 18px;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#field {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* -- frame ---------------------------------------------------------------- */
+
+.frame {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 10px) var(--gutter) 10px;
+}
+
+.ghost-btn {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--dimmer);
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: color 0.25s var(--ease);
+}
+.ghost-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ghost-btn:hover, .ghost-btn:focus-visible { color: var(--ink); }
+.ghost-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+/* Filled circle while he wears a face — the control shows what tapping returns
+   him to, not what he currently is. */
+.ghost-btn[data-shape="face"] svg circle { fill: currentColor; }
+
+/* The field already says what he is doing: still, breathing, or speaking. This
+   stays for screen readers and appears on screen only when something failed,
+   which the field has no way to express. */
+.state {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--danger);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  pointer-events: none;
+}
+.state[data-state="error"] { opacity: 1; }
+
+/* -- what he said --------------------------------------------------------- */
+
+/* Anchored above the composer and scrimmed, so text stays readable over the
+   field without a panel boxing it in. */
+.caption {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  max-width: 33rem;
+  max-height: 32vh;
+  margin: 0 auto;
+  padding: 18px 4px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  text-align: center;
+  text-wrap: pretty;
+  color: var(--ink);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16px);
+  mask-image: linear-gradient(to bottom, transparent, #000 16px);
+  text-shadow: 0 1px 16px rgba(4, 6, 11, 0.95), 0 0 34px rgba(4, 6, 11, 0.8);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
+}
+.caption:not(:empty) { opacity: 1; transform: none; }
+
+/* -- composer ------------------------------------------------------------- */
+
+/* A hairline, not a bar. It brightens on focus and otherwise recedes. */
+.composer {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: calc(env(safe-area-inset-bottom) + 14px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 33rem;
+  margin: 0 auto;
+  padding-left: 4px;
+  border-bottom: 1px solid var(--line);
+  transition: border-color 0.25s var(--ease);
+}
+.composer:focus-within { border-color: rgba(56, 189, 248, 0.55); }
+
+.composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 13px 4px;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+}
+.composer input::placeholder { color: var(--dimmer); }
+.composer input:focus { outline: none; }
+
+/* The send control earns its contrast: invisible until there is something to
+   send, so an empty composer is just a line. */
+.composer button {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--dimmer);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease), color 0.2s var(--ease);
+}
+.composer button svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.composer[data-ready="true"] button { opacity: 1; transform: none; color: var(--accent); }
+.composer button:focus-visible { opacity: 1; transform: none; outline: 1px solid var(--accent); outline-offset: 2px; }
+.composer button:disabled { opacity: 0.35; cursor: default; }
+
+/* -- settings ------------------------------------------------------------- */
+
+.sheet {
+  width: min(27rem, calc(100vw - 28px));
+  padding: 26px 24px 22px;
+  color: var(--ink);
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  backdrop-filter: blur(22px);
+}
+.sheet::backdrop { background: rgba(4, 6, 11, 0.76); }
+.sheet h2 {
+  margin: 0 0 20px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.sheet label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.sheet input[type="url"],
+.sheet input[type="password"],
+.sheet input[type="text"] {
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 11px 13px;
+  font: 15px/1.4 inherit;
+  color: var(--ink);
+  background: rgba(4, 6, 11, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition: border-color 0.2s var(--ease);
+}
+.sheet input:focus-visible { outline: none; border-color: var(--accent); }
+
+.sheet label.switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.sheet label.switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+.hint {
+  margin: 0 0 20px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+.sheet menu {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+.sheet menu button {
+  padding: 10px 18px;
+  font: 14px/1 inherit;
+  color: var(--bg);
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.sheet menu button.quiet {
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+.sheet menu button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+/* The field's motion is the product and stays; the chrome's decorative
+   transitions are what a reduced-motion preference is actually asking about. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; }
+  .caption { transform: none; }
+}

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jarvis-mobile"
+version = "0.1.0"
+description = "OpenJarvis adapted for Android: Termux device tools, key-only cloud providers, and a web/PWA front end"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = {text = "Apache-2.0"}
+# Deliberately thin. The phone install adds openjarvis separately with its
+# heavy extras stripped (see install-termux.sh), so pinning it here would drag
+# the desktop dependency set onto Android.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jarvis_mobile"]
+# The autoload shim is a top-level module, not part of the package.
+only-include = ["src/jarvis_mobile", "src/jarvis_mobile_autoload.py"]
+sources = ["src"]
+
+# Lands in site-packages root, where Python reads .pth files at startup. This
+# is what makes the `jarvis` CLI see our tools and engines: OpenJarvis has no
+# plugin entry point, so registration happens by import or not at all.
+[tool.hatch.build.targets.wheel.force-include]
+"jarvis_mobile_autoload.pth" = "jarvis_mobile_autoload.pth"
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
