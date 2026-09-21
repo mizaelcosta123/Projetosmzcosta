@@ -127,9 +127,12 @@ voice.addEventListener('end', () => {
  * @param {string} [audioUrl] Server-rendered audio; enables real analysis.
  */
 async function say(text, audioUrl) {
-  if (!settings.speak || !text.trim()) return;
+  if (!settings.speak) return;
+  if (!audioUrl && !text.trim()) return;
   try {
     if (audioUrl) {
+      // Real audio: the analyser measures it, so the mouth is in sync rather
+      // than approximately in step.
       if (!(voice instanceof AnalyserDriver)) voice = adoptDriver(new AnalyserDriver());
       await voice.speak(audioUrl);
     } else if (voice instanceof SynthesisDriver) {
@@ -240,11 +243,24 @@ function watchAgentEvents() {
     } catch {
       return;
     }
-    if (payload.type !== 'tool_call_start') return;
-    const { tool, arguments: args } = payload.data ?? {};
-    if (tool !== 'set_display_mode') return;
-    const mode = args?.mode;
-    if (mode && field.shapes[mode]) applyMode(mode);
+    const data = payload.data ?? {};
+
+    if (payload.type === 'tool_call_start' && data.tool === 'set_display_mode') {
+      const mode = data.arguments?.mode;
+      if (mode && field.shapes[mode]) applyMode(mode);
+      return;
+    }
+
+    // A finished `speak` carries the clip's URL. This is the path that makes
+    // the mouth follow a measured waveform instead of a modelled envelope, so
+    // it takes over from the browser voice whenever it fires.
+    if (payload.type === 'tool_call_end' && data.tool === 'speak' && data.success) {
+      const url = data.metadata?.audio_url;
+      if (url) {
+        setCaption(data.metadata.text || '');
+        say('', url).catch(() => {});
+      }
+    }
   });
 
   // Reconnect with a ceiling: a phone that sleeps or changes network drops the

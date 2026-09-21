@@ -12,6 +12,9 @@ from jarvis_mobile.tools.display import (
     SetDisplayModeTool,
     current_mode,
 )
+from jarvis_mobile.tools.speak import (
+    SpeakTool,
+)
 from jarvis_mobile.tools.termux import (
     TERMUX_TOOL_IDS,
     DeviceAppLaunchTool,
@@ -25,7 +28,7 @@ from jarvis_mobile.tools.termux import (
 )
 
 #: Every tool this package adds, ready to drop into a config.toml `tools` line.
-MOBILE_TOOL_IDS = (*TERMUX_TOOL_IDS, "set_display_mode")
+MOBILE_TOOL_IDS = (*TERMUX_TOOL_IDS, "set_display_mode", "speak")
 
 __all__ = [
     "DISPLAY_MODES",
@@ -38,6 +41,7 @@ __all__ = [
     "DeviceShareTool",
     "DeviceStatusTool",
     "SetDisplayModeTool",
+    "SpeakTool",
     "current_mode",
     "is_termux",
     "termux_api_available",

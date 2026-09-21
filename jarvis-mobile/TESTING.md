@@ -17,6 +17,25 @@ navegador. Os botões **Esfera** e **Rosto** trocam a forma na mão.
 Isso é só a interface, sem cérebro por trás — a voz vem do navegador, não de um
 modelo. Serve para responder "o visual está certo?".
 
+## 1b. Ouvir a voz local — sem chave, sem internet
+
+```bash
+sudo apt install espeak-ng mbrola          # ou: pkg install espeak-ng (Termux)
+git clone https://github.com/felipefacundes/brasiltts ~/brasiltts
+~/jarvis-venv/bin/python -m jarvis_mobile.speech.install_voices --source ~/brasiltts
+```
+
+Três vozes brasileiras: **Angêlô** (masculina), **Maricota** (feminina) e
+**Nordestino**. São vozes MBROLA — alguns megabytes de difones, sem modelo, sem
+GPU, sem rede.
+
+Só a voz da nuvem soa melhor; a local é a que continua funcionando sem sinal. É
+por isso que existem as duas, e o `speak` escolhe a que estiver pronta.
+
+No Termux o `mbrola` precisa ser compilado uma vez para aarch64 — os pacotes do
+brasiltts são Arch x86_64, e só os **dados de voz** de dentro deles é que são
+portáveis. O instalador avisa e mostra o comando.
+
 ## 2. Rodar tudo no computador — uns 5 minutos
 
 Mais rápido de diagnosticar que no celular, e o que quebra aqui quebraria lá.

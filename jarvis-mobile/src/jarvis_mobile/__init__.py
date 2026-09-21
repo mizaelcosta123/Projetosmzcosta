@@ -26,6 +26,10 @@ from jarvis_mobile.providers import (
     register_providers,
     resolve_api_key,
 )
+from jarvis_mobile.speech import (  # noqa: F401  (registration side effect)
+    DEFAULT_VOICE,
+    VOICES,
+)
 from jarvis_mobile.tools import (  # noqa: F401  (registration side effect)
     DISPLAY_MODES,
     MOBILE_TOOL_IDS,
@@ -42,6 +46,7 @@ __version__ = "0.1.0"
 register_providers()
 
 __all__ = [
+    "DEFAULT_VOICE",
     "DISPLAY_MODES",
     "PROVIDERS",
     "TERMUX_TOOL_IDS",
