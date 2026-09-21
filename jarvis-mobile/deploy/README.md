@@ -28,6 +28,31 @@ escutar fora do loopback, que é o comportamento certo para algo na internet
 aberta. Guarde esse valor: é ele que você põe em **Configurações → Chave de
 API** na interface.
 
+### Variáveis de ambiente: o que é obrigatório e o que não é
+
+Só duas coisas fazem o serviço funcionar. O resto é escolha.
+
+| variável | precisa? | para quê |
+|---|---|---|
+| `OPENJARVIS_API_KEY` | **sim** | Sem ela o servidor recusa escutar fora do loopback. O blueprint gera uma (`generateValue: true`) — você não digita, só copia o valor gerado para **Configurações → Chave de API** na interface. |
+| `OPENROUTER_API_KEY` | **sim, na prática** | É o motor. `sync: false` no blueprint, então o campo aparece em branco e fica em branco se você não preencher. A mesma chave atende o `speak` pelo `openrouter_tts`. |
+| `JARVIS_HOST` / `JARVIS_PORT` | já vêm prontas | `0.0.0.0` e `10000`, definidas no `render.yaml`. Não mexa. |
+
+Opcionais, todas lidas se estiverem presentes:
+
+| variável | o que muda |
+|---|---|
+| `TAVILY_API_KEY` | O `web_search` passa a usar o Tavily, com resultados ranqueados. Sem ela a imagem cai no DuckDuckGo, que já funciona porque o `ddgs` está instalado. |
+| `YOUDOTCOM_API_KEY` | Idem, pelo You.com. Sem chave o You.com responde 403 e o fallback entra. |
+| `OPENJARVIS_WEB_SEARCH_ENGINE` | Fixa o buscador (`tavily`, `youcom`, `duckduckgo`) em vez de deixar no `auto`. |
+| `NOUS_API_KEY` · `HUGGINGFACE_API_KEY` (ou `HF_TOKEN`) · `OPENCODE_API_KEY` | Habilitam os outros presets de provedor. Só valem se você trocar o `default_model` / `preferred_engine` no `config.toml` — com o padrão em `openrouter/auto` elas ficam paradas. |
+| `OPENROUTER_HOST` e afins (`<ENGINE_ID>_HOST`) | Aponta um preset para outro endereço. Serve para testar contra um servidor compatível com OpenAI local. |
+
+**O que NÃO colocar:** nada de `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` ou
+`GEMINI_API_KEY` a menos que você queira mesmo esses provedores — o OpenJarvis
+detecta essas variáveis e monta um motor de nuvem adicional, o que só embaralha
+qual caminho atende a conversa.
+
 ### Duas coisas do plano gratuito que vão te surpreender
 
 **Sem disco persistente.** O Render rejeita um bloco `disk:` num serviço

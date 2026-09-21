@@ -35,6 +35,13 @@ PY="$VENV/bin/python"
 CORE_DEPS=(click croniter httpx rich tomlkit websockets pyyaml)
 # `requests` rides with the server set: openjarvis.server.app imports it
 # transitively (connectors.embeddings) and refuses to start without it.
+#
+# `ddgs` is deliberately NOT here even though `web_search` is enabled below. It
+# pulls primp (Rust) and lxml (C), which is the class of dependency this whole
+# install was measured to avoid on Android. Give the search tool a key instead
+# -- TAVILY_API_KEY or YOUDOTCOM_API_KEY -- and it works without either. With
+# neither, `web_search` answers "No search engine available" and the rest of the
+# assistant is unaffected.
 SERVER_DEPS=(fastapi uvicorn python-multipart pydantic requests)
 
 say()  { printf '\n\033[36m==>\033[0m %s\n' "$*"; }

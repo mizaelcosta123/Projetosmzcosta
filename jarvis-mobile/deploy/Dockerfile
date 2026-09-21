@@ -55,9 +55,16 @@ WORKDIR /opt
 # openjarvis.server.app reaches research_router -> research_loop ->
 # hybrid_search -> connectors.embeddings, which imports it at module level. Drop
 # it and `jarvis serve` dies with ModuleNotFoundError before it ever binds.
+#
+# `ddgs` is what makes the enabled `web_search` tool work with no API key: the
+# You.com path answers 403 unkeyed and the fallback is DuckDuckGo, which needs
+# this package or the tool returns "No search engine available". It costs ~29 MB
+# (it pulls primp and lxml, both compiled) and is the reason it is in the image
+# and NOT in install-termux.sh -- primp is Rust, which is the exact trap the
+# phone dependency set was measured to avoid.
 RUN pip install \
         click croniter httpx rich tomlkit websockets pyyaml \
-        fastapi uvicorn python-multipart pydantic requests
+        fastapi uvicorn python-multipart pydantic requests ddgs
 
 # --no-deps is load-bearing: OpenJarvis's declared dependencies pull `datasets`
 # (pyarrow, pandas, numpy) and the `openai` SDK, which is what the minimal set
