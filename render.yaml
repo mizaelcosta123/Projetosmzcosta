@@ -1,0 +1,41 @@
+# Render Blueprint — o backend do Jarvis.
+#
+# O Render procura este arquivo na RAIZ do repositório; em qualquer subpasta ele
+# não é encontrado. Por isso ele mora aqui, e os caminhos abaixo são relativos à
+# raiz.
+#
+# Aplicar em:
+#   https://dashboard.render.com/blueprint/new?repo=https://github.com/mizaelcosta123/Projetosmzcosta
+services:
+  - type: web
+    name: jarvis-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./jarvis-mobile/deploy/Dockerfile
+    # O Dockerfile faz `COPY . /opt/jarvis-mobile`, então o contexto precisa ser
+    # a pasta do pacote — não a raiz, que arrastaria o repositório inteiro.
+    dockerContext: ./jarvis-mobile
+    healthCheckPath: /health
+    # Deploy manual: um push que quebre a imagem não deve derrubar o que está
+    # no ar sem você saber.
+    autoDeploy: false
+    envVars:
+      # O Render roteia para a porta que o serviço escutar; 10000 é o padrão
+      # dele. O Dockerfile lê estas duas variáveis no ENTRYPOINT.
+      - key: JARVIS_PORT
+        value: "10000"
+      - key: JARVIS_HOST
+        value: "0.0.0.0"
+      # sync:false = você digita no painel, nunca fica no repositório.
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # Sem esta chave o servidor recusa escutar fora do loopback — o
+      # comportamento certo para algo exposto na internet. Guarde o valor: é ele
+      # que vai em Configurações → Chave de API na interface.
+      - key: OPENJARVIS_API_KEY
+        generateValue: true
+    disk:
+      name: jarvis-data
+      mountPath: /data
+      sizeGB: 1

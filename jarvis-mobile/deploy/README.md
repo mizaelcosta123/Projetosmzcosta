@@ -18,7 +18,8 @@ https://dashboard.render.com/blueprint/new
   ?repo=https://github.com/mizaelcosta123/Projetosmzcosta
 ```
 
-O `render.yaml` já descreve o serviço. Depois do primeiro deploy, defina
+O `render.yaml` está na **raiz do repositório**, não aqui — o Render só procura
+nesse lugar, e numa subpasta ele responde "blueprint não encontrado". Depois do primeiro deploy, defina
 `OPENROUTER_API_KEY` no painel — **chave em arquivo versionado é chave vazada**,
 por isso ela está marcada `sync: false`.
 
@@ -37,12 +38,31 @@ O compose publica só em `127.0.0.1` de propósito. Para alcançar de fora, ponh
 um proxy reverso com TLS na frente — não troque a porta por `0.0.0.0` e pronto,
 porque aí a chave trafega em claro.
 
-## Não verificado
+## O que foi provado, e o que não
 
-A imagem **não foi construída**: este ambiente não tem daemon Docker. O que está
-provado é a receita dentro dela — a lista de dependências, o `--no-deps`, a
-instalação das vozes e o deploy da interface são exatamente os comandos que
-rodaram neste container e funcionaram. O que falta confirmar é o build em si.
+O servidor foi **subido com exatamente esta configuração** e verificado:
 
-Se falhar, a primeira suspeita é o `pip install` do `pydantic` na imagem slim;
-`apt-get install build-essential` antes dele resolve.
+| | |
+|---|---|
+| Recusa `0.0.0.0` sem `OPENJARVIS_API_KEY` | conferido — é por isso que o blueprint gera uma |
+| `/v1/info` sem chave | HTTP 401 |
+| `/v1/info` com chave | devolve modelo, agente e motor |
+| Interface na mesma origem | HTTP 200 |
+| Conversa de ponta a ponta | mensagem enviada de um navegador real, resposta na legenda, sem erro de console |
+
+**Não provado:** o build da imagem (este ambiente não tem daemon Docker) e a
+chamada de rede ao `openrouter.ai` (bloqueada pelo proxy daqui). A receita
+dentro do Dockerfile é a mesma sequência que rodou neste container; o caminho de
+rede foi provado contra um backend compatível com OpenAI local.
+
+Se o build falhar, a primeira suspeita é o `pip install` do `pydantic` na imagem
+slim — `apt-get install build-essential` antes dele resolve.
+
+## Um detalhe sobre qual motor atende
+
+Com uma chave de OpenRouter presente, o OpenJarvis registra **dois** caminhos
+para ele: o motor de nuvem embutido e o preset que este pacote adiciona. A
+descoberta monta um `multi` e o embutido costuma atender. Funciona igual para
+conversar; a diferença é que o campo `cost_tier` do auto router passa pelo
+preset, não pelo embutido. Se quiser garantir o preset, rode com
+`--engine openrouter`.
