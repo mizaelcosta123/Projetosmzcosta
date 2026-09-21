@@ -25,6 +25,8 @@ const el = {
   model: document.getElementById('model'),
   speak: document.getElementById('speak'),
   voiceMode: document.getElementById('voice-mode'),
+  modelOptions: document.getElementById('model-options'),
+  modelHint: document.getElementById('model-hint'),
   demoBtn: document.getElementById('demo-btn'),
 };
 
@@ -154,6 +156,53 @@ function adoptDriver(next) {
   return next;
 }
 
+
+
+// -- the model picker -------------------------------------------------------
+
+/**
+ * Offer the provider's free models as suggestions.
+ *
+ * The list is written beside this page by `python -m jarvis_mobile.models
+ * --refresh`, so it is fetched from our own origin — no CORS grant and no
+ * extra route on the server. It is deliberately not compiled into the page:
+ * free models arrive and retire constantly, and an ID baked in here would
+ * eventually fail at request time with nothing useful to say.
+ *
+ * Absent file means no suggestions, which is a complete state: the field is a
+ * text input and any ID can still be typed.
+ */
+let modelsLoaded = false;
+
+async function loadModelSuggestions() {
+  if (modelsLoaded) return;
+  modelsLoaded = true;
+
+  const rows = await fetch('./models.json')
+    .then((response) => (response.ok ? response.json() : null))
+    .then((payload) => payload?.free)
+    .catch(() => null);
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    el.modelHint.textContent =
+      'Deixe vazio para usar o modelo do servidor. Para listar os gratuitos: ' +
+      'python -m jarvis_mobile.models --refresh';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const row of rows) {
+    if (!row?.id) continue;
+    const option = document.createElement('option');
+    option.value = row.id;
+    // The context window is the one number that decides a free model's use.
+    const context = row.context ? ` · ${Math.round(row.context / 1000)}K` : '';
+    option.label = `${row.name ?? row.id}${context}`;
+    fragment.append(option);
+  }
+  el.modelOptions.replaceChildren(fragment);
+  el.modelHint.textContent = `${rows.length} modelos gratuitos disponíveis — ou digite qualquer ID.`;
+}
 
 // -- the agent changing how he looks ---------------------------------------
 
@@ -414,6 +463,7 @@ el.menu.addEventListener('click', () => {
   el.model.value = settings.model;
   el.speak.checked = settings.speak;
   el.voiceMode.textContent = describeVoice();
+  loadModelSuggestions();
   el.settings.showModal();
 });
 
@@ -454,6 +504,7 @@ watchAgentEvents();
 // than an input box that can only fail.
 if (!serverOf(settings)) {
   el.voiceMode.textContent = describeVoice();
+  loadModelSuggestions();
   el.settings.showModal();
 }
 

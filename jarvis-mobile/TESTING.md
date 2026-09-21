@@ -95,6 +95,24 @@ Quer fixar um modelo? Ponha o ID dele no campo **Modelo**. A interface pergunta
 ao `/v1/info` qual o servidor está usando, então esse campo só é necessário se
 você quiser outro.
 
+### Escolher entre os modelos gratuitos
+
+```bash
+~/jarvis-venv/bin/python -m jarvis_mobile.models --refresh
+```
+
+Isso busca o catálogo do OpenRouter, fica só com os que custam zero na entrada
+**e** na saída, e escreve a lista ao lado da interface. Eles passam a aparecer
+como sugestões em **Configurações → Modelo** — e o campo continua aceitando
+qualquer ID digitado.
+
+Sem `--refresh` ele só imprime a lista no terminal, sem mexer em nada.
+
+A lista não está fixa no código de propósito: modelos gratuitos entram e saem
+toda semana, e alguns já vêm com data de remoção anunciada. Um ID fixo aqui
+falharia na hora da requisição sem explicar por quê. Rode o comando de novo
+quando quiser uma lista atual.
+
 Confira sua chave antes de instalar qualquer coisa:
 
 ```bash
