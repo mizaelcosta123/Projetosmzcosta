@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jarvis-mobile"
+version = "0.1.0"
+description = "OpenJarvis adapted for Android: Termux device tools, key-only cloud providers, and a web/PWA front end"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = {text = "Apache-2.0"}
+# Deliberately thin. The phone install adds openjarvis separately with its
+# heavy extras stripped (see install-termux.sh), so pinning it here would drag
+# the desktop dependency set onto Android.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jarvis_mobile"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
