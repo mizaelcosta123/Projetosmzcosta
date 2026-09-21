@@ -1,0 +1,38 @@
+# Server config for the container. Everything here can be overridden by an
+# environment variable at run time, which is how a host without a shell does it.
+
+[intelligence]
+# The auto router picks per prompt, which is the only sensible default for a
+# catalogue of hundreds. Set OPENROUTER_API_KEY and it works as-is.
+default_model = "openrouter/auto"
+preferred_engine = "openrouter"
+
+[engine]
+default = "openrouter"
+
+[agent]
+default_agent = "orchestrator"
+max_turns = 8
+# No shell or filesystem tools: a container reachable from the internet should
+# not carry them, and the device tools only mean anything on a phone anyway.
+tools = "think,calculator,web_search,speak,set_display_mode"
+context_from_memory = false
+
+[tools.storage]
+default_backend = "sqlite"
+db_path = "/data/.openjarvis/memory.db"
+
+[learning]
+enabled = false
+
+[telemetry]
+enabled = false
+gpu_metrics = false
+
+[traces]
+enabled = true
+db_path = "/data/.openjarvis/traces.db"
+
+[server]
+host = "0.0.0.0"
+port = 8000

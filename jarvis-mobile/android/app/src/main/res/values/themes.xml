@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window matches the field's own ground, so there is no white flash
+         between launch and the first frame of the canvas. -->
+    <style name="Theme.Jarvis" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/ground</item>
+        <item name="android:statusBarColor">@color/ground</item>
+        <item name="android:navigationBarColor">@color/ground</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

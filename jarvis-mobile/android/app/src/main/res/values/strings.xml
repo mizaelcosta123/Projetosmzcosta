@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Jarvis</string>
+    <string name="offline_title">Não encontrei o Jarvis</string>
+    <string name="offline_body">O servidor não respondeu em %1$s.\n\nAbra o Termux e rode:\njarvis-start</string>
+    <string name="retry">Tentar de novo</string>
+    <string name="change_address">Mudar endereço</string>
+    <string name="address_hint">http://127.0.0.1:8000</string>
+</resources>
