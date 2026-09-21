@@ -321,3 +321,65 @@ html, body {
 .sheet .hint.bad {
   color: var(--danger);
 }
+
+/* -- the provider list ----------------------------------------------------- */
+
+.sheet select {
+  width: 100%;
+  padding: 0.7rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(120, 170, 210, 0.28);
+  background: rgba(10, 18, 30, 0.85);
+  color: inherit;
+  font: inherit;
+}
+
+.sheet .stack {
+  margin: 0.35rem 0 0.2rem;
+  padding: 0.75rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(120, 170, 210, 0.16);
+  background: rgba(8, 14, 24, 0.55);
+}
+
+/* A row of buttons rather than the sheet's footer menu, which is right-aligned
+   and full width. */
+.sheet menu.row {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+}
+
+.sheet menu.row button {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.sheet button.danger {
+  color: #ffb4a8;
+  border-color: rgba(255, 140, 120, 0.35);
+}
+
+/* The one line that says whether this entry can reach the phone. It is the
+   difference between "he opened YouTube" and a convincing sentence about a
+   phone nothing touched, so it is styled to be read, not skimmed. */
+#provider-role {
+  font-weight: 600;
+}
+
+#provider-role[data-reach='device'] {
+  color: #9fe8c0;
+}
+
+#provider-role[data-reach='chat'] {
+  color: #ffd9a0;
+}
+
+#provider-status[data-state='bad'] {
+  color: #ffb4a8;
+}
+
+#provider-status[data-state='good'] {
+  color: #9fe8c0;
+}

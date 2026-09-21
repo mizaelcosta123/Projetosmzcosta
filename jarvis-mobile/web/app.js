@@ -8,8 +8,17 @@
 import { ParticleField } from './particles.js';
 import { AnalyserDriver, SynthesisDriver, createVoiceDriver } from './voice.js';
 
-import { explain, providerMistake } from './diagnose.js';
+import { explain } from './diagnose.js';
 import { LiveSession, WakeWord } from './live.js';
+import {
+  chatUrl,
+  fetchModels,
+  headersFor,
+  makeProvider,
+  modelsUrl,
+  reachesDevice,
+  termuxOllama,
+} from './providers.js';
 
 const SETTINGS_KEY = 'jarvis.settings.v1';
 
@@ -25,9 +34,17 @@ const el = {
   shape: document.getElementById('shape'),
   menu: document.getElementById('menu'),
   settings: document.getElementById('settings'),
-  serverUrl: document.getElementById('server-url'),
-  serverHint: document.getElementById('server-hint'),
-  apiKey: document.getElementById('api-key'),
+  provider: document.getElementById('provider'),
+  providerRole: document.getElementById('provider-role'),
+  providerName: document.getElementById('provider-name'),
+  providerUrl: document.getElementById('provider-url'),
+  providerHint: document.getElementById('provider-hint'),
+  providerKey: document.getElementById('provider-key'),
+  providerTest: document.getElementById('provider-test'),
+  providerRemove: document.getElementById('provider-remove'),
+  providerAdd: document.getElementById('provider-add'),
+  providerOllama: document.getElementById('provider-ollama'),
+  providerStatus: document.getElementById('provider-status'),
   model: document.getElementById('model'),
   speak: document.getElementById('speak'),
   voiceMode: document.getElementById('voice-mode'),
@@ -46,7 +63,7 @@ const el = {
  * should still render the face.
  */
 function loadSettings() {
-  const fallback = { serverUrl: '', apiKey: '', model: '', speak: true, wake: true };
+  const fallback = { providers: [], active: '', model: '', speak: true, wake: true };
   let saved = fallback;
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -54,14 +71,35 @@ function loadSettings() {
   } catch {
     return fallback;
   }
+  return migrate(saved);
+}
 
-  // A provider URL saved before the sheet started refusing them would fail on
-  // every message, forever, on a phone whose owner has no reason to suspect
-  // the stored value. Clearing it here means the page heals itself on the next
-  // visit: blank is same-origin, which is the right answer when this page was
-  // served by the backend.
-  if (providerMistake(saved.serverUrl)) saved.serverUrl = '';
-  return saved;
+/**
+ * Bring a settings object up to the current shape.
+ *
+ * This app shipped with a single `serverUrl`/`apiKey` pair before it could
+ * hold a list. Somebody who set that up once and has been using it since must
+ * not open the sheet one day and find it blank, so the old pair becomes the
+ * first entry in the list and stays selected.
+ */
+function migrate(saved) {
+  if (Array.isArray(saved.providers) && saved.providers.length > 0) return saved;
+
+  const providers = [];
+  if (saved.serverUrl || saved.apiKey) {
+    providers.push(makeProvider({ url: saved.serverUrl ?? '', key: saved.apiKey ?? '' }));
+  } else {
+    // No entry at all means "this same page", which is the right default when
+    // the backend is what served it.
+    providers.push(makeProvider({ name: 'Este servidor', url: '' }));
+  }
+  return {
+    providers,
+    active: providers[0].id,
+    model: saved.model ?? '',
+    speak: saved.speak ?? true,
+    wake: saved.wake ?? true,
+  };
 }
 
 function saveSettings(settings) {
@@ -73,6 +111,15 @@ function saveSettings(settings) {
 }
 
 let settings = loadSettings();
+
+/** The entry currently in use, never undefined: a missing id falls back. */
+function activeProvider() {
+  return (
+    settings.providers.find((entry) => entry.id === settings.active) ??
+    settings.providers[0] ??
+    makeProvider({ url: '' })
+  );
+}
 
 /** @type {LiveSession|null} The open session, or null when nothing listens.
  *
@@ -86,7 +133,11 @@ let wake = null;
 // Served from the OpenJarvis server itself? Then it is the default target and
 // no one has to type a URL.
 const sameOrigin = location.protocol.startsWith('http') ? location.origin : '';
-const serverOf = (s) => (s.serverUrl || sameOrigin).replace(/\/+$/, '');
+const serverOf = (s) => {
+  const entry =
+    s.providers?.find((row) => row.id === s.active) ?? s.providers?.[0] ?? null;
+  return (entry?.url || sameOrigin).replace(/\/+$/, '');
+};
 
 // -- the field --------------------------------------------------------------
 
@@ -195,52 +246,6 @@ function adoptDriver(next) {
 
 
 
-// -- the model picker -------------------------------------------------------
-
-/**
- * Offer the provider's free models as suggestions.
- *
- * The list is written beside this page by `python -m jarvis_mobile.models
- * --refresh`, so it is fetched from our own origin — no CORS grant and no
- * extra route on the server. It is deliberately not compiled into the page:
- * free models arrive and retire constantly, and an ID baked in here would
- * eventually fail at request time with nothing useful to say.
- *
- * Absent file means no suggestions, which is a complete state: the field is a
- * text input and any ID can still be typed.
- */
-let modelsLoaded = false;
-
-async function loadModelSuggestions() {
-  if (modelsLoaded) return;
-  modelsLoaded = true;
-
-  const rows = await fetch('./models.json')
-    .then((response) => (response.ok ? response.json() : null))
-    .then((payload) => payload?.free)
-    .catch(() => null);
-
-  if (!Array.isArray(rows) || rows.length === 0) {
-    el.modelHint.textContent =
-      'Deixe vazio para usar o modelo do servidor. Para listar os gratuitos: ' +
-      'python -m jarvis_mobile.models --refresh';
-    return;
-  }
-
-  const fragment = document.createDocumentFragment();
-  for (const row of rows) {
-    if (!row?.id) continue;
-    const option = document.createElement('option');
-    option.value = row.id;
-    // The context window is the one number that decides a free model's use.
-    const context = row.context ? ` · ${Math.round(row.context / 1000)}K` : '';
-    option.label = `${row.name ?? row.id}${context}`;
-    fragment.append(option);
-  }
-  el.modelOptions.replaceChildren(fragment);
-  el.modelHint.textContent = `${rows.length} modelos gratuitos disponíveis — ou digite qualquer ID.`;
-}
-
 // -- the agent changing how he looks ---------------------------------------
 
 /**
@@ -258,8 +263,9 @@ function watchAgentEvents() {
   if (!base) return;
 
   const url = base.replace(/^http/, 'ws') + '/v1/agents/events';
-  const protocols = settings.apiKey
-    ? ['openjarvis.auth.v1', 'openjarvis.key.b64url.' + base64url(settings.apiKey)]
+  const key = activeProvider().key;
+  const protocols = key
+    ? ['openjarvis.auth.v1', 'openjarvis.key.b64url.' + base64url(key)]
     : [];
 
   let socket;
@@ -411,7 +417,7 @@ async function streamReply(text, onChunk) {
   if (!base) throw new Error('Nenhum servidor configurado.');
 
   const headers = { 'Content-Type': 'application/json' };
-  if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
+  Object.assign(headers, headersFor(activeProvider()));
 
   const body = {
     model: await modelFor(base, headers),
@@ -671,25 +677,152 @@ el.shape.addEventListener('click', () => {
   applyMode(field.targetShape === 'face' ? 'orb' : 'face');
 });
 
+// -- the settings sheet -----------------------------------------------------
+
+/** Redraw the picker from the saved list, keeping the active one selected. */
+function renderProviders() {
+  const fragment = document.createDocumentFragment();
+  for (const entry of settings.providers) {
+    const option = document.createElement('option');
+    option.value = entry.id;
+    option.textContent = entry.name;
+    option.selected = entry.id === settings.active;
+    fragment.append(option);
+  }
+  el.provider.replaceChildren(fragment);
+  showProvider();
+}
+
+/** Fill the edit fields from the selected entry, and say what it can do. */
+function showProvider() {
+  const entry = activeProvider();
+  el.providerName.value = entry.name;
+  el.providerUrl.value = entry.url;
+  el.providerKey.value = entry.key;
+  setProviderStatus('');
+
+  // The one sentence that prevents the worst misunderstanding this app has:
+  // adding a provider key and then asking him to open an app, which produces a
+  // confident answer about a phone nothing ever touched.
+  if (reachesDevice(entry)) {
+    el.providerRole.dataset.reach = 'device';
+    el.providerRole.textContent = 'Jarvis — pensa e alcança o seu aparelho.';
+  } else {
+    el.providerRole.dataset.reach = 'chat';
+    el.providerRole.textContent =
+      'Provedor — só responde. Nada aqui chega ao Termux: as ferramentas de ' +
+      'aparelho vivem no Jarvis, não no modelo.';
+  }
+
+  // Only entry left? Removing it would leave nothing to talk to.
+  el.providerRemove.disabled = settings.providers.length < 2;
+}
+
+function setProviderStatus(text, state = '') {
+  el.providerStatus.textContent = text;
+  el.providerStatus.dataset.state = state;
+}
+
+/** Read the edit fields back into the selected entry. */
+function collectProvider() {
+  const entry = activeProvider();
+  const updated = makeProvider({
+    id: entry.id,
+    name: el.providerName.value,
+    url: el.providerUrl.value,
+    key: el.providerKey.value,
+  });
+  settings.providers = settings.providers.map((row) => (row.id === entry.id ? updated : row));
+  return updated;
+}
+
+el.provider.addEventListener('change', () => {
+  collectProvider();
+  settings.active = el.provider.value;
+  // A model ID belongs to the provider that listed it, so changing provider
+  // cannot keep the old one: "qwen2.5:1.5b" means nothing to OpenRouter.
+  settings.model = '';
+  el.model.value = '';
+  el.modelOptions.replaceChildren();
+  resolvedModel = '';
+  showProvider();
+});
+
+el.providerAdd.addEventListener('click', () => {
+  collectProvider();
+  const entry = makeProvider({ name: 'Novo', url: '' });
+  settings.providers = [...settings.providers, entry];
+  settings.active = entry.id;
+  renderProviders();
+  el.providerUrl.focus();
+});
+
+el.providerOllama.addEventListener('click', () => {
+  collectProvider();
+  const entry = termuxOllama();
+  const already = settings.providers.find((row) => row.url === entry.url);
+  if (already) {
+    settings.active = already.id;
+  } else {
+    settings.providers = [...settings.providers, entry];
+    settings.active = entry.id;
+  }
+  renderProviders();
+  loadModels();
+});
+
+el.providerRemove.addEventListener('click', () => {
+  if (settings.providers.length < 2) return;
+  const gone = activeProvider().id;
+  settings.providers = settings.providers.filter((row) => row.id !== gone);
+  settings.active = settings.providers[0].id;
+  renderProviders();
+});
+
+el.providerTest.addEventListener('click', () => loadModels());
+
+/**
+ * Ask the selected provider what it can run, and fill the picker.
+ *
+ * Typing a model ID by hand still works — the field is an input with a
+ * datalist, not a select — because a brand-new model is always reachable
+ * before any catalogue has heard of it.
+ */
+async function loadModels() {
+  const entry = collectProvider();
+  setProviderStatus('Perguntando…');
+  el.providerTest.disabled = true;
+  try {
+    const models = await fetchModels(entry);
+    const fragment = document.createDocumentFragment();
+    for (const id of models) {
+      const option = document.createElement('option');
+      option.value = id;
+      fragment.append(option);
+    }
+    el.modelOptions.replaceChildren(fragment);
+    setProviderStatus(`${models.length} modelos. Escolha um, ou deixe vazio.`, 'good');
+    el.modelHint.textContent = 'Vazio usa o padrão do servidor. Qualquer ID pode ser digitado.';
+    // One model and nothing chosen? Choosing for them is the obvious kindness.
+    if (models.length === 1 && !el.model.value) el.model.value = models[0];
+  } catch (error) {
+    setProviderStatus(String(error.message || error), 'bad');
+  } finally {
+    el.providerTest.disabled = false;
+  }
+}
+
 el.menu.addEventListener('click', () => {
-  resetServerHint();
-  el.serverUrl.value = settings.serverUrl;
-  el.apiKey.value = settings.apiKey;
+  renderProviders();
+  // Asking on open is what "the models load by themselves" means. It is not
+  // awaited: the sheet must be usable while a slow or dead endpoint times out.
+  loadModels();
   el.model.value = settings.model;
   el.speak.checked = settings.speak;
   el.wake.checked = settings.wake;
   el.voiceMode.textContent = describeVoice();
-  loadModelSuggestions();
   el.settings.showModal();
 });
-
-const DEFAULT_SERVER_HINT = el.serverHint.textContent;
-
-/** Put the field's explanation back to its neutral wording. */
-function resetServerHint() {
-  el.serverHint.textContent = DEFAULT_SERVER_HINT;
-  el.serverHint.classList.remove('bad');
-}
 
 el.settings.addEventListener('close', () => {
   if (el.settings.returnValue === 'demo') {
@@ -697,23 +830,9 @@ el.settings.addEventListener('close', () => {
     return;
   }
 
-  // A provider URL here cannot work — the browser blocks it — so the sheet
-  // comes back with the reason instead of saving a setting that only fails
-  // later, in a message that points nowhere.
-  const provider = providerMistake(el.serverUrl.value);
-  if (provider) {
-    el.serverHint.textContent =
-      `${provider} é o provedor de modelos, não o Jarvis. Deixe vazio para usar ` +
-      'este mesmo servidor; a chave do provedor já está configurada no backend.';
-    el.serverHint.classList.add('bad');
-    // showModal() inside the close handler is too early for the dialog.
-    setTimeout(() => el.settings.showModal(), 0);
-    return;
-  }
-
+  collectProvider();
   settings = {
-    serverUrl: el.serverUrl.value.trim(),
-    apiKey: el.apiKey.value.trim(),
+    ...settings,
     model: el.model.value.trim(),
     speak: el.speak.checked,
     wake: el.wake.checked,
@@ -745,7 +864,7 @@ watchAgentEvents();
 // than an input box that can only fail.
 if (!serverOf(settings)) {
   el.voiceMode.textContent = describeVoice();
-  loadModelSuggestions();
+  renderProviders();
   el.settings.showModal();
 }
 
