@@ -126,10 +126,12 @@ else
 # put in default_model.
 
 [intelligence]
-# OpenRouter and Hugging Face namespace their model IDs as "vendor/model", and
-# the catalogue runs to hundreds — so name the one you want rather than hoping
-# a default fits. Ask the assistant to list its models if you are unsure.
-default_model = "anthropic/claude-sonnet-4.5"
+# OpenRouter's auto router picks a model per prompt, from what the community
+# actually spends on for that kind of task — which is the right default for a
+# catalogue of hundreds where no single fixed choice fits everything. You are
+# billed at the routed model's rate. Name a specific "vendor/model" here
+# instead if you would rather pin one.
+default_model = "openrouter/auto"
 preferred_engine = "openrouter"
 
 [engine]

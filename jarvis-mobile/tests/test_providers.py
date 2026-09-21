@@ -100,3 +100,16 @@ def test_build_engine_honours_a_custom_base_url():
         "openrouter", api_key="k", base_url="https://proxy.internal/api"
     )
     assert engine._host == "https://proxy.internal/api"
+
+
+def test_openrouter_suggests_the_auto_router():
+    """A catalogue of hundreds has no sensible fixed default; auto is the default."""
+    openrouter = providers.get_provider("openrouter")
+    assert "openrouter/auto" in openrouter.suggested_models
+
+
+def test_the_openrouter_note_explains_what_auto_costs():
+    """Routing to an arbitrary model is a billing surprise unless it is stated."""
+    note = providers.get_provider("openrouter").notes
+    assert "openrouter/auto" in note
+    assert "cost_tier" in note

@@ -35,7 +35,7 @@ python3 -m venv ~/jarvis-venv
 ~/jarvis-venv/bin/python -m jarvis_mobile.deploy --source ~/mzc/jarvis-mobile/web
 
 export OPENROUTER_API_KEY="sua-chave"
-~/jarvis-venv/bin/jarvis serve --engine openrouter --model anthropic/claude-sonnet-4.5
+~/jarvis-venv/bin/jarvis serve --engine openrouter --model openrouter/auto
 ```
 
 Abra <http://127.0.0.1:8000>. Se a chave estiver certa, ele responde de verdade.
@@ -77,14 +77,23 @@ uma lista de frases.
 | `Another server is already registered` | O OpenJarvis guarda um PID único. Encerre o processo anterior antes de subir outro. |
 | A página abre mas o chat dá erro | Se você abriu a interface de outra origem que não o próprio servidor, é CORS. Use a que o `jarvis serve` entrega. |
 | Pedi o rosto e nada aconteceu | A troca chega por WebSocket em `/v1/agents/events`. Se o modelo não chamou a tool, o botão de forma continua funcionando. |
-| `O servidor não disse qual modelo usar` | Preencha **Configurações → Modelo**. Com OpenRouter os IDs são `vendor/modelo`, por exemplo `anthropic/claude-sonnet-4.5`. |
+| `O servidor não disse qual modelo usar` | Preencha **Configurações → Modelo** com `openrouter/auto`. |
 
 ### Sobre o OpenRouter
 
-Os IDs são namespaced (`vendor/modelo`) e o catálogo tem centenas de entradas,
-então vale nomear o que você quer em vez de esperar um padrão servir. A
-interface pergunta ao `/v1/info` qual modelo o servidor está configurado para
-usar — o campo **Modelo** só é necessário se você quiser outro.
+Use **`openrouter/auto`**. O catálogo tem centenas de entradas com IDs
+namespaced (`vendor/modelo`), e nenhuma escolha fixa serve para tudo — o auto
+router decide por prompt, com base no que a comunidade de fato gasta para aquele
+tipo de tarefa numa janela de sete dias. Você é cobrado pela tarifa do modelo
+que ele escolher, e o campo `cost_tier` (`low`, `medium`, `high`, `xhigh`,
+`max`; padrão `low`) limita o quanto isso pode custar.
+
+Numa conversa de vários turnos ele mantém o mesmo modelo enquanto aquele
+continuar sendo uma boa escolha, então não troca no meio do raciocínio.
+
+Quer fixar um modelo? Ponha o ID dele no campo **Modelo**. A interface pergunta
+ao `/v1/info` qual o servidor está usando, então esse campo só é necessário se
+você quiser outro.
 
 Confira sua chave antes de instalar qualquer coisa:
 

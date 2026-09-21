@@ -73,9 +73,20 @@ PROVIDERS: dict[str, Provider] = {
             base_url="https://openrouter.ai/api",
             key_env=("OPENROUTER_API_KEY",),
             console_url="https://openrouter.ai/keys",
+            # 'openrouter/auto' first, and it is the one to default to: a
+            # catalogue this size has no sensible fixed default, and the auto
+            # router picks per prompt from what the community actually spends
+            # on for that kind of task over a trailing week. A multi-turn
+            # conversation sticks to one model while it stays a leading choice,
+            # so switching does not happen mid-thought.
+            suggested_models=("openrouter/auto",),
             notes=(
                 "Aggregator: one key reaches hundreds of models from many "
-                "vendors. Model ids are namespaced, e.g. 'vendor/model'."
+                "vendors. Model ids are namespaced, e.g. 'vendor/model'. Use "
+                "'openrouter/auto' to let it choose per prompt; billing "
+                "matches whatever model it routes to, and the 'cost_tier' "
+                "request field (low, medium, high, xhigh, max; default low) "
+                "caps how expensive that may be."
             ),
         ),
         Provider(
