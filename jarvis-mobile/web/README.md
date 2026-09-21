@@ -128,6 +128,25 @@ level.
   envelope that restarts on each word. It lands on the words and looks alive,
   but it is an approximation, not the waveform.
 
+### Lip shape
+
+Loudness alone opens the jaw, which means every sound at a given volume
+produces the same mouth — "mmm" and "aah" become indistinguishable. So the
+analyser also reads the spectrum and estimates lip spread from where the energy
+sits: a vowel's first two formants move with the jaw and the tongue, so the
+balance between the F1 band (300–1000 Hz) and the F2 band (1300–2800 Hz) tracks
+whether the lips are spread or rounded. "ee" pushes F2 high while F1 stays low;
+"oo" keeps both low; "ah" opens F1. Sibilance (4–8 kHz) nudges it spread.
+
+That is a three-band heuristic, not a model of the vocal tract. The honest
+comparison is [FaceFormer](https://github.com/EvelynFan/FaceFormer), which
+predicts 15,069 numbers per frame — a full 3D mesh — from raw audio through
+wav2vec 2.0. This costs one array read per frame and runs on a phone; it buys
+the distinction that matters most and none of the rest.
+
+`SynthesisDriver` leaves spread at neutral: it has no audio to measure, and
+inventing a shape would be worse than admitting there isn't one.
+
 OpenJarvis has no TTS HTTP endpoint today: `text_to_speech` is an agent tool
 that writes a file, and `/v1/speech/*` is transcription only. So the browser
 voice is the default, and the analyser path activates the moment a server

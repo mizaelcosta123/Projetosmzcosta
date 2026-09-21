@@ -20,11 +20,21 @@ export class VoiceDriver extends EventTarget {
   constructor() {
     super();
     this.level = 0;
+    /**
+     * Lip shape, -1 (rounded, as in "oo") through 0 (neutral) to +1 (spread,
+     * as in "ee").
+     *
+     * Loudness alone cannot tell those apart: "mmm" and "aah" at the same
+     * volume produce an identical mouth. Drivers that can measure the spectrum
+     * set this; the rest leave it at neutral.
+     */
+    this.spread = 0;
     this.speaking = false;
   }
 
   _emitEnd() {
     this.level = 0;
+    this.spread = 0;
     this.speaking = false;
     this.dispatchEvent(new Event('end'));
   }
@@ -57,6 +67,7 @@ export class AnalyserDriver extends VoiceDriver {
     this.analyser.fftSize = 1024;
     this.analyser.smoothingTimeConstant = 0.6;
     this.buffer = new Uint8Array(this.analyser.fftSize);
+    this.spectrum = new Uint8Array(this.analyser.frequencyBinCount);
     this.analyser.connect(this.context.destination);
   }
 
@@ -99,9 +110,22 @@ export class AnalyserDriver extends VoiceDriver {
     this._emitEnd();
   }
 
-  /** Root-mean-square of the current window, normalised to roughly 0..1. */
+  /**
+   * Measure loudness and lip shape from the current window.
+   *
+   * Loudness is the waveform's RMS. Lip shape comes from where the energy
+   * sits: a vowel's first two formants move with the jaw and the tongue, so
+   * the balance between the F1 band and the F2 band tracks whether the lips
+   * are spread or rounded. "ee" pushes F2 high while F1 stays low; "oo" keeps
+   * both low; "ah" opens F1. It is a heuristic over three bands, not a model
+   * of the vocal tract — but it separates mouth shapes that loudness alone
+   * renders identical, and it costs one array read per frame.
+   *
+   * @returns {number} The loudness, 0..1. Lip shape lands in `this.spread`.
+   */
   sample() {
     if (!this.speaking || !this.analyser) return 0;
+
     this.analyser.getByteTimeDomainData(this.buffer);
     let sum = 0;
     for (let i = 0; i < this.buffer.length; i += 1) {
@@ -112,7 +136,37 @@ export class AnalyserDriver extends VoiceDriver {
     // Speech RMS rarely passes ~0.35, so scale it up before clamping;
     // otherwise the field would barely move on ordinary speech.
     this.level = Math.min(1, rms * 3.2);
+
+    this.analyser.getByteFrequencyData(this.spectrum);
+    this.spread = this._lipShape();
     return this.level;
+  }
+
+  /** Energy in a frequency band, averaged over its bins. */
+  _band(lowHz, highHz) {
+    // Bin n covers n * sampleRate / fftSize Hz.
+    const perBin = this.context.sampleRate / this.analyser.fftSize;
+    const first = Math.max(0, Math.floor(lowHz / perBin));
+    const last = Math.min(this.spectrum.length - 1, Math.ceil(highHz / perBin));
+    let total = 0;
+    for (let i = first; i <= last; i += 1) total += this.spectrum[i];
+    return total / Math.max(1, last - first + 1);
+  }
+
+  /** Lip spread from the formant bands, -1 (rounded) to +1 (spread). */
+  _lipShape() {
+    const f1 = this._band(300, 1000);    // jaw height
+    const f2 = this._band(1300, 2800);   // tongue position and lip spread
+    const sibilance = this._band(4000, 8000); // s, sh: lips part, teeth show
+
+    // Below this the frame is silence or a closed consonant; reporting a shape
+    // for it would make the mouth twitch between words.
+    if (f1 + f2 < 12) return 0;
+
+    const balance = (f2 - f1) / (f1 + f2);
+    // Sibilants read as slightly spread even though their F2 is not dominant.
+    const hiss = Math.min(0.35, sibilance / 255);
+    return Math.max(-1, Math.min(1, balance * 1.6 + hiss));
   }
 
   stop() {

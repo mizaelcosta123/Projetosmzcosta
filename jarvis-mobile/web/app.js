@@ -103,7 +103,9 @@ function followVoice() {
     field.setLevel(0);
     return;
   }
-  field.setLevel(voice.sample());
+  // sample() returns loudness and leaves the lip shape on the driver; passing
+  // both is what lets the mouth tell one vowel from another.
+  field.setLevel(voice.sample(), voice.spread);
   requestAnimationFrame(followVoice);
 }
 

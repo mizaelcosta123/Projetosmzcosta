@@ -103,6 +103,8 @@ export class ParticleField {
 
     this.level = 0;
     this.smoothLevel = 0;
+    this.spread = 0;
+    this.smoothSpread = 0;
     this.thinking = false;
     this.thinkLevel = 0;
     this.time = 0;
@@ -144,12 +146,20 @@ export class ParticleField {
   }
 
   /**
-   * Feed the field the voice's current loudness.
+   * Feed the field the voice's current loudness, and optionally its lip shape.
+   *
+   * Loudness alone opens the jaw, which makes every sound at a given volume
+   * look the same. Lip spread is what separates them: a mouth saying "ee" is
+   * wide and nearly closed, one saying "oo" is small and round, and loudness
+   * cannot tell you which. Drivers that measure the spectrum supply it; the
+   * rest pass nothing and the mouth stays at its neutral width.
    *
    * @param {number} level 0 for silence, 1 for peak.
+   * @param {number} [spread] -1 rounded, 0 neutral, +1 spread.
    */
-  setLevel(level) {
+  setLevel(level, spread = 0) {
     this.level = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
+    this.spread = Number.isFinite(spread) ? Math.min(1, Math.max(-1, spread)) : 0;
   }
 
   /**
@@ -182,6 +192,9 @@ export class ParticleField {
     const rising = this.level > this.smoothLevel;
     this.smoothLevel += (this.level - this.smoothLevel) * (rising ? 0.45 : 0.08);
     if (this.smoothLevel < 0.002) this.smoothLevel = 0;
+    // Lips are muscle: they cannot snap between shapes the way a spectrum
+    // reading can, and an unsmoothed spread reads as a flutter.
+    this.smoothSpread += (this.spread - this.smoothSpread) * 0.22;
 
     if (this.morph < 1) this.morph = Math.min(1, this.morph + step * 1.5);
 
@@ -204,6 +217,11 @@ export class ParticleField {
     const { x, y, vx, vy, phase, ctx } = this;
     const scale = this.scale;
     const spread = 1 + energy * 0.05 + breath * 0.035;
+    // How wide the mouth is held, and how wide the opening between the lips
+    // is: "ee" stretches both, "oo" purses both.
+    const lips = this.smoothSpread * energy;
+    const lipWidth = 1 + lips * 0.2;
+    const apertureWidth = 1 + lips * 0.32;
 
     // Buckets let the renderer set fillStyle a handful of times per frame
     // instead of once per particle, which is the difference between smooth and
@@ -231,6 +249,16 @@ export class ParticleField {
 
         if (role === ROLE.MOUTH && drop < 0.05) {
           goalY -= energy * 0.045; // the upper lip lifts a little
+        }
+        if (lips !== 0) {
+          const near = blended
+            ? from.aperture[i] + (to.aperture[i] - from.aperture[i]) * m
+            : to.aperture[i];
+          if (near < 3) {
+            // Full effect on the lips, fading to nothing by the cheeks.
+            const weight = 1 - near / 3;
+            goalX *= 1 + (lipWidth - 1) * weight;
+          }
         }
         if (role === ROLE.HALO) {
           // Loose points drift further out as he speaks.
@@ -265,8 +293,9 @@ export class ParticleField {
           ? from.aperture[i] + (to.aperture[i] - from.aperture[i]) * m
           : to.aperture[i];
         // The opening grows with the voice; anything within it is inside his
-        // mouth, and drawing it would fill the cavity back in.
-        if (inside < energy) continue;
+        // mouth, and drawing it would fill the cavity back in. A rounded
+        // vowel narrows the opening even at the same loudness.
+        if (inside < energy / apertureWidth) continue;
       }
 
       const speed = Math.abs(vx[i]) + Math.abs(vy[i]);
