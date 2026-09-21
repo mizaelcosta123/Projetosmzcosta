@@ -14,26 +14,62 @@ reinstall replaces the package directory and takes the interface with it.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 from pathlib import Path
 
-__all__ = ["default_source", "deploy", "main", "static_dir"]
+__all__ = [
+    "REQUIRED",
+    "assets",
+    "broken_imports",
+    "default_source",
+    "deploy",
+    "main",
+    "static_dir",
+]
 
-#: Files the interface needs. Anything else in the source directory is skipped,
-#: so notes and tests never end up served to the browser.
-ASSETS = (
-    "index.html",
-    "styles.css",
-    "app.js",
-    "particles.js",
-    "face.js",
-    "orb.js",
-    "voice.js",
-    "manifest.webmanifest",
-    "icon-192.png",
-    "icon-512.png",
-)
+#: The entry points. Without one of these the source is not the interface, so
+#: a missing one is an error rather than a warning.
+REQUIRED = ("index.html", "app.js", "styles.css")
+
+#: Not served. Everything *else* in the directory travels, and that direction
+#: is the point.
+#:
+#: This used to be an allowlist of ten filenames. Adding an eleventh module and
+#: forgetting the list shipped a page whose first `import` 404s — and a browser
+#: that cannot resolve a module aborts the whole graph, so the result is not a
+#: degraded page but a black one, with the HTML still rendering. It happened.
+SKIPPED = frozenset({"README.md"})
+
+#: `import … from './x.js'` and `export … from './x.js'`, which is how one
+#: module in this interface reaches another.
+_LOCAL_IMPORT = re.compile(r"""(?:^|\n)\s*(?:import|export)[^'"\n]*from\s*['"](\./[^'"]+)['"]""")
+
+
+def assets(source: Path) -> list[str]:
+    """Every file in the interface directory that should be served."""
+    return sorted(
+        entry.name
+        for entry in Path(source).iterdir()
+        if entry.is_file() and entry.name not in SKIPPED and not entry.name.startswith(".")
+    )
+
+
+def broken_imports(directory: Path) -> list[str]:
+    """Local modules a script imports that are not beside it.
+
+    Cheap to check, impossible to notice by looking, and catastrophic in the
+    browser — which is the combination that earns a check of its own.
+    """
+    directory = Path(directory)
+    missing = []
+    for script in sorted(directory.glob("*.js")):
+        text = script.read_text(encoding="utf-8", errors="replace")
+        for reference in _LOCAL_IMPORT.findall(text):
+            if not (directory / reference.removeprefix("./")).is_file():
+                missing.append(f"{script.name} -> {reference}")
+    return missing
 
 
 def static_dir() -> Path:
@@ -65,15 +101,16 @@ def deploy(source: Path, target: Path | None = None) -> list[Path]:
     Raises
     ------
     FileNotFoundError
-        If the source is not an interface directory, or a required asset is
-        missing — better than serving a half-copied page that fails in the
-        browser with a blank screen.
+        If the source is not an interface directory, if an entry point is
+        missing, or if the copied page would import a module that is not
+        there — all three are a blank screen in the browser, and a build that
+        stops is better than one that ships that.
     """
     source = Path(source)
     if not (source / "index.html").is_file():
         raise FileNotFoundError(f"{source} does not look like the web interface")
 
-    missing = [name for name in ASSETS if not (source / name).is_file()]
+    missing = [name for name in REQUIRED if not (source / name).is_file()]
     if missing:
         raise FileNotFoundError(f"{source} is missing: {', '.join(missing)}")
 
@@ -81,9 +118,18 @@ def deploy(source: Path, target: Path | None = None) -> list[Path]:
     destination.mkdir(parents=True, exist_ok=True)
 
     written = []
-    for name in ASSETS:
+    for name in assets(source):
         shutil.copy2(source / name, destination / name)
         written.append(destination / name)
+
+    # After copying, not before: what matters is whether the *served* page can
+    # resolve its own modules. Failing the install is right — a build that
+    # ships a black screen is worse than one that stops.
+    unresolved = broken_imports(destination)
+    if unresolved:
+        raise FileNotFoundError(
+            f"{destination} would serve a page whose imports 404: {', '.join(unresolved)}"
+        )
     return written
 
 

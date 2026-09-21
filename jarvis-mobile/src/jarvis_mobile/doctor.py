@@ -97,7 +97,7 @@ def _server_deps() -> Row:
 
 def _interface() -> Row:
     try:
-        from jarvis_mobile.deploy import ASSETS, static_dir
+        from jarvis_mobile.deploy import REQUIRED, broken_imports, static_dir
     except ImportError:
         return (SKIP, "interface", "skipped — jarvis_mobile is not importable")
 
@@ -111,9 +111,23 @@ def _interface() -> Row:
                 "--source <checkout>/jarvis-mobile/web"
             ),
         )
-    missing = [name for name in ASSETS if not (where / name).is_file()]
+    missing = [name for name in REQUIRED if not (where / name).is_file()]
     if missing:
         return (WARN, "interface", f"incomplete — missing {', '.join(missing[:3])}")
+
+    # A module the page imports but that was never copied is not a degraded
+    # interface, it is a black screen: the browser aborts the whole module
+    # graph. Worth its own line, because nothing else makes it visible.
+    unresolved = broken_imports(where)
+    if unresolved:
+        return (
+            FAIL,
+            "interface",
+            (
+                f"a script imports something that is not there ({unresolved[0]}). "
+                "The page will render black. Re-run: python -m jarvis_mobile.deploy"
+            ),
+        )
     return (OK, "interface", f"deployed to {where}")
 
 
