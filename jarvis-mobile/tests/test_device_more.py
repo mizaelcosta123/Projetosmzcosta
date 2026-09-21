@@ -388,3 +388,46 @@ def test_and_with_allow_ui_the_tap_arrives():
     result, ran = _tap_through(Policy(allow_ui=True))
     assert ran == [["input", "tap", "200", "240"]]
     assert result.success, result.content
+
+
+# -- the advice that would have been wrong -----------------------------------
+
+
+def test_a_stale_runner_is_told_to_update_not_to_pass_a_flag(monkeypatch):
+    """What the user actually hit.
+
+    Their runner predated --allow-ui, so argparse rejected the flag outright.
+    Telling them to pass it would have sent them hunting for a typo that was
+    not there. The copy is the problem, so the copy is what the message names.
+    """
+    from jarvis_mobile.tools import device_more
+
+    class _Stale:
+        linked = True
+        runner_is_stale = True
+
+    monkeypatch.setattr(device_more, "hub", _Stale())
+    result = _run_tool("device_tap", x=1, y=2)
+
+    assert not result.success
+    assert "antes das ferramentas de tela" in result.content
+    assert "curl -O" in result.content
+    assert "--allow-ui" in result.content, "still say what to pass once it is current"
+
+
+def test_a_current_runner_gets_the_ordinary_advice(monkeypatch):
+    from jarvis_mobile.tools import device_more
+    from jarvis_mobile.tools import termux as termux_module
+
+    class _Current:
+        linked = True
+        runner_is_stale = False
+
+    monkeypatch.setattr(device_more, "hub", _Current())
+    monkeypatch.setattr(termux_module, "device_reachable", lambda: True)
+    monkeypatch.setattr(termux_module, "_which", lambda name: None)
+
+    result = _run_tool("device_tap", x=1, y=2)
+    assert not result.success
+    assert "antes das ferramentas de tela" not in result.content
+    assert "--allow-ui" in result.content

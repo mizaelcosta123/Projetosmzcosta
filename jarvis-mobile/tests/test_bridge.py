@@ -170,6 +170,10 @@ def test_the_hub_reports_what_the_phone_said_it_has():
         "linked": True,
         "name": "pixel",
         "shell": False,
+        "ui": False,
+        # _hello() predates the screen tools, which is exactly what a runner
+        # somebody downloaded weeks ago looks like on the wire.
+        "stale": True,
         "binaries": ["termux-open-url"],
     }
 
@@ -488,6 +492,8 @@ def test_the_status_endpoint_tracks_the_link():
         "linked": True,
         "name": "pixel",
         "shell": True,
+        "ui": True,  # a free shell covers the screen binaries too
+        "stale": True,
         "binaries": ["termux-battery-status"],
     }
     assert client.get(STATUS_PATH).json() == {"linked": False}, "a disconnect must show"
@@ -574,3 +580,101 @@ def test_the_websocket_was_never_the_broken_half():
         ws.send_text(_json.dumps(_hello(binaries=["termux-battery-status"])))
         ws.receive_text()
         assert client.get(STATUS_PATH).json()["linked"] is True
+
+
+# -- the stale copy on somebody's phone --------------------------------------
+
+
+def test_a_runner_that_never_heard_of_the_screen_is_flagged():
+    """The failure this catches, which cost a real evening.
+
+    The runner is one file people download once and keep. A copy saved before
+    the screen tools existed links perfectly happily — same protocol version,
+    same helpers — and then refuses `input tap` citing a flag its own --help
+    has never heard of. Nothing on either side said "your copy is old".
+    """
+    hub = DeviceHub()
+
+    async def scenario():
+        hub.attach(_noop_send, _hello(binaries=["termux-open-url"]))
+
+    asyncio.run(scenario())
+    assert hub.runner_is_stale
+    assert hub.describe()["stale"] is True
+
+
+def test_a_current_runner_is_not_flagged_even_with_the_screen_off():
+    """Reporting `ui: false` is a current runner saying no, not an old one."""
+    hub = DeviceHub()
+
+    async def scenario():
+        hub.attach(_noop_send, _hello(ui=False))
+
+    asyncio.run(scenario())
+    assert not hub.runner_is_stale
+    assert hub.allows_ui is False
+
+
+def test_allow_ui_is_reported_through():
+    hub = DeviceHub()
+
+    async def scenario():
+        hub.attach(_noop_send, _hello(ui=True))
+
+    asyncio.run(scenario())
+    assert hub.allows_ui is True
+    assert not hub.runner_is_stale
+
+
+def test_a_free_shell_covers_the_screen_too():
+    """--allow-shell already runs anything, so it cannot be the narrower one."""
+    hub = DeviceHub()
+
+    async def scenario():
+        hub.attach(_noop_send, _hello(shell=True, ui=False))
+
+    asyncio.run(scenario())
+    assert hub.allows_ui is True
+
+
+# -- handing out the runner --------------------------------------------------
+
+
+def test_the_server_serves_the_runner_it_was_built_with():
+    """One command to update, and no branch or raw URL to get right.
+
+    Until this existed the only way to refresh the file on a phone was to find
+    it in the repository again, which is how a copy gets to be weeks old.
+    """
+    pytest.importorskip("fastapi")
+    import fastapi
+    from fastapi.testclient import TestClient
+
+    from jarvis_mobile.bridge.routes import RUNNER_PATH, create_device_router
+
+    app = fastapi.FastAPI()
+    app.include_router(create_device_router("segredo", DeviceHub()))
+    response = TestClient(app).get(RUNNER_PATH)
+
+    assert response.status_code == 200
+    body = response.text
+    # It has to be the real thing, not a stub or a redirect to one.
+    assert "def main(" in body
+    assert "--allow-ui" in body, "the served copy must know the current flags"
+    assert "runner.py" in response.headers.get("content-disposition", "")
+
+
+def test_the_served_runner_is_byte_for_byte_the_module():
+    from pathlib import Path
+
+    import fastapi
+    from fastapi.testclient import TestClient
+
+    from jarvis_mobile.bridge import runner as runner_module
+    from jarvis_mobile.bridge.routes import RUNNER_PATH, create_device_router
+
+    app = fastapi.FastAPI()
+    app.include_router(create_device_router("segredo", DeviceHub()))
+    served = TestClient(app).get(RUNNER_PATH).text
+
+    assert served == Path(runner_module.__file__).read_text(encoding="utf-8")

@@ -31,6 +31,8 @@ from openjarvis.core.registry import ToolRegistry
 from openjarvis.core.types import ToolResult
 from openjarvis.tools._stubs import ToolSpec
 
+from jarvis_mobile.bridge import hub
+from jarvis_mobile.bridge.hub import RUNNER_PATH
 from jarvis_mobile.tools.termux import _TIMEOUT, _TermuxTool, _which
 
 __all__ = ["DEVICE_MORE_TOOL_IDS", "UI_BINARIES", "DevicePermissionsTool"]
@@ -205,6 +207,16 @@ class _UITool(_TermuxTool):
     """
 
     def _preflight(self) -> ToolResult | None:
+        # An old runner is the first thing to rule out, and the only one whose
+        # advice would otherwise be actively wrong: telling somebody to pass
+        # --allow-ui to a copy of the runner that has never heard of the flag
+        # sends them looking for a typo that is not there.
+        if hub.linked and hub.runner_is_stale:
+            return self._fail(
+                f"{self.tool_id} não funciona com o runner que está no seu "
+                "celular: ele é de antes das ferramentas de tela. Atualize e "
+                f"reinicie com --allow-ui:\n\n    curl -O <este-servidor>{RUNNER_PATH}"
+            )
         problem = super()._preflight()
         if problem is None:
             return None
