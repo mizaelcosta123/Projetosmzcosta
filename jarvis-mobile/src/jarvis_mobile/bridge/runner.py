@@ -40,7 +40,15 @@ import urllib.request
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-__all__ = ["ALWAYS_ALLOWED", "Policy", "diagnose", "main", "open_socket", "run_command"]
+__all__ = [
+    "ALWAYS_ALLOWED",
+    "UI_BINARIES",
+    "Policy",
+    "diagnose",
+    "main",
+    "open_socket",
+    "run_command",
+]
 
 logger = logging.getLogger("jarvis.device")
 
@@ -58,12 +66,43 @@ TERMUX_HELPERS = (
     "termux-share",
     "termux-battery-status",
     "termux-am",
+    "termux-camera-info",
+    "termux-camera-photo",
+    "termux-contact-list",
+    "termux-location",
+    "termux-sensor",
+    "termux-telephony-deviceinfo",
+    "termux-torch",
+    "termux-volume",
+    "termux-wifi-connectioninfo",
     "am",
+    "ls",
+    "sh",
+    # Android's own, reported so the server knows whether the screen tools can
+    # work at all — being present is not the same as being allowed, which is
+    # what --allow-ui decides.
+    "input",
+    "screencap",
+    "uiautomator",
+    "wm",
+    "pm",
 )
 
 #: Runnable without --allow-shell. Every ``termux-*`` helper is covered by the
-#: prefix rule; these two are what device_read needs and nothing else.
-ALWAYS_ALLOWED = frozenset({"am", "cat", "head"})
+#: prefix rule; these are what device_read and the directory listing need.
+ALWAYS_ALLOWED = frozenset({"am", "cat", "head", "ls"})
+
+#: Android's own binaries, which drive the screen: tapping, typing, reading the
+#: view hierarchy, taking a screenshot.
+#:
+#: Deliberately behind their own flag rather than in ALWAYS_ALLOWED. `input
+#: tap` can press any button on the phone, including "confirm payment", so
+#: turning it on is a decision, and like --allow-shell it is one that has to be
+#: typed here rather than granted by whoever holds the backend's token.
+#: --allow-ui is the narrower half of that bargain: the screen, and nothing else.
+UI_BINARIES = frozenset(
+    {"input", "screencap", "uiautomator", "wm", "pm", "settings", "dumpsys", "cmd", "monkey"}
+)
 
 #: Per stream. A command that prints a database should fail usefully rather
 #: than push megabytes through a phone's uplink.
@@ -76,8 +115,15 @@ _BACKOFF_MAX = 60.0
 class Policy:
     """What this device is willing to run."""
 
-    def __init__(self, *, allow_shell: bool = False, extra: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        *,
+        allow_shell: bool = False,
+        allow_ui: bool = False,
+        extra: tuple[str, ...] = (),
+    ) -> None:
         self.allow_shell = allow_shell
+        self.allow_ui = allow_ui
         self.extra = frozenset(extra)
 
     def refuse(self, argv: list[str]) -> str:
@@ -91,6 +137,15 @@ class Policy:
             return ""
         if program in ALWAYS_ALLOWED or program in self.extra:
             return ""
+        if program in UI_BINARIES:
+            if self.allow_ui:
+                return ""
+            return (
+                f"'{program}' controla a tela deste aparelho — tocar, digitar, "
+                "ler o que está nela. Para liberar, reinicie o runner com "
+                "--allow-ui. Isso deixa o assistente apertar qualquer botão do "
+                "celular, então é uma decisão sua e tem que ser digitada aqui."
+            )
         return (
             f"'{program}' não está liberado neste aparelho. "
             "Rode o runner com --allow-shell para permitir comandos livres, "
@@ -100,8 +155,12 @@ class Policy:
     def describe(self) -> str:
         if self.allow_shell:
             return "shell livre"
-        extra = f" + {', '.join(sorted(self.extra))}" if self.extra else ""
-        return f"somente termux-* e {', '.join(sorted(ALWAYS_ALLOWED))}{extra}"
+        parts = [f"somente termux-* e {', '.join(sorted(ALWAYS_ALLOWED))}"]
+        if self.allow_ui:
+            parts.append("+ controle de tela")
+        if self.extra:
+            parts.append(f"+ {', '.join(sorted(self.extra))}")
+        return " ".join(parts)
 
 
 def available_helpers() -> list[str]:
@@ -270,6 +329,7 @@ async def _connect_once(url: str, token: str, name: str, policy: Policy) -> None
                     "device": name,
                     "binaries": available_helpers(),
                     "shell": policy.allow_shell,
+                    "ui": policy.allow_ui,
                 }
             )
         )
@@ -326,6 +386,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Permitir qualquer comando, não só os helpers do Termux.",
     )
     parser.add_argument(
+        "--allow-ui",
+        action="store_true",
+        help="Permitir controlar a tela: tocar, digitar, ler o que está nela.",
+    )
+    parser.add_argument(
         "--allow",
         action="append",
         default=[],
@@ -355,7 +420,11 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    policy = Policy(allow_shell=args.allow_shell, extra=tuple(args.allow))
+    policy = Policy(
+        allow_shell=args.allow_shell,
+        allow_ui=args.allow_ui,
+        extra=tuple(args.allow),
+    )
     helpers = available_helpers()
     logger.info("aparelho %s — %d helpers, %s", args.name, len(helpers), policy.describe())
     if not helpers:

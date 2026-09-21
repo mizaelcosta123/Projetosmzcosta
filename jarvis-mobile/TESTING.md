@@ -228,6 +228,71 @@ mais ele confunde qual tool usar. A tabela diz quem sabe tentar, não quem
 acerta sempre. Em caso de dúvida, pergunte ao seu próprio Ollama — é o que o
 doctor faz, e ele responde sobre os modelos que você realmente tem.
 
+## Permissões do Android
+
+Este é o problema que mais custa tempo, porque o Termux:API **não avisa** que
+uma permissão foi negada. `termux-camera-photo` sem permissão de câmera falha do
+jeito que um comando quebrado falha, e o assistente repassa isso para alguém que
+não tem motivo nenhum para suspeitar que existe uma tela de ajustes envolvida.
+
+Pergunte a ele: *"confira as permissões do meu aparelho"*. A ferramenta
+`device_permissions` testa as seis de uma vez e diz o que falta:
+
+```
+Liberado: storage, contacts.
+
+Falta liberar:
+  · Câmera: Ajustes do Android → Apps → Termux:API → Permissões → Câmera → Permitir.
+  · Microfone: Ajustes do Android → Apps → Termux:API → Permissões → Microfone → Permitir.
+```
+
+Só **armazenamento** se resolve por comando:
+
+```bash
+termux-setup-storage    # e aceite o pedido que aparece
+```
+
+As outras cinco são a mesma tela de ajustes do Android, uma por permissão. Não
+há comando: o Android exige o toque de uma pessoa.
+
+| permissão | para quê |
+|---|---|
+| Armazenamento | ler e escrever arquivos, salvar fotos e capturas de tela |
+| Câmera | `device_photo`, `device_camera_info` |
+| Microfone | gravar áudio |
+| Localização | `device_location` |
+| Contatos | `device_contacts` |
+| SMS | ler a lista de mensagens |
+
+## Controlar a tela
+
+As ferramentas de tela — tocar, arrastar, digitar, ler o que está nela, tirar
+print — usam `input`, `uiautomator` e `screencap`, que são binários do **Android**
+e não helpers do Termux. O runner recusa isso por padrão, de propósito: `input
+tap` consegue apertar qualquer botão do seu celular, inclusive os que gastam
+dinheiro.
+
+```bash
+python runner.py --url … --token … --allow-ui
+```
+
+`--allow-ui` libera a tela e nada mais; `--allow-shell` libera tudo. Como as
+duas, isso tem que ser digitado **no celular** — quem tem o token do backend não
+consegue se conceder isso sozinho.
+
+Com a tela liberada, o fluxo que faz ele operar qualquer app é:
+
+```
+device_ui_dump   → o que está na tela, com as coordenadas
+device_tap       → toca no que ele encontrou
+device_type      → escreve no campo
+device_ui_dump   → confere o que mudou
+```
+
+`device_screenshot` salva a imagem, mas **ele não consegue vê-la** — o resultado
+de uma ferramenta é texto. Para saber o que está na tela, quem serve é o
+`device_ui_dump`; a captura serve para você ver, via `device_open`.
+
 ## Quando algo falha
 
 | Sintoma | O que é |
