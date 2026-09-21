@@ -78,9 +78,31 @@ RUN git clone --depth 1 --branch "${OPENJARVIS_REF}" \
 RUN git clone --depth 1 --branch "${BRASILTTS_REF}" \
         https://github.com/felipefacundes/brasiltts brasiltts
 
-COPY . /opt/jarvis-mobile
-RUN pip install /opt/jarvis-mobile \
-    && python -m jarvis_mobile.deploy --source /opt/jarvis-mobile/web
+# The context is taken whole and the package root is located inside it, rather
+# than each COPY trusting a fixed layout.
+#
+# The reason is concrete: Render resolved `COPY deploy/config.toml` against the
+# repository root even with `dockerContext` naming this folder, and the build
+# died on the last COPY after every install had already run. Locating the
+# package here costs one `if` and works whether the context is jarvis-mobile/ or
+# the repository root — and if it is neither, it says so with a listing instead
+# of a checksum error.
+COPY . /opt/ctx
+RUN set -eux; \
+    if [ -f /opt/ctx/pyproject.toml ]; then \
+        src=/opt/ctx; \
+    elif [ -f /opt/ctx/jarvis-mobile/pyproject.toml ]; then \
+        src=/opt/ctx/jarvis-mobile; \
+    else \
+        echo 'No jarvis-mobile package in the build context. It holds:' >&2; \
+        ls -A /opt/ctx >&2; \
+        exit 1; \
+    fi; \
+    mv "$src" /opt/jarvis-mobile; \
+    pip install /opt/jarvis-mobile; \
+    python -m jarvis_mobile.deploy --source /opt/jarvis-mobile/web; \
+    mkdir -p /data/.openjarvis; \
+    cp /opt/jarvis-mobile/deploy/config.toml /data/.openjarvis/config.toml
 
 # The voice data is written whether or not MBROLA itself made it into the
 # image, so that installing the binary later is enough. Non-fatal for the same
@@ -88,14 +110,12 @@ RUN pip install /opt/jarvis-mobile \
 RUN python -m jarvis_mobile.speech.install_voices --source /opt/brasiltts \
     || echo 'WARNING: Brazilian voice data not installed'
 
-# Config and state live under /data. No VOLUME is declared here on purpose:
-# whether that path survives a restart is the platform's decision, not the
-# image's — Render mounts a disk there on a paid plan and ignores it on the
-# free one, and compose mounts a named volume. Declaring it would only create
-# anonymous volumes nobody asked for.
+# Config and state live under /data, written by the step above. No VOLUME is
+# declared here on purpose: whether that path survives a restart is the
+# platform's decision, not the image's — Render mounts a disk there on a paid
+# plan and ignores it on the free one, and compose mounts a named volume.
+# Declaring it would only create anonymous volumes nobody asked for.
 ENV HOME=/data
-RUN mkdir -p /data/.openjarvis
-COPY deploy/config.toml /data/.openjarvis/config.toml
 
 # Loopback would make the server unreachable from outside the container.
 ENV JARVIS_HOST=0.0.0.0 \

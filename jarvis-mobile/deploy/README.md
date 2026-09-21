@@ -91,17 +91,19 @@ O servidor foi **subido com exatamente esta configuração** e verificado:
 | Interface na mesma origem | HTTP 200 |
 | Conversa de ponta a ponta | mensagem enviada de um navegador real, resposta na legenda, sem erro de console |
 
-**Não provado:** o build da imagem em si (o registro do Docker Hub é bloqueado
-pelo proxy deste ambiente) e a chamada de rede real ao `openrouter.ai` (idem).
-O que *foi* provado é a receita: cada passo do Dockerfile — os dois `git clone`
-rasos, o `pip install --no-deps` do OpenJarvis, a instalação deste pacote, as
-vozes e a interface — rodou aqui num virtualenv limpo com exatamente a lista de
-dependências da imagem, e o `jarvis serve` resultante respondeu. O caminho de
-rede foi provado contra um backend compatível com OpenAI local.
+A imagem foi **construída e executada de verdade**, nos dois contextos de build
+possíveis (esta pasta e a raiz do repositório). O contêiner respondeu 200 em
+`/health`, serviu a interface, e o `HEALTHCHECK` do próprio Docker o marcou
+`healthy`.
 
-### Dois erros que já derrubaram este deploy
+**Não provado:** a camada `apt` (o mirror do Debian é bloqueado pelo proxy deste
+ambiente, então o build de teste parte de uma base que já traz o `git`) e a
+chamada de rede real ao `openrouter.ai` — essa foi provada contra um backend
+compatível com OpenAI local.
 
-Ambos corrigidos; ficam registrados porque nenhum dos dois aparece no código.
+### Três erros que já derrubaram este deploy
+
+Todos corrigidos; ficam registrados porque nenhum dos três aparece no código.
 
 1. **`Unable to locate package mbrola`.** O MBROLA mora na área `contrib` do
    Debian — o sintetizador é livre, as vozes de origem não são —, e a imagem
@@ -115,6 +117,13 @@ Ambos corrigidos; ficam registrados porque nenhum dos dois aparece no código.
    `requests` a CLI funciona, o `jarvis serve` morre antes de abrir a porta, e o
    Render mostra apenas *Failed deploy*. Vale igual no Termux — está no
    `install-termux.sh` e o `jarvis-doctor` avisa.
+3. **`"/deploy/config.toml": not found`** ao calcular o checksum de um `COPY`.
+   O Render resolveu o caminho contra a **raiz do repositório** mesmo com
+   `dockerContext` apontando para esta pasta, e o build só morreu no último
+   `COPY`, depois de todos os `pip install`. O Dockerfile deixou de confiar no
+   layout: copia o contexto inteiro e **procura** a raiz do pacote lá dentro, o
+   que funciona nos dois casos. Se não achar em nenhum, imprime o que o contexto
+   tem, em vez de um erro de checksum.
 
 ## Um detalhe sobre qual motor atende
 
