@@ -88,6 +88,53 @@ uma lista de frases.
 
 ---
 
+## Quando nada funciona
+
+```bash
+~/jarvis-venv/bin/python -m jarvis_mobile.doctor --engine ollama
+```
+
+Percorre a cadeia inteira **na ordem em que as coisas quebram** e aponta a
+primeira falha, com o comando que resolve. "Não conecta de jeito nenhum" vira um
+alvo específico.
+
+```
+[  ok  ] OpenJarvis          importable
+[  ok  ] plugin              4 providers, 8 tools registered
+[  ok  ] server deps         fastapi, uvicorn, pydantic present
+[  ok  ] interface           deployed to …/server/static
+[ fail ] ollama · http://localhost:11434   unreachable …
+```
+
+A ordem importa: um pacote que não carrega explica todas as falhas depois dele,
+então consertar a primeira costuma apagar o resto.
+
+### Usando Ollama em vez da nuvem
+
+```bash
+~/jarvis-venv/bin/jarvis serve --engine ollama --model qwen2.5-coder:1.5b
+```
+
+**Se o Ollama roda em outra máquina que não a do Jarvis** — o caso silencioso —
+duas coisas precisam ser verdade:
+
+```bash
+# na máquina do Ollama:
+OLLAMA_HOST=0.0.0.0 ollama serve
+
+# onde o Jarvis roda:
+export OLLAMA_HOST=http://192.168.x.x:11434
+```
+
+Sem o `0.0.0.0`, o Ollama só aceita conexões da própria máquina, e do celular
+parece que ele simplesmente não existe.
+
+Uma ressalva sobre o `qwen2.5-coder:1.5b`: com 1,5 bilhão de parâmetros e
+treinado para código, ele conversa, mas chamar tools de forma confiável é outra
+exigência. O agente `orchestrator` depende disso — se ele não trocar de rosto
+quando você pedir, é o modelo, não a interface. Um modelo maior com tool calling
+resolve; os botões continuam funcionando enquanto isso.
+
 ## Quando algo falha
 
 | Sintoma | O que é |
