@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 
+from jarvis_mobile.bridge import Ran as _Ran
 from jarvis_mobile.tools import termux
 
 
@@ -32,11 +33,49 @@ def calls(monkeypatch):
 # -- environment guards -----------------------------------------------------
 
 
-def test_tools_refuse_to_run_outside_termux(monkeypatch):
+def test_tools_refuse_when_no_device_is_reachable(monkeypatch):
+    """Off the phone and with nothing linked, the tool says where to look."""
     monkeypatch.setattr(termux, "is_termux", lambda: False)
+    monkeypatch.setattr(type(termux.hub), "linked", property(lambda self: False))
     result = termux.DeviceStatusTool().execute()
     assert not result.success
-    assert "not running under Termux" in result.content
+    assert "runner" in result.content
+    assert "Termux" in result.content
+
+
+def test_tools_reach_the_bridge_when_a_device_is_linked(monkeypatch):
+    """Off the phone but linked, the same argv goes down the socket instead."""
+    sent = {}
+
+    def fake_run(argv, *, stdin=None, timeout=20.0):
+        sent["argv"] = list(argv)
+        sent["stdin"] = stdin
+        return _Ran(0, '{"percentage": 80, "status": "CHARGING"}', "")
+
+    monkeypatch.setattr(termux, "is_termux", lambda: False)
+    monkeypatch.setattr(type(termux.hub), "linked", property(lambda self: True))
+    monkeypatch.setattr(termux.hub, "has_binary", lambda name: True)
+    monkeypatch.setattr(termux.hub, "run", fake_run)
+
+    result = termux.DeviceStatusTool().execute()
+    assert result.success, result.content
+    assert sent["argv"] == ["termux-battery-status"]
+    assert "80%" in result.content
+
+
+def test_a_dropped_device_is_reported_as_such(monkeypatch):
+    def drop(argv, *, stdin=None, timeout=20.0):
+        raise termux.DeviceOffline("o aparelho desconectou")
+
+    monkeypatch.setattr(termux, "is_termux", lambda: False)
+    monkeypatch.setattr(type(termux.hub), "linked", property(lambda self: True))
+    monkeypatch.setattr(termux.hub, "has_binary", lambda name: True)
+    monkeypatch.setattr(termux.hub, "run", drop)
+
+    result = termux.DeviceStatusTool().execute()
+    assert not result.success
+    assert "desconectou" in result.content
+    assert result.metadata.get("device") is True
 
 
 def test_missing_termux_api_names_the_package(monkeypatch):
@@ -215,17 +254,25 @@ def test_timeout_is_reported_as_a_tool_failure(on_termux, monkeypatch):
 # -- specs ------------------------------------------------------------------
 
 
-def test_side_effecting_tools_require_confirmation():
+def test_no_device_tool_uses_the_fail_closed_confirmation_flag():
+    """A regression guard, not a preference.
+
+    OpenJarvis's executor refuses a tool marked ``requires_confirmation`` when
+    no interactive callback exists, and ``jarvis serve`` never has one. Three
+    of these tools carried the flag and were therefore dead in the web UI —
+    the product — while reading as guarded. The gate that works lives in the
+    bridge runner, on the phone. Setting this back to True silently disables
+    the tool, so the test pins it.
+    """
     for tool_cls in (
         termux.DeviceOpenTool,
         termux.DeviceAppLaunchTool,
         termux.DeviceShareTool,
+        termux.DeviceNotifyTool,
+        termux.DeviceClipboardTool,
+        termux.DeviceStatusTool,
     ):
-        assert tool_cls().spec.requires_confirmation is True, tool_cls.__name__
-
-
-def test_read_only_tools_do_not_require_confirmation():
-    assert termux.DeviceStatusTool().spec.requires_confirmation is False
+        assert tool_cls().spec.requires_confirmation is False, tool_cls.__name__
 
 
 def test_registered_ids_match_the_declared_list():

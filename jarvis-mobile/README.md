@@ -13,9 +13,10 @@ registries, so this package registers into them and leaves upstream untouched �
 
 | Piece | What it gives you |
 |---|---|
-| **Device tools** | `device_open`, `device_app_launch`, `device_notify`, `device_clipboard`, `device_share`, `device_status` — the phone's apps, share sheet, clipboard and notification shade as agent tools |
+| **Device tools** | `device_open`, `device_app_launch`, `device_notify`, `device_clipboard`, `device_share`, `device_status`, `device_shell`, `device_read` — the phone's apps, share sheet, clipboard, notification shade, shell and files as agent tools |
+| **Device bridge** | The same tools from a backend that is *not* on the phone: a one-file runner in Termux dials out over a WebSocket and the agent's calls travel down it. Works behind NAT, opens no port, and the phone decides what it will run |
 | **Provider presets** | OpenRouter, Nous Portal (Hermes), Hugging Face, OpenCode Zen — endpoints pre-filled, you supply only a key. Any other OpenAI-compatible URL still works |
-| **Shell** | Nothing to add: OpenJarvis's `shell_exec` runs `subprocess` locally, so inside Termux it already *is* your phone's shell |
+| **Shell** | Inside Termux, OpenJarvis's own `shell_exec` already *is* your phone's shell. From anywhere else, `device_shell` is — over the bridge |
 
 ## Why this shape
 

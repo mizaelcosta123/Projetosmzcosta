@@ -35,6 +35,13 @@ services:
       # que vai em Configurações → Chave de API na interface.
       - key: OPENJARVIS_API_KEY
         generateValue: true
+      # O segredo da ponte com o celular. Separado do de cima de propósito: um
+      # deixa conversar com o assistente, este deixa alcançar o aparelho.
+      # Enquanto ninguém conectar um runner, as ferramentas de aparelho só
+      # respondem "nenhum aparelho conectado" — deixar esta chave aqui não
+      # expõe nada sozinho.
+      - key: JARVIS_DEVICE_TOKEN
+        generateValue: true
 
 # SEM DISCO, E ISSO É DE PROPÓSITO
 #

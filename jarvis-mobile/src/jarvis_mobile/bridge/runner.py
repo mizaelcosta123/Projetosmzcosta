@@ -1,0 +1,318 @@
+"""The phone side of the bridge: dial out, run what is allowed, report back.
+
+Run this in Termux. It holds a WebSocket open to the backend and executes the
+commands that come down it, which is what lets a Jarvis on a public URL reach
+a phone that can accept no inbound connection at all.
+
+    pip install websockets
+    python -m jarvis_mobile.bridge.runner \\
+        --url https://jarvis-backend-xxxx.onrender.com \\
+        --token "$JARVIS_DEVICE_TOKEN"
+
+**This file is the security boundary.** The backend sends argv; nothing on the
+other side can decide what this process is willing to run. So the policy lives
+here, on the device, where its owner can read it:
+
+* by default only the ``termux-*`` helpers and the two commands the file tools
+  need — enough for every device tool, and not a shell;
+* ``--allow-shell`` lifts that, and must be typed on the phone. A stolen token
+  cannot add it.
+
+Deliberately importable with nothing but ``websockets``: the whole point of a
+cloud backend is that the phone does not carry the assistant, so the runner
+must not drag OpenJarvis onto it.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import contextlib
+import json
+import logging
+import os
+import platform
+import shutil
+import subprocess
+import sys
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
+
+__all__ = ["ALWAYS_ALLOWED", "Policy", "main", "run_command"]
+
+logger = logging.getLogger("jarvis.device")
+
+PROTOCOL_VERSION = 1
+DEVICE_PATH = "/v1/device/link"
+
+#: Helpers the device tools drive. Probed once so the server knows what this
+#: phone can actually do instead of failing halfway through a tool call.
+TERMUX_HELPERS = (
+    "termux-open",
+    "termux-open-url",
+    "termux-notification",
+    "termux-clipboard-get",
+    "termux-clipboard-set",
+    "termux-share",
+    "termux-battery-status",
+    "termux-am",
+    "am",
+)
+
+#: Runnable without --allow-shell. Every ``termux-*`` helper is covered by the
+#: prefix rule; these two are what device_read needs and nothing else.
+ALWAYS_ALLOWED = frozenset({"am", "cat", "head"})
+
+#: Per stream. A command that prints a database should fail usefully rather
+#: than push megabytes through a phone's uplink.
+_MAX_OUTPUT = 64 * 1024
+
+_BACKOFF_START = 2.0
+_BACKOFF_MAX = 60.0
+
+
+class Policy:
+    """What this device is willing to run."""
+
+    def __init__(self, *, allow_shell: bool = False, extra: tuple[str, ...] = ()) -> None:
+        self.allow_shell = allow_shell
+        self.extra = frozenset(extra)
+
+    def refuse(self, argv: list[str]) -> str:
+        """Why this argv may not run, or the empty string when it may."""
+        if not argv:
+            return "comando vazio"
+        if self.allow_shell:
+            return ""
+        program = os.path.basename(argv[0])
+        if program.startswith("termux-"):
+            return ""
+        if program in ALWAYS_ALLOWED or program in self.extra:
+            return ""
+        return (
+            f"'{program}' não está liberado neste aparelho. "
+            "Rode o runner com --allow-shell para permitir comandos livres, "
+            f"ou com --allow {program} para liberar só este."
+        )
+
+    def describe(self) -> str:
+        if self.allow_shell:
+            return "shell livre"
+        extra = f" + {', '.join(sorted(self.extra))}" if self.extra else ""
+        return f"somente termux-* e {', '.join(sorted(ALWAYS_ALLOWED))}{extra}"
+
+
+def available_helpers() -> list[str]:
+    """Which of the helpers this phone actually has installed."""
+    return [name for name in TERMUX_HELPERS if shutil.which(name)]
+
+
+def run_command(
+    argv: list[str],
+    *,
+    stdin: str | None = None,
+    timeout: float = 20.0,
+) -> dict[str, Any]:
+    """Execute one command, capturing both streams as text."""
+    try:
+        proc = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            input=stdin,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"returncode": 124, "stdout": "", "stderr": f"tempo esgotado ({timeout:.0f}s)"}
+    except FileNotFoundError:
+        return {"returncode": 127, "stdout": "", "stderr": f"{argv[0]}: não encontrado"}
+    except OSError as exc:
+        return {"returncode": 126, "stdout": "", "stderr": f"{argv[0]}: {exc}"}
+
+    return {
+        "returncode": proc.returncode,
+        "stdout": _clip(proc.stdout),
+        "stderr": _clip(proc.stderr),
+    }
+
+
+def _clip(text: str | None) -> str:
+    text = text or ""
+    if len(text) <= _MAX_OUTPUT:
+        return text
+    return text[:_MAX_OUTPUT] + f"\n… (cortado em {_MAX_OUTPUT} caracteres)"
+
+
+def link_url(base: str) -> str:
+    """Turn whatever the user pasted into the WebSocket URL.
+
+    Accepts the backend's ordinary https address, which is what they have in
+    the browser, and upgrades the scheme themselves rather than making them
+    remember that wss exists.
+    """
+    parts = urlsplit(base.strip())
+    if not parts.scheme:
+        parts = urlsplit(f"https://{base.strip()}")
+    scheme = {"http": "ws", "https": "wss", "ws": "ws", "wss": "wss"}.get(parts.scheme)
+    if scheme is None:
+        raise ValueError(f"esquema desconhecido: {parts.scheme}")
+    path = parts.path.rstrip("/")
+    if not path.endswith(DEVICE_PATH):
+        path += DEVICE_PATH
+    return urlunsplit((scheme, parts.netloc, path, "", ""))
+
+
+async def _serve(connection: Any, policy: Policy) -> None:
+    """Answer calls until the connection closes."""
+    async for message in connection:
+        try:
+            frame = json.loads(message)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(frame, dict):
+            continue
+        if frame.get("type") == "welcome":
+            logger.info("conectado — %s", policy.describe())
+            continue
+        if frame.get("type") != "run":
+            continue
+
+        argv = [str(a) for a in frame.get("argv") or []]
+        reply: dict[str, Any] = {"type": "done", "id": frame.get("id")}
+        refusal = policy.refuse(argv)
+        if refusal:
+            logger.warning("recusado: %s", " ".join(argv[:3]))
+            reply["error"] = refusal
+        else:
+            logger.info("rodando: %s", " ".join(argv[:6]))
+            stdin = frame.get("stdin")
+            reply.update(
+                run_command(
+                    argv,
+                    stdin=str(stdin) if isinstance(stdin, str) else None,
+                    timeout=float(frame.get("timeout") or 20.0),
+                )
+            )
+        await connection.send(json.dumps(reply))
+
+
+async def _connect_once(url: str, token: str, name: str, policy: Policy) -> None:
+    # websockets renamed this in 14.0; support both so a phone's pip version
+    # is not a thing the user has to debug.
+    try:
+        from websockets.asyncio.client import connect
+    except ImportError:  # pragma: no cover - older websockets
+        from websockets.client import connect  # type: ignore[no-redef]
+
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        connection = await connect(url, additional_headers=headers)
+    except TypeError:  # pragma: no cover - websockets < 14 spells it differently
+        connection = await connect(url, extra_headers=headers)
+
+    async with connection:
+        await connection.send(
+            json.dumps(
+                {
+                    "type": "hello",
+                    "version": PROTOCOL_VERSION,
+                    "device": name,
+                    "binaries": available_helpers(),
+                    "shell": policy.allow_shell,
+                }
+            )
+        )
+        await _serve(connection, policy)
+
+
+async def serve_forever(url: str, token: str, name: str, policy: Policy) -> None:
+    """Stay linked, reconnecting for as long as this process lives.
+
+    A phone loses its network constantly — a lift, a tunnel, a screen-off
+    radio nap. Backing off and retrying is the normal case, not an error path.
+    """
+    backoff = _BACKOFF_START
+    while True:
+        try:
+            await _connect_once(url, token, name, policy)
+            backoff = _BACKOFF_START
+            logger.info("conexão encerrada pelo servidor; reconectando")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - every failure here is retryable
+            logger.warning("sem conexão (%s); tentando de novo em %.0fs", exc, backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, _BACKOFF_MAX)
+            continue
+        await asyncio.sleep(_BACKOFF_START)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="python -m jarvis_mobile.bridge.runner",
+        description=__doc__.splitlines()[0],
+    )
+    parser.add_argument(
+        "--url",
+        default=os.environ.get("JARVIS_DEVICE_URL", ""),
+        help="O endereço do backend, igual ao do navegador (ou JARVIS_DEVICE_URL).",
+    )
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("JARVIS_DEVICE_TOKEN", ""),
+        help="O segredo do aparelho (ou JARVIS_DEVICE_TOKEN).",
+    )
+    parser.add_argument(
+        "--name",
+        default=platform.node() or "phone",
+        help="Como este aparelho aparece nos logs do servidor.",
+    )
+    parser.add_argument(
+        "--allow-shell",
+        action="store_true",
+        help="Permitir qualquer comando, não só os helpers do Termux.",
+    )
+    parser.add_argument(
+        "--allow",
+        action="append",
+        default=[],
+        metavar="BINARIO",
+        help="Liberar um comando específico. Pode repetir.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    if not args.url or not args.token:
+        print(
+            "Faltou o endereço ou o segredo.\n\n"
+            "  export JARVIS_DEVICE_URL=https://seu-backend.onrender.com\n"
+            "  export JARVIS_DEVICE_TOKEN=...      # o mesmo do painel do Render\n"
+            "  python -m jarvis_mobile.bridge.runner\n",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        url = link_url(args.url)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    policy = Policy(allow_shell=args.allow_shell, extra=tuple(args.allow))
+    helpers = available_helpers()
+    logger.info("aparelho %s — %d helpers, %s", args.name, len(helpers), policy.describe())
+    if not helpers:
+        logger.warning("nenhum helper termux-* encontrado — rode: pkg install termux-api")
+
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(serve_forever(url, args.token, args.name, policy))
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

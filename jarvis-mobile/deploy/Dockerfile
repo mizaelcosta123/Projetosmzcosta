@@ -127,4 +127,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c 'import httpx, os, sys; port = os.environ.get("JARVIS_PORT", "8000"); sys.exit(0 if httpx.get("http://127.0.0.1:" + port + "/health", timeout=8).status_code == 200 else 1)'
 
-ENTRYPOINT ["sh", "-c", "exec jarvis serve --host \"$JARVIS_HOST\" --port \"$JARVIS_PORT\""]
+# `jarvis-mobile serve`, not `jarvis serve`: same command, with the device
+# bridge's WebSocket route mounted. OpenJarvis has no plugin hook for routes,
+# so this wrapper is how the phone gets somewhere to dial. With no
+# JARVIS_DEVICE_TOKEN set it behaves exactly like `jarvis serve`.
+ENTRYPOINT ["sh", "-c", "exec jarvis-mobile serve --host \"$JARVIS_HOST\" --port \"$JARVIS_PORT\""]

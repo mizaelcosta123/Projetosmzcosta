@@ -14,6 +14,12 @@ license = {text = "Apache-2.0"}
 # the desktop dependency set onto Android.
 dependencies = []
 
+# `jarvis-mobile serve` is `jarvis serve` with the device route mounted.
+# Every other subcommand passes straight through. See bridge/install.py for
+# why this exists instead of a plugin hook.
+[project.scripts]
+jarvis-mobile = "jarvis_mobile.bridge.install:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",

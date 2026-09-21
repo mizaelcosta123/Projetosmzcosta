@@ -13,9 +13,15 @@ default = "openrouter"
 [agent]
 default_agent = "orchestrator"
 max_turns = 8
-# No shell or filesystem tools: a container reachable from the internet should
-# not carry them, and the device tools only mean anything on a phone anyway.
-tools = "think,calculator,web_search,speak,set_display_mode"
+# No shell or filesystem tools *for the server*: a container reachable from the
+# internet should not be able to run commands on itself.
+#
+# The device_* tools are a different thing. They do nothing at all unless a
+# phone has linked itself over the bridge (JARVIS_DEVICE_TOKEN), they execute
+# on that phone and never here, and the runner on the device decides what it
+# will accept — device_shell in particular needs --allow-shell typed there.
+# Without a linked phone every one of them answers "nenhum aparelho conectado".
+tools = "think,calculator,web_search,speak,set_display_mode,device_open,device_app_launch,device_notify,device_clipboard,device_share,device_status,device_shell,device_read"
 context_from_memory = false
 
 [tools.storage]
