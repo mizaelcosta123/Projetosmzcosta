@@ -43,6 +43,18 @@ export function makeRandom(seed = 0x9e3779b9) {
 export const SHAPES = { orb: sampleOrb, face: sampleFace };
 
 /**
+ * Move a hue toward a target along the shortest arc of the colour wheel.
+ *
+ * Hue is circular, so a plain lerp from 350° to 10° would run the long way
+ * through the whole spectrum. This wraps the difference into [-180, 180] first.
+ */
+function stepHue(current, target, rate) {
+  const diff = ((target - current + 540) % 360) - 180;
+  if (Math.abs(diff) < 0.1) return target;
+  return (current + diff * rate + 360) % 360;
+}
+
+/**
  * The animated field.
  *
  * Owns its canvas, resizes with it, and renders on demand. It knows nothing
@@ -74,8 +86,13 @@ export class ParticleField {
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.count = count;
     this.restDrift = restDrift;
+    // Hue is animated, not fixed: switching the active agent recolours the
+    // whole field, and a hard cut between two identities reads as a glitch. The
+    // rendered hue chases the target along the shortest arc every frame.
     this.hue = hue;
     this.accentHue = accentHue;
+    this.targetHue = hue;
+    this.targetAccentHue = accentHue;
 
     this.x = new Float32Array(count);
     this.y = new Float32Array(count);
@@ -163,6 +180,26 @@ export class ParticleField {
   }
 
   /**
+   * Recolour the field to another agent's identity.
+   *
+   * Each agent owns a base hue and an accent that sits roughly opposite it. The
+   * transition is handled in `frame()` so it eases over a beat rather than
+   * cutting, which is what sells one agent handing the field to another.
+   *
+   * @param {number} hue Base hue, 0..360.
+   * @param {number} [accentHue] Accent hue, 0..360.
+   * @param {boolean} [immediate] Skip the transition.
+   */
+  setPalette(hue, accentHue, immediate = false) {
+    if (Number.isFinite(hue)) this.targetHue = hue;
+    if (Number.isFinite(accentHue)) this.targetAccentHue = accentHue;
+    if (immediate) {
+      this.hue = this.targetHue;
+      this.accentHue = this.targetAccentHue;
+    }
+  }
+
+  /**
    * Mark him as working on an answer.
    *
    * A deliberate third state, distinct from both silence and speech. Idle is
@@ -197,6 +234,11 @@ export class ParticleField {
     this.smoothSpread += (this.spread - this.smoothSpread) * 0.22;
 
     if (this.morph < 1) this.morph = Math.min(1, this.morph + step * 1.5);
+
+    // Ease the palette toward the active agent along the shorter way round the
+    // colour wheel, so cyan → violet never detours through the greens.
+    this.hue = stepHue(this.hue, this.targetHue, 0.06);
+    this.accentHue = stepHue(this.accentHue, this.targetAccentHue, 0.06);
 
     // Roughly one breath every three seconds — slow enough to read as thought
     // rather than as a pulse waiting to be dismissed. It fades in and out so

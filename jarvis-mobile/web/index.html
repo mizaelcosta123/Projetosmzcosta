@@ -13,6 +13,34 @@
 <body>
   <canvas id="field" aria-hidden="true"></canvas>
 
+  <!-- Futuristic chrome, purely decorative and marked aria-hidden. The reticle
+       rings, corner brackets and scanline are static CSS; hud.js only feeds the
+       live telemetry and the state reaction. -->
+  <div class="hud" id="hud" aria-hidden="true" data-state="idle">
+    <span class="corner tl"></span>
+    <span class="corner tr"></span>
+    <span class="corner bl"></span>
+    <span class="corner br"></span>
+    <span class="scanline"></span>
+
+    <svg class="reticle" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+      <circle class="ring ring-static" cx="200" cy="200" r="150" />
+      <circle class="ring ring-spin" cx="200" cy="200" r="176" stroke-dasharray="6 20" />
+      <circle class="ring ring-spin-rev" cx="200" cy="200" r="128" stroke-dasharray="2 14" />
+      <path class="arc arc-a" d="M200 30 A170 170 0 0 1 370 200" />
+      <path class="arc arc-b" d="M200 370 A170 170 0 0 1 30 200" />
+      <g class="ticks">
+        <line x1="200" y1="24" x2="200" y2="40" />
+        <line x1="200" y1="360" x2="200" y2="376" />
+        <line x1="24" y1="200" x2="40" y2="200" />
+        <line x1="360" y1="200" x2="376" y2="200" />
+      </g>
+    </svg>
+
+    <div class="telemetry" id="telemetry"></div>
+    <p class="hud-mode" id="hud-mode">EM REPOUSO</p>
+  </div>
+
   <!-- The frame stays out of the way: he is the interface, not the chrome
        around him. Controls sit at the edges, dim until touched. -->
   <header class="frame">
@@ -33,6 +61,15 @@
       </svg>
     </button>
   </header>
+
+  <!-- The active agent's callsign and specialty, sitting just under the frame. -->
+  <div class="callsign" id="callsign" aria-live="polite">
+    <span class="callsign-name" id="callsign-name">JARVIS</span>
+    <span class="callsign-role" id="callsign-role">Orquestrador</span>
+  </div>
+
+  <!-- The roster: pick which agent holds the field. -->
+  <nav class="dock" id="dock" role="tablist" aria-label="Agentes"></nav>
 
   <p id="caption" class="caption" aria-live="polite"></p>
 
