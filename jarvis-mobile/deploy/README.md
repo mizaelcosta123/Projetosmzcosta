@@ -161,7 +161,21 @@ dormindo —, com espera crescente até 60s.
 
 ### Conferir
 
-No servidor, `python -m jarvis_mobile.doctor` mostra uma linha `bridge`:
+Pergunte ao próprio servidor, de qualquer lugar:
+
+```bash
+curl -s -H "Authorization: Bearer $OPENJARVIS_API_KEY" \
+  https://seu-backend.onrender.com/v1/device
+```
+
+```json
+{"linked": true, "name": "pixel", "shell": false, "binaries": ["termux-open-url", ...]}
+{"linked": false}
+```
+
+É a diferença entre "o runner nunca conectou" e "o runner caiu" — que as ferramentas de aparelho não conseguem contar, porque as duas respondem "nenhum aparelho conectado".
+
+No servidor, `jarvis-doctor` mostra a mesma coisa na linha `bridge`:
 
 ```
 [  ok  ] bridge    pixel linked — 8 helpers, shell allowed
