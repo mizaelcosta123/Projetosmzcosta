@@ -19,9 +19,15 @@ max_turns = 8
 # The device_* tools are a different thing. They do nothing at all unless a
 # phone has linked itself over the bridge (JARVIS_DEVICE_TOKEN), they execute
 # on that phone and never here, and the runner on the device decides what it
-# will accept — device_shell in particular needs --allow-shell typed there.
-# Without a linked phone every one of them answers "nenhum aparelho conectado".
-tools = "think,calculator,web_search,speak,set_display_mode,device_open,device_app_launch,device_notify,device_clipboard,device_share,device_status,device_shell,device_read"
+# will accept. Two of those decisions have to be typed on the phone itself:
+# device_shell needs --allow-shell, and the screen tools (tap, swipe, type,
+# ui_dump, screenshot) need --allow-ui, because `input tap` can press any
+# button on somebody's phone. Without a linked phone every one of them answers
+# "nenhum aparelho conectado".
+#
+# device_permissions is the one to reach for first when a device tool fails for
+# no clear reason: Android does not report a denied permission as one.
+tools = "think,calculator,web_search,device_open,device_app_launch,device_notify,device_clipboard,device_share,device_status,device_permissions,device_screen_size,device_ui_dump,device_screenshot,device_tap,device_swipe,device_type,device_key,device_photo,device_camera_info,device_write,device_list,device_packages,device_wifi,device_telephony,device_sensors,device_volume,device_contacts,device_location,device_torch_on,device_torch_off,device_shell,device_read,set_display_mode,speak"
 context_from_memory = false
 
 [tools.storage]
