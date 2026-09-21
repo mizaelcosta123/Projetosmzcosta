@@ -35,10 +35,12 @@ import platform
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-__all__ = ["ALWAYS_ALLOWED", "Policy", "main", "run_command"]
+__all__ = ["ALWAYS_ALLOWED", "Policy", "diagnose", "main", "open_socket", "run_command"]
 
 logger = logging.getLogger("jarvis.device")
 
@@ -163,6 +165,46 @@ def link_url(base: str) -> str:
     return urlunsplit((scheme, parts.netloc, path, "", ""))
 
 
+def _probe(url: str, timeout: float = 10.0) -> int | None:
+    """The status code at ``url``, or None when it cannot be reached."""
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return int(response.status)
+    except urllib.error.HTTPError as exc:
+        return int(exc.code)
+    except Exception:  # noqa: BLE001 - this is a diagnostic, it must not raise
+        return None
+
+
+def diagnose(url: str, error: Exception) -> str:
+    """Turn a bare 403 into a sentence that names the two possible causes.
+
+    A rejected upgrade looks identical whether the route is missing from the
+    deployed image or the token does not match, and neither is guessable from
+    "HTTP 403". Asking /health separates "the server is fine, the bridge is
+    not" from "wrong address", which is most of the way to the answer.
+    """
+    text = str(error)
+    if "403" not in text:
+        return text
+
+    base = url.split(DEVICE_PATH)[0]
+    base = base.replace("wss://", "https://").replace("ws://", "http://")
+    health = _probe(f"{base}/health")
+
+    if health == 200:
+        return (
+            f"{text}\n"
+            f"    O servidor responde ({base}/health = 200), mas recusou a ponte.\n"
+            "    Ou a imagem no ar não tem a rota /v1/device/link — ela é recente,\n"
+            "    e um deploy anterior a ela devolve 403 para qualquer token —,\n"
+            "    ou o valor aqui difere do JARVIS_DEVICE_TOKEN configurado lá."
+        )
+    if health is None:
+        return f"{text}\n    E {base}/health também não respondeu. Confira o endereço."
+    return f"{text}\n    {base}/health respondeu {health}, então o servidor não está saudável."
+
+
 async def _serve(connection: Any, policy: Policy) -> None:
     """Answer calls until the connection closes."""
     async for message in connection:
@@ -197,21 +239,29 @@ async def _serve(connection: Any, policy: Policy) -> None:
         await connection.send(json.dumps(reply))
 
 
-async def _connect_once(url: str, token: str, name: str, policy: Policy) -> None:
-    # websockets renamed this in 14.0; support both so a phone's pip version
-    # is not a thing the user has to debug.
-    try:
-        from websockets.asyncio.client import connect
-    except ImportError:  # pragma: no cover - older websockets
-        from websockets.client import connect  # type: ignore[no-redef]
+def open_socket(url: str, token: str) -> Any:
+    """Return the connection's async context manager, whatever websockets is.
 
+    Two things changed between websockets 10 and 14, and both bite here. The
+    header argument was renamed, and — the subtle one — ``await connect(...)``
+    used to yield a protocol object that is *not* an async context manager,
+    while the ``connect(...)`` object itself always is. Awaiting first and then
+    entering the result works on 14+ and fails on 10 with a message about the
+    asynchronous context manager protocol.
+    """
     headers = {"Authorization": f"Bearer {token}"}
     try:
-        connection = await connect(url, additional_headers=headers)
-    except TypeError:  # pragma: no cover - websockets < 14 spells it differently
-        connection = await connect(url, extra_headers=headers)
+        from websockets.asyncio.client import connect
 
-    async with connection:
+        return connect(url, additional_headers=headers)
+    except ImportError:  # pragma: no cover - websockets < 13, still common in Termux
+        from websockets.client import connect  # type: ignore[no-redef]
+
+        return connect(url, extra_headers=headers)
+
+
+async def _connect_once(url: str, token: str, name: str, policy: Policy) -> None:
+    async with open_socket(url, token) as connection:
         await connection.send(
             json.dumps(
                 {
@@ -241,7 +291,9 @@ async def serve_forever(url: str, token: str, name: str, policy: Policy) -> None
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - every failure here is retryable
-            logger.warning("sem conexão (%s); tentando de novo em %.0fs", exc, backoff)
+            logger.warning(
+                "sem conexão (%s); tentando de novo em %.0fs", diagnose(url, exc), backoff
+            )
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, _BACKOFF_MAX)
             continue

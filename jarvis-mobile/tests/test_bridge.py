@@ -350,3 +350,88 @@ def test_the_runner_imports_nothing_from_this_package():
         "websockets",
         "__future__",
     }, sorted(imported)
+
+
+# -- the two websockets APIs, and the 403 that explains itself ---------------
+
+
+def test_open_socket_returns_an_async_context_manager():
+    """The bug this pins cost a real user an evening.
+
+    On websockets 10 — what Termux ships — ``await connect(...)`` yields a
+    protocol object that is NOT an async context manager, while on 14+ it is.
+    Awaiting first and entering the result therefore works on the developer's
+    machine and fails on the phone with a message about the asynchronous
+    context manager protocol. The fix is to never await first, so what
+    open_socket hands back must support ``async with`` directly.
+    """
+    from jarvis_mobile.bridge.runner import open_socket
+
+    opener = open_socket("ws://127.0.0.1:1/v1/device/link", "t")
+    assert hasattr(opener, "__aenter__"), type(opener)
+    assert hasattr(opener, "__aexit__"), type(opener)
+
+
+def test_open_socket_sends_the_token_under_whichever_name(monkeypatch):
+    """The header argument was renamed between the two APIs."""
+    import jarvis_mobile.bridge.runner as runner_module
+
+    seen = {}
+
+    class FakeConnect:
+        def __init__(self, url, **kwargs):
+            seen.update(kwargs)
+            seen["url"] = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    import sys
+    import types
+
+    module = types.ModuleType("websockets.asyncio.client")
+    module.connect = FakeConnect
+    monkeypatch.setitem(sys.modules, "websockets.asyncio.client", module)
+
+    runner_module.open_socket("ws://host/v1/device/link", "segredo")
+    assert seen["additional_headers"] == {"Authorization": "Bearer segredo"}
+    assert seen["url"] == "ws://host/v1/device/link"
+
+
+def test_diagnose_leaves_an_unrelated_error_alone():
+    from jarvis_mobile.bridge.runner import diagnose
+
+    assert diagnose("ws://x/v1/device/link", OSError("rede fora")) == "rede fora"
+
+
+def test_a_403_with_a_healthy_server_names_both_causes(monkeypatch):
+    import jarvis_mobile.bridge.runner as runner_module
+    from jarvis_mobile.bridge.runner import diagnose
+
+    monkeypatch.setattr(runner_module, "_probe", lambda url, timeout=10.0: 200)
+    said = diagnose(
+        "wss://x.onrender.com/v1/device/link",
+        RuntimeError("server rejected WebSocket connection: HTTP 403"),
+    )
+    assert "/v1/device/link" in said
+    assert "JARVIS_DEVICE_TOKEN" in said
+    assert "https://x.onrender.com/health" in said
+
+
+def test_a_403_with_an_unreachable_server_says_to_check_the_address(monkeypatch):
+    import jarvis_mobile.bridge.runner as runner_module
+    from jarvis_mobile.bridge.runner import diagnose
+
+    monkeypatch.setattr(runner_module, "_probe", lambda url, timeout=10.0: None)
+    said = diagnose("wss://x/v1/device/link", RuntimeError("HTTP 403"))
+    assert "endereço" in said
+
+
+def test_probe_never_raises():
+    from jarvis_mobile.bridge.runner import _probe
+
+    assert _probe("http://127.0.0.1:1/health", timeout=0.5) is None
+    assert _probe("nao-e-uma-url", timeout=0.5) is None
