@@ -53,9 +53,7 @@ def install(app_module: Any = None) -> bool:
         if not token:
             # Not an error: a backend with no phone to reach is a normal way
             # to run this. Said once, at startup, so it is findable later.
-            logger.info(
-                "device bridge off — set %s to let a phone link to this server", TOKEN_ENV
-            )
+            logger.info("device bridge off — set %s to let a phone link to this server", TOKEN_ENV)
             return application
         application.include_router(create_device_router(token))
         logger.info("device bridge on — a runner may link with %s", TOKEN_ENV)

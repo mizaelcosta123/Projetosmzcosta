@@ -9,12 +9,15 @@ import { ParticleField } from './particles.js';
 import { AnalyserDriver, SynthesisDriver, createVoiceDriver } from './voice.js';
 
 import { explain, providerMistake } from './diagnose.js';
+import { LiveSession, WakeWord } from './live.js';
 
 const SETTINGS_KEY = 'jarvis.settings.v1';
 
 const el = {
   canvas: document.getElementById('field'),
   status: document.getElementById('status'),
+  live: document.getElementById('live'),
+  wake: document.getElementById('wake'),
   caption: document.getElementById('caption'),
   composer: document.getElementById('composer'),
   prompt: document.getElementById('prompt'),
@@ -43,7 +46,7 @@ const el = {
  * should still render the face.
  */
 function loadSettings() {
-  const fallback = { serverUrl: '', apiKey: '', model: '', speak: true };
+  const fallback = { serverUrl: '', apiKey: '', model: '', speak: true, wake: true };
   let saved = fallback;
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -70,6 +73,15 @@ function saveSettings(settings) {
 }
 
 let settings = loadSettings();
+
+/** @type {LiveSession|null} The open session, or null when nothing listens.
+ *
+ * Declared here, above say(), which reads it: a `let` further down would be in
+ * the temporal dead zone for any earlier caller. */
+let live = null;
+
+/** @type {WakeWord|null} Listens for his name while nothing else listens. */
+let wake = null;
 
 // Served from the OpenJarvis server itself? Then it is the default target and
 // no one has to type a URL.
@@ -141,6 +153,14 @@ voice.addEventListener('end', () => {
 async function say(text, audioUrl) {
   if (!settings.speak) return;
   if (!audioUrl && !text.trim()) return;
+  // While he talks, the live session needs a way to duck him and a way to cut
+  // him off. It holds this until the sentence ends.
+  const handle = {
+    pause: () => voice.stop(),
+    setVolume: (volume) => voice.setVolume(volume),
+  };
+  if (live?.active) live.speakingStarted(handle);
+
   try {
     if (audioUrl) {
       // Real audio: the analyser measures it, so the mouth is in sync rather
@@ -155,6 +175,8 @@ async function say(text, audioUrl) {
     console.warn('speech failed', error);
     field.setLevel(0);
     setStatus('em repouso');
+  } finally {
+    if (live?.active) live.speakingEnded();
   }
 }
 
@@ -450,17 +472,21 @@ const syncReady = () => {
 el.prompt.addEventListener('input', syncReady);
 syncReady();
 
-el.composer.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const text = el.prompt.value.trim();
+/**
+ * Ask him something, from the composer or from the microphone.
+ *
+ * One path for both, so live voice cannot drift from typing: same streaming,
+ * same captions, same errors, same voice.
+ *
+ * @param {string} text
+ */
+async function ask(text) {
   if (!text || busy) return;
 
   busy = true;
   el.send.disabled = true;
-  el.prompt.value = '';
-  syncReady();
   setCaption('');
-  setStatus('pensando');
+  setStatus('pensando', 'thinking');
 
   try {
     let shown = '';
@@ -478,7 +504,142 @@ el.composer.addEventListener('submit', async (event) => {
     busy = false;
     el.send.disabled = false;
   }
+}
+
+el.composer.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const text = el.prompt.value.trim();
+  el.prompt.value = '';
+  syncReady();
+  ask(text);
 });
+
+// -- live voice -------------------------------------------------------------
+
+/** What each session state looks like on screen. */
+const LIVE_STATUS = {
+  listening: 'ouvindo',
+  hearing: 'ouvindo você',
+  'cutting-in': 'ouvindo você',
+  asking: 'pensando',
+  answering: 'falando',
+  off: 'em repouso',
+};
+
+function showLive(mode) {
+  // Drives the button's animation: absent when off, idling when listening,
+  // quickened while it has your voice.
+  if (mode) el.composer.dataset.live = mode;
+  else delete el.composer.dataset.live;
+  el.live.setAttribute('aria-pressed', String(Boolean(mode)));
+}
+
+/**
+ * Open or close a live session.
+ *
+ * @param {string} [first] Something already said — the words after his name,
+ *   so "Jarvis, qual a bateria?" is one sentence and not two.
+ */
+async function toggleLive(first = '') {
+  if (live?.active) {
+    live.stop();
+    return;
+  }
+
+  // One recogniser at a time: the wake listener has to let go of the
+  // microphone before the session can take it.
+  wake?.stop();
+
+  const session = new LiveSession();
+  session.addEventListener('state', (event) => {
+    const { state, text } = event.detail;
+
+    if (state === 'off') {
+      live = null;
+      showLive('');
+      setStatus('em repouso');
+      armWake(); // back to waiting for his name, if that is switched on
+      return;
+    }
+    if (state === 'error') {
+      setStatus('erro', 'error');
+      setCaption(`Não consegui ouvir: ${text}`);
+      return;
+    }
+
+    showLive(state === 'hearing' || state === 'cutting-in' ? 'hearing' : 'on');
+
+    // `answering` is the voice's own business — say() already set the status
+    // and the field is following the waveform. Overwriting it here would
+    // flatten the one state the page shows best.
+    if (state === 'answering') return;
+    if (state === 'asking') return; // ask() takes it from here
+
+    setStatus(LIVE_STATUS[state] ?? 'ouvindo');
+    // Interim words, shown as they arrive: proof it is hearing you, and the
+    // only feedback there is before the answer starts.
+    if (text) setCaption(text);
+  });
+
+  session.addEventListener('ask', (event) => {
+    ask(event.detail.text);
+  });
+
+  try {
+    await session.start();
+    live = session;
+    showLive('on');
+    if (first) ask(first);
+  } catch (error) {
+    // Permission refused, or a browser that cannot do it. Either way the
+    // reason belongs on screen, not in the console.
+    setStatus('erro', 'error');
+    setCaption(String(error.message || error));
+    showLive('');
+  }
+}
+
+el.live.addEventListener('click', () => toggleLive());
+
+// -- his name ---------------------------------------------------------------
+
+/**
+ * Listen for his name, if that is switched on and nothing else is listening.
+ *
+ * Idempotent, and called from everywhere the answer might have changed: the
+ * first tap on the page, closing the settings sheet, and the end of a session.
+ */
+function armWake() {
+  if (!settings.wake || live?.active) {
+    wake?.stop();
+    return;
+  }
+  if (!wake) {
+    wake = new WakeWord();
+    wake.addEventListener('wake', (event) => toggleLive(event.detail.rest));
+    wake.addEventListener('denied', () => {
+      // Refusing the microphone is an answer. Remember it instead of asking
+      // again on every visit, and say what still works.
+      settings = { ...settings, wake: false };
+      saveSettings(settings);
+      setStatus('erro', 'error');
+      setCaption(
+        'Sem permissão para o microfone, então desliguei o atendimento por voz. ' +
+          'O botão de ondas continua funcionando.'
+      );
+    });
+  }
+  try {
+    wake.start();
+  } catch {
+    // A browser without speech recognition. The button says so when pressed;
+    // there is nothing useful to announce before anyone asks.
+  }
+}
+
+// A page cannot open a microphone before the person has touched it, so the
+// first touch is when this can begin.
+document.addEventListener('pointerdown', armWake, { once: true });
 
 // The toggle stays as a manual override; asking him is the intended path.
 el.shape.addEventListener('click', () => {
@@ -491,6 +652,7 @@ el.menu.addEventListener('click', () => {
   el.apiKey.value = settings.apiKey;
   el.model.value = settings.model;
   el.speak.checked = settings.speak;
+  el.wake.checked = settings.wake;
   el.voiceMode.textContent = describeVoice();
   loadModelSuggestions();
   el.settings.showModal();
@@ -529,10 +691,12 @@ el.settings.addEventListener('close', () => {
     apiKey: el.apiKey.value.trim(),
     model: el.model.value.trim(),
     speak: el.speak.checked,
+    wake: el.wake.checked,
   };
   resolvedModel = '';
   saveSettings(settings);
   watchAgentEvents();
+  armWake();
 });
 
 /**

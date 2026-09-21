@@ -8,6 +8,7 @@ passes.
 
     python -m jarvis_mobile.doctor
     python -m jarvis_mobile.doctor --engine ollama
+    python -m jarvis_mobile.doctor --engine ollama --model qwen2.5:3b
 """
 
 from __future__ import annotations
@@ -26,6 +27,15 @@ SKIP = "skip"
 
 #: A local engine on a phone can be slow to answer; a dead port is instant.
 _TIMEOUT = 8.0
+
+#: Asking about every pulled model costs a round trip each; a few is enough to
+#: answer "is there one here that works".
+_MAX_MODELS = 8
+
+#: The same 1.5B — and the same ~1GB — as the qwen2.5-coder people tend to have
+#: pulled, without the code-completion training that costs the tool call. On a
+#: phone this swap is free: it weighs what the coder weighed.
+_SUGGESTED = "qwen2.5:1.5b"
 
 Row = tuple[str, str, str]
 
@@ -136,7 +146,7 @@ def _engine(engine_id: str, host: str | None) -> Row:
     import httpx
 
     if engine_id == "ollama":
-        base = (host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434").rstrip("/")
+        base = _ollama_base(host)
         try:
             response = httpx.get(f"{base}/api/tags", timeout=_TIMEOUT)
             response.raise_for_status()
@@ -171,6 +181,120 @@ def _engine(engine_id: str, host: str | None) -> Row:
         return (FAIL, f"{engine_id} · key", detail)
     status, detail = _probe_catalog(provider, api_key)
     return (status, f"{engine_id} · {provider.endpoint}", detail)
+
+
+def _ollama_base(host: str | None) -> str:
+    """Where Ollama is, by the same precedence `ollama` itself uses."""
+    return (host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434").rstrip("/")
+
+
+def _tool_calling(engine_id: str, host: str | None, model: str | None) -> Row:
+    """Whether the model can call a tool at all.
+
+    Every ``device_*`` tool reaches the phone through a tool call. A model that
+    cannot emit one does not say so — it answers in prose, plausibly, about a
+    phone it never touched. From the outside that is indistinguishable from a
+    dead bridge, and people go looking for the wrong fault. This is the only
+    check that tells the two apart before the guessing starts.
+
+    Coder models are the common trap: they are trained to continue code, not
+    to choose a tool and fill in its arguments, and several ship without the
+    capability at all.
+    """
+    if engine_id == "ollama":
+        base = _ollama_base(host)
+        wanted = [model] if model else _ollama_models(base)
+        if not wanted:
+            return (SKIP, "tool calling", "no model to ask about")
+
+        able: list[str] = []
+        unable: list[str] = []
+        unknown: list[str] = []
+        for name in wanted[:_MAX_MODELS]:
+            capabilities = _ollama_capabilities(base, name)
+            if capabilities is None:
+                unknown.append(name)
+            elif "tools" in capabilities:
+                able.append(name)
+            else:
+                unable.append(name)
+
+        if able:
+            return (OK, "tool calling", f"{', '.join(able)} can call tools")
+        if unable:
+            return (
+                FAIL,
+                "tool calling",
+                (
+                    f"{', '.join(unable)} cannot call tools, so no device_* tool will "
+                    f"ever run and nothing will reach your phone. Pull one that can: "
+                    f"ollama pull {_SUGGESTED}"
+                ),
+            )
+        return (
+            WARN,
+            "tool calling",
+            (
+                f"{base} did not say whether {', '.join(unknown)} can call tools "
+                "(Ollama older than 0.6 does not report it). Upgrade it, or assume "
+                "device tools will not work."
+            ),
+        )
+
+    # Cloud providers advertise it per model in their catalogue.
+    if not model:
+        return (SKIP, "tool calling", "no model named — pass --model to check it")
+    try:
+        from jarvis_mobile.models import fetch_catalog
+        from jarvis_mobile.providers import get_provider, resolve_api_key
+
+        provider = get_provider(engine_id)
+        catalog = fetch_catalog(engine_id, api_key=resolve_api_key(provider))
+    except (ImportError, KeyError, RuntimeError) as exc:
+        return (SKIP, "tool calling", f"could not read the catalogue ({exc})")
+
+    entry = next((m for m in catalog if m.get("id") == model), None)
+    if entry is None:
+        return (WARN, "tool calling", f"{model} is not in {engine_id}'s catalogue")
+    supported = entry.get("supported_parameters")
+    if supported is None:
+        return (WARN, "tool calling", f"{engine_id} does not say whether {model} can call tools")
+    if "tools" in supported:
+        return (OK, "tool calling", f"{model} can call tools")
+    return (
+        FAIL,
+        "tool calling",
+        (
+            f"{model} cannot call tools, so no device_* tool will ever run and "
+            "nothing will reach your phone. Pick a model whose catalogue entry "
+            "lists 'tools'."
+        ),
+    )
+
+
+def _ollama_models(base: str) -> list[str]:
+    """Every model pulled locally, or nothing if Ollama cannot be reached."""
+    import httpx
+
+    try:
+        response = httpx.get(f"{base}/api/tags", timeout=_TIMEOUT)
+        response.raise_for_status()
+        return [m.get("name", "") for m in response.json().get("models", []) if m.get("name")]
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
+def _ollama_capabilities(base: str, model: str) -> list[str] | None:
+    """What a model advertises, or None when this Ollama does not say."""
+    import httpx
+
+    try:
+        response = httpx.post(f"{base}/api/show", json={"model": model}, timeout=_TIMEOUT)
+        response.raise_for_status()
+        capabilities = response.json().get("capabilities")
+    except (httpx.HTTPError, ValueError):
+        return None
+    return capabilities if isinstance(capabilities, list) else None
 
 
 def _speech() -> Row:
@@ -272,7 +396,12 @@ def _server_running(port: int) -> Row:
     return (OK, "server", f"answering on {url} — open that in your browser")
 
 
-def run(engine_id: str = "ollama", host: str | None = None, port: int = 8000) -> list[Row]:
+def run(
+    engine_id: str = "ollama",
+    host: str | None = None,
+    port: int = 8000,
+    model: str | None = None,
+) -> list[Row]:
     """Every check, in the order things actually break."""
     checks: list[Callable[[], Row]] = [
         _openjarvis,
@@ -280,6 +409,7 @@ def run(engine_id: str = "ollama", host: str | None = None, port: int = 8000) ->
         _server_deps,
         _interface,
         lambda: _engine(engine_id, host),
+        lambda: _tool_calling(engine_id, host, model),
         _speech,
         _termux,
         _bridge,
@@ -299,9 +429,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine", default="ollama", help="Which engine to probe.")
     parser.add_argument("--host", default=None, help="Override the engine's address.")
     parser.add_argument("--port", type=int, default=8000, help="Where the server should be.")
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Which model the server will use. Without it, every pulled Ollama model is asked.",
+    )
     args = parser.parse_args(argv)
 
-    rows = run(args.engine, args.host, args.port)
+    rows = run(args.engine, args.host, args.port, args.model)
 
     print(f"\npython {sys.version.split()[0]} · {sys.executable}")
     print(f"PREFIX={os.environ.get('PREFIX', '(none)')}\n")

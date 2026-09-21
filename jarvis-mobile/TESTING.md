@@ -112,7 +112,7 @@ então consertar a primeira costuma apagar o resto.
 ### Usando Ollama em vez da nuvem
 
 ```bash
-~/jarvis-venv/bin/jarvis serve --engine ollama --model qwen2.5-coder:1.5b
+~/jarvis-venv/bin/jarvis serve --engine ollama --model qwen2.5:1.5b
 ```
 
 **Se o Ollama roda em outra máquina que não a do Jarvis** — o caso silencioso —
@@ -129,11 +129,68 @@ export OLLAMA_HOST=http://192.168.x.x:11434
 Sem o `0.0.0.0`, o Ollama só aceita conexões da própria máquina, e do celular
 parece que ele simplesmente não existe.
 
-Uma ressalva sobre o `qwen2.5-coder:1.5b`: com 1,5 bilhão de parâmetros e
-treinado para código, ele conversa, mas chamar tools de forma confiável é outra
-exigência. O agente `orchestrator` depende disso — se ele não trocar de rosto
-quando você pedir, é o modelo, não a interface. Um modelo maior com tool calling
-resolve; os botões continuam funcionando enquanto isso.
+**O Jarvis no Render não alcança o seu Ollama.** `localhost:11434` lá dentro é
+o próprio contêiner do Render, não o seu aparelho — e a sua casa não tem
+endereço fixo para ele chamar de volta. Ollama e Jarvis precisam estar do mesmo
+lado da rede, o que na prática dá duas montagens:
+
+| | onde roda o Jarvis | como o aparelho é controlado |
+|---|---|---|
+| **tudo no celular** | Termux, com `--engine ollama` | direto: as tools `device_*` rodam localmente, sem ponte, sem token, sem WebSocket |
+| **nuvem** | Render, com engine de nuvem | pela ponte: o `runner.py` no Termux mantém a conexão aberta |
+
+A primeira é a mais curta para automatizar o aparelho — não há rede entre o
+agente e o telefone, porque são a mesma máquina. Custa a memória do modelo e a
+bateria. A segunda responde mais rápido e funciona com o celular no bolso, mas
+depende da ponte estar ligada.
+
+### O modelo precisa saber chamar tools
+
+Toda tool `device_*` chega ao celular por uma **chamada de tool**. Um modelo que
+não sabe fazer isso não avisa: ele responde em prosa, convincente, sobre um
+aparelho em que nunca tocou. De fora, isso é idêntico a uma ponte quebrada — e
+manda você procurar o defeito no lugar errado.
+
+Os modelos `-coder` são a armadilha comum. Foram treinados para continuar
+código, não para escolher uma tool e preencher os argumentos dela, e vários nem
+anunciam a capacidade. `qwen2.5-coder:1.5b` é um deles.
+
+O doctor pergunta isso direto ao Ollama, antes de qualquer adivinhação:
+
+```bash
+~/jarvis-venv/bin/python -m jarvis_mobile.doctor --engine ollama --model qwen2.5-coder:1.5b
+```
+
+```
+[  ok  ] ollama · http://localhost:11434    2 models: qwen2.5-coder:1.5b, qwen2.5:1.5b
+[ fail ] tool calling                       qwen2.5-coder:1.5b cannot call tools, so no
+                                            device_* tool will ever run …
+```
+
+Sem `--model`, ele pergunta sobre **todos** os modelos baixados e diz quais
+servem — que costuma ser a resposta útil.
+
+### O que cabe num celular
+
+O `-coder` e o normal **do mesmo tamanho pesam o mesmo**. Trocar um pelo outro
+não custa memória nenhuma; custa só o download.
+
+| modelo | tamanho | chama tools |
+|---|---|---|
+| `qwen2.5-coder:1.5b` | ~1 GB | **não** |
+| `qwen2.5:1.5b` | ~1 GB | sim |
+| `qwen2.5:0.5b` | ~400 MB | sim, mas erra bastante |
+| `llama3.2:1b` | ~1,3 GB | sim |
+
+`qwen2.5:1.5b` é a troca direta: mesmo peso do `-coder` que você já tem, e sabe
+chamar tools. `qwen2.5:0.5b` é o piso — cabe em quase tudo, mas 500 milhões de
+parâmetros escolhendo a tool certa e preenchendo os argumentos erra o bastante
+para irritar.
+
+Anunciar a capacidade e acertar são coisas diferentes: quanto menor o modelo,
+mais ele confunde qual tool usar. A tabela diz quem sabe tentar, não quem
+acerta sempre. Em caso de dúvida, pergunte ao seu próprio Ollama — é o que o
+doctor faz, e ele responde sobre os modelos que você realmente tem.
 
 ## Quando algo falha
 

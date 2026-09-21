@@ -14,6 +14,7 @@ registries, so this package registers into them and leaves upstream untouched �
 | Piece | What it gives you |
 |---|---|
 | **Device tools** | `device_open`, `device_app_launch`, `device_notify`, `device_clipboard`, `device_share`, `device_status`, `device_shell`, `device_read` — the phone's apps, share sheet, clipboard, notification shade, shell and files as agent tools |
+| **Live voice** | Press the bars in the composer, or say his name, and it listens: your speech is transcribed and sent, and he stops mid-sentence when you cut in. A noise only ducks him; words are what interrupt |
 | **Device bridge** | The same tools from a backend that is *not* on the phone: a one-file runner in Termux dials out over a WebSocket and the agent's calls travel down it. Works behind NAT, opens no port, and the phone decides what it will run |
 | **Provider presets** | OpenRouter, Nous Portal (Hermes), Hugging Face, OpenCode Zen — endpoints pre-filled, you supply only a key. Any other OpenAI-compatible URL still works |
 | **Shell** | Inside Termux, OpenJarvis's own `shell_exec` already *is* your phone's shell. From anywhere else, `device_shell` is — over the bridge |
@@ -54,7 +55,7 @@ No model list is hardcoded. Catalogs change weekly, so every engine inherits
 ```python
 import jarvis_mobile
 
-engine = jarvis_mobile.build_engine("nous")   # key read from NOUS_API_KEY
+engine = jarvis_mobile.build_engine("nous")  # key read from NOUS_API_KEY
 print(engine.list_models())
 ```
 
