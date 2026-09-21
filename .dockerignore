@@ -1,0 +1,21 @@
+# Only here because the Docker build context may turn out to be the repository
+# root: Render has resolved COPY against it even with `dockerContext` naming
+# jarvis-mobile/. The Dockerfile copes with either, and this keeps the larger
+# of the two from dragging along things the image never installs.
+.git/
+.github/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.ruff_cache/
+**/node_modules/
+**/dist/
+
+# Built with Gradle, never inside the image.
+jarvis-mobile/android/
+
+# Notes and skills, not application code.
+.claude/
+mapa-mental-tasko/
+Checkpoint.md

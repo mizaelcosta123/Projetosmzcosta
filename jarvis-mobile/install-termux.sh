@@ -33,7 +33,16 @@ PY="$VENV/bin/python"
 # loop, and an OpenAI-compatible cloud engine. Verified by installing exactly
 # this set and driving a request end to end.
 CORE_DEPS=(click croniter httpx rich tomlkit websockets pyyaml)
-SERVER_DEPS=(fastapi uvicorn python-multipart pydantic)
+# `requests` rides with the server set: openjarvis.server.app imports it
+# transitively (connectors.embeddings) and refuses to start without it.
+#
+# `ddgs` is deliberately NOT here even though `web_search` is enabled below. It
+# pulls primp (Rust) and lxml (C), which is the class of dependency this whole
+# install was measured to avoid on Android. Give the search tool a key instead
+# -- TAVILY_API_KEY or YOUDOTCOM_API_KEY -- and it works without either. With
+# neither, `web_search` answers "No search engine available" and the rest of the
+# assistant is unaffected.
+SERVER_DEPS=(fastapi uvicorn python-multipart pydantic requests)
 
 say()  { printf '\n\033[36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m !\033[0m %s\n' "$*" >&2; }
@@ -150,7 +159,10 @@ default = "openrouter"
 default_agent = "orchestrator"
 max_turns = 8
 # Device tools need the Termux:API app. Drop any you would rather not grant.
-tools = "think,calculator,shell_exec,file_read,web_search,speak,device_open,device_notify,device_clipboard,device_share,device_status,device_app_launch,set_display_mode"
+# device_shell and device_read are the same tools the cloud backend uses over
+# the bridge; running here they simply execute locally, which keeps one tool
+# name meaning one thing wherever the agent happens to be.
+tools = "think,calculator,shell_exec,file_read,web_search,speak,device_open,device_notify,device_clipboard,device_share,device_status,device_app_launch,device_shell,device_read,set_display_mode"
 context_from_memory = false
 
 [tools.storage]

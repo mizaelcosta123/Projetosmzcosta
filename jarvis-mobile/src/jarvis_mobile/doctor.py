@@ -78,7 +78,10 @@ def _plugin() -> Row:
 
 def _server_deps() -> Row:
     missing = []
-    for module in ("fastapi", "uvicorn", "pydantic"):
+    # `requests` looks redundant next to httpx and is not: the server app
+    # imports it transitively, so a venv without it starts the CLI fine and then
+    # fails at `jarvis serve`. Checking it here names that before it happens.
+    for module in ("fastapi", "uvicorn", "pydantic", "requests"):
         try:
             __import__(module)
         except ImportError:
@@ -89,7 +92,7 @@ def _server_deps() -> Row:
             "server deps",
             f"missing: {', '.join(missing)}. Install: pip install {' '.join(missing)}",
         )
-    return (OK, "server deps", "fastapi, uvicorn, pydantic present")
+    return (OK, "server deps", "fastapi, uvicorn, pydantic, requests present")
 
 
 def _interface() -> Row:
@@ -206,6 +209,44 @@ def _termux() -> Row:
     return (OK, "termux", "device tools available")
 
 
+def _bridge() -> Row:
+    """Whether a phone can reach this server, and whether one has.
+
+    On the phone itself the bridge is beside the point — the tools run
+    locally — so this reports the cloud side only.
+    """
+    try:
+        from jarvis_mobile.bridge.hub import TOKEN_ENV, configured_token, hub
+        from jarvis_mobile.tools.termux import is_termux
+    except ImportError:
+        return (SKIP, "bridge", "skipped — jarvis_mobile is not importable")
+
+    if is_termux():
+        return (SKIP, "bridge", "not needed — the tools run on this device")
+    if not configured_token():
+        return (
+            SKIP,
+            "bridge",
+            f"off — set {TOKEN_ENV} on the server and pass the same value to the runner",
+        )
+    if not hub.linked:
+        return (
+            WARN,
+            "bridge",
+            (
+                "on, but no phone is linked. In Termux run: "
+                "python -m jarvis_mobile.bridge.runner --url <server> --token <token>"
+            ),
+        )
+    device = hub.describe()
+    shell = "shell allowed" if device["shell"] else "no shell"
+    return (
+        OK,
+        "bridge",
+        f"{device['name']} linked — {len(device['binaries'])} helpers, {shell}",
+    )
+
+
 def _server_running(port: int) -> Row:
     import httpx
 
@@ -227,6 +268,7 @@ def run(engine_id: str = "ollama", host: str | None = None, port: int = 8000) ->
         lambda: _engine(engine_id, host),
         _speech,
         _termux,
+        _bridge,
         lambda: _server_running(port),
     ]
     rows = []

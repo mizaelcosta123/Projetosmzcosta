@@ -280,3 +280,9 @@ html, body {
   *, *::before, *::after { transition-duration: 0.01ms !important; }
   .caption { transform: none; }
 }
+
+/* A hint carrying a correction, not a description. Same size and rhythm as the
+   others so the sheet does not jump; only the colour changes. */
+.sheet .hint.bad {
+  color: var(--danger);
+}

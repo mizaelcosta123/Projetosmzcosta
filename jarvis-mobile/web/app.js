@@ -8,6 +8,8 @@
 import { ParticleField } from './particles.js';
 import { AnalyserDriver, SynthesisDriver, createVoiceDriver } from './voice.js';
 
+import { explain, providerMistake } from './diagnose.js';
+
 const SETTINGS_KEY = 'jarvis.settings.v1';
 
 const el = {
@@ -21,6 +23,7 @@ const el = {
   menu: document.getElementById('menu'),
   settings: document.getElementById('settings'),
   serverUrl: document.getElementById('server-url'),
+  serverHint: document.getElementById('server-hint'),
   apiKey: document.getElementById('api-key'),
   model: document.getElementById('model'),
   speak: document.getElementById('speak'),
@@ -41,12 +44,21 @@ const el = {
  */
 function loadSettings() {
   const fallback = { serverUrl: '', apiKey: '', model: '', speak: true };
+  let saved = fallback;
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
+    saved = raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
   } catch {
     return fallback;
   }
+
+  // A provider URL saved before the sheet started refusing them would fail on
+  // every message, forever, on a phone whose owner has no reason to suspect
+  // the stored value. Clearing it here means the page heals itself on the next
+  // visit: blank is same-origin, which is the right answer when this page was
+  // served by the backend.
+  if (providerMistake(saved.serverUrl)) saved.serverUrl = '';
+  return saved;
 }
 
 function saveSettings(settings) {
@@ -460,7 +472,7 @@ el.composer.addEventListener('submit', async (event) => {
     if (!settings.speak) setStatus('em repouso');
   } catch (error) {
     setStatus('erro', 'error');
-    setCaption(String(error.message || error));
+    setCaption(explain(error, serverOf(settings)));
   } finally {
     field.setThinking(false);
     busy = false;
@@ -474,6 +486,7 @@ el.shape.addEventListener('click', () => {
 });
 
 el.menu.addEventListener('click', () => {
+  resetServerHint();
   el.serverUrl.value = settings.serverUrl;
   el.apiKey.value = settings.apiKey;
   el.model.value = settings.model;
@@ -483,11 +496,34 @@ el.menu.addEventListener('click', () => {
   el.settings.showModal();
 });
 
+const DEFAULT_SERVER_HINT = el.serverHint.textContent;
+
+/** Put the field's explanation back to its neutral wording. */
+function resetServerHint() {
+  el.serverHint.textContent = DEFAULT_SERVER_HINT;
+  el.serverHint.classList.remove('bad');
+}
+
 el.settings.addEventListener('close', () => {
   if (el.settings.returnValue === 'demo') {
     runDemo();
     return;
   }
+
+  // A provider URL here cannot work — the browser blocks it — so the sheet
+  // comes back with the reason instead of saving a setting that only fails
+  // later, in a message that points nowhere.
+  const provider = providerMistake(el.serverUrl.value);
+  if (provider) {
+    el.serverHint.textContent =
+      `${provider} é o provedor de modelos, não o Jarvis. Deixe vazio para usar ` +
+      'este mesmo servidor; a chave do provedor já está configurada no backend.';
+    el.serverHint.classList.add('bad');
+    // showModal() inside the close handler is too early for the dialog.
+    setTimeout(() => el.settings.showModal(), 0);
+    return;
+  }
+
   settings = {
     serverUrl: el.serverUrl.value.trim(),
     apiKey: el.apiKey.value.trim(),

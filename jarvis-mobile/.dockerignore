@@ -1,0 +1,19 @@
+# The build context is this folder; only what the image actually installs needs
+# to travel. Trimming it also stops an untracked local venv or a Gradle cache
+# from busting the COPY layer's cache on every build.
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# The Android project is built with Gradle, never inside this image.
+android/
+
+# Tests and their fixtures are not installed by `pip install .`.
+tests/
+web/tests/
+node_modules/
+
+.git/
+.github/
