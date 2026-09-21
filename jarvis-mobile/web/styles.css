@@ -1,0 +1,213 @@
+/* Dark by necessity, not by fashion: the field is luminous dots on black, and
+   a light background would wash it out entirely. */
+:root {
+  --bg: #05070c;
+  --ink: #e6edf7;
+  --muted: #7d8da6;
+  --accent: #38bdf8;
+  --surface: rgba(14, 20, 32, 0.92);
+  --line: rgba(120, 150, 190, 0.22);
+  --gutter: 16px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#field {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top)) var(--gutter) 12px;
+}
+
+.status {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  transition: color 0.3s;
+}
+.status[data-state="speaking"] { color: var(--accent); }
+.status[data-state="error"] { color: #f87171; }
+
+.icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+}
+.icon span {
+  height: 1.5px;
+  background: var(--muted);
+  border-radius: 2px;
+}
+
+.chip {
+  padding: 8px 14px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip:hover, .chip:focus-visible { color: var(--ink); border-color: var(--accent); }
+
+/* The reply sits over the field rather than in a scrolling log: the face is
+   the interface, and a transcript would compete with it. */
+.caption {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: 96px;
+  max-width: 34rem;
+  margin: 0 auto;
+  max-height: 34vh;
+  overflow-y: auto;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--ink);
+  text-shadow: 0 2px 18px rgba(5, 7, 12, 0.95);
+  opacity: 0;
+  transition: opacity 0.35s;
+}
+.caption:not(:empty) { opacity: 1; }
+
+.composer {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: max(var(--gutter), env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+  max-width: 34rem;
+  margin: 0 auto;
+}
+
+.composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 18px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  backdrop-filter: blur(12px);
+}
+.composer input::placeholder { color: var(--muted); }
+.composer input:focus-visible { outline: none; border-color: var(--accent); }
+
+.composer button {
+  width: 48px;
+  flex: none;
+  font-size: 19px;
+  color: var(--bg);
+  background: var(--accent);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.composer button:disabled { opacity: 0.4; cursor: default; }
+
+.settings {
+  width: min(28rem, calc(100vw - 32px));
+  padding: 24px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+}
+.settings::backdrop { background: rgba(5, 7, 12, 0.72); }
+.settings h2 { margin: 0 0 18px; font-size: 16px; letter-spacing: 0.04em; }
+.settings label {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.settings label.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+.settings input[type="url"],
+.settings input[type="password"],
+.settings input[type="text"] {
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 14px;
+  font: 15px/1.4 inherit;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+  background: rgba(5, 7, 12, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.hint { margin: 0 0 16px; font-size: 12px; color: var(--muted); }
+
+.settings menu {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+.settings menu button {
+  padding: 11px 20px;
+  font: inherit;
+  color: var(--bg);
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.settings menu button.ghost {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caption, .status { transition: none; }
+}

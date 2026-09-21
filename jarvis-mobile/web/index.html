@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#05070c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Jarvis</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="field" aria-hidden="true"></canvas>
+
+  <header class="bar">
+    <button id="menu" class="icon" aria-label="Configurações" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <p id="status" class="status" role="status">em repouso</p>
+    <button id="shape" class="chip" aria-label="Alternar forma">rosto</button>
+  </header>
+
+  <p id="caption" class="caption" aria-live="polite"></p>
+
+  <form id="composer" class="composer" autocomplete="off">
+    <input id="prompt" type="text" placeholder="Fale com ele…" aria-label="Mensagem">
+    <button id="send" type="submit" aria-label="Enviar">→</button>
+  </form>
+
+  <dialog id="settings" class="settings">
+    <form method="dialog">
+      <h2>Conexão</h2>
+      <label>Servidor
+        <input id="server-url" type="url" inputmode="url" placeholder="http://localhost:8000">
+      </label>
+      <label>Chave de API
+        <input id="api-key" type="password" placeholder="opcional">
+      </label>
+      <label>Modelo
+        <input id="model" type="text" placeholder="deixe vazio para o padrão">
+      </label>
+      <label class="row">
+        <input id="speak" type="checkbox" checked>
+        Falar as respostas em voz alta
+      </label>
+      <p class="hint" id="voice-mode"></p>
+      <menu>
+        <button value="demo" id="demo-btn" class="ghost">Ver sem servidor</button>
+        <button value="save" id="save-btn">Salvar</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
