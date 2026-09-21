@@ -252,9 +252,17 @@ function setCaption(text) {
  * The model to ask for.
  *
  * The server rejects a request without one — a 422, not a default — so leaving
- * the field blank in settings has to mean "whatever this server serves", not
- * "omit it". The first model from `/v1/models` is that, and it is cached for
- * the session because it cannot change without the server restarting.
+ * the field blank in settings has to mean "whatever this server is set to",
+ * not "omit it".
+ *
+ * `/v1/info` carries exactly that: the model the server was configured with.
+ * It beats picking from `/v1/models`, which lists everything an engine can
+ * reach — for an aggregator like OpenRouter that is hundreds of models, the
+ * first of them is arbitrary, and the server filters provider-qualified IDs
+ * out of that list anyway, so it can come back empty. The list stays as a
+ * fallback for a server that reports no configured model.
+ *
+ * Cached for the session: it cannot change without the server restarting.
  */
 let resolvedModel = '';
 
@@ -262,17 +270,27 @@ async function modelFor(base, headers) {
   if (settings.model) return settings.model;
   if (resolvedModel) return resolvedModel;
 
+  const configured = await fetch(`${base}/v1/info`, { headers })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((info) => info?.model)
+    .catch(() => null);
+  if (configured) {
+    resolvedModel = configured;
+    return configured;
+  }
+
   const response = await fetch(`${base}/v1/models`, { headers });
   if (!response.ok) {
     throw new Error(
-      `Não consegui listar os modelos do servidor (${response.status}). ` +
+      `Não consegui descobrir qual modelo usar (${response.status}). ` +
         'Escolha um em Configurações → Modelo.',
     );
   }
   const first = (await response.json())?.data?.[0]?.id;
   if (!first) {
     throw new Error(
-      'O servidor não expôs nenhum modelo. Escolha um em Configurações → Modelo.',
+      'O servidor não disse qual modelo usar. Escolha um em Configurações → Modelo — ' +
+        'com OpenRouter, algo como "anthropic/claude-sonnet-4.5".',
     );
   }
   resolvedModel = first;

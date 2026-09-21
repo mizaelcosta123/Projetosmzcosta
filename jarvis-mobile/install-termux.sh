@@ -116,8 +116,8 @@ else
   cat > "$CONFIG" <<'TOML'
 # Jarvis on Android. Pick a provider, set its key, and you are running.
 #
-#   nous         NOUS_API_KEY          https://portal.nousresearch.com
 #   openrouter   OPENROUTER_API_KEY    https://openrouter.ai/keys
+#   nous         NOUS_API_KEY          https://portal.nousresearch.com
 #   huggingface  HF_TOKEN              https://huggingface.co/settings/tokens
 #   opencode     OPENCODE_API_KEY      https://opencode.ai/auth
 #
@@ -126,11 +126,14 @@ else
 # put in default_model.
 
 [intelligence]
-default_model = ""          # empty: the interface asks the server what it serves
-preferred_engine = "nous"
+# OpenRouter and Hugging Face namespace their model IDs as "vendor/model", and
+# the catalogue runs to hundreds — so name the one you want rather than hoping
+# a default fits. Ask the assistant to list its models if you are unsure.
+default_model = "anthropic/claude-sonnet-4.5"
+preferred_engine = "openrouter"
 
 [engine]
-default = "nous"
+default = "openrouter"
 
 [agent]
 default_agent = "orchestrator"
@@ -168,8 +171,8 @@ if [ ! -f "$ENV_FILE" ]; then
 # Your API key goes here. Uncomment the line for the provider you chose and
 # paste the key. This file is read by the `jarvis-start` launcher.
 #
-# export NOUS_API_KEY="..."
 # export OPENROUTER_API_KEY="..."
+# export NOUS_API_KEY="..."
 # export HF_TOKEN="..."
 # export OPENCODE_API_KEY="..."
 ENVEOF
