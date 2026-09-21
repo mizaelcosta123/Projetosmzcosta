@@ -19,6 +19,8 @@ dependencies = []
 # why this exists instead of a plugin hook.
 [project.scripts]
 jarvis-mobile = "jarvis_mobile.bridge.install:main"
+# The docs call it by this name, so it should answer to it.
+jarvis-doctor = "jarvis_mobile.doctor:main"
 
 [project.optional-dependencies]
 dev = [
