@@ -144,6 +144,42 @@ agente e o telefone, porque são a mesma máquina. Custa a memória do modelo e 
 bateria. A segunda responde mais rápido e funciona com o celular no bolso, mas
 depende da ponte estar ligada.
 
+### Ligar a página ao Ollama do seu Termux
+
+No painel de configurações há um botão **Ollama do Termux**. Ele cria uma
+entrada apontando para `http://localhost:11434` — que, do navegador do próprio
+aparelho, é o Ollama rodando ali dentro.
+
+Isso funciona mesmo com a página vindo do Render por https: o Chrome não
+bloqueia `http://localhost` como conteúdo misto. O que ele bloqueia é o CORS, e
+é aí que quase todo mundo trava. O Ollama só aceita chamadas da própria
+máquina, então precisa ser dito para aceitar esta página:
+
+```bash
+# no Termux, no lugar de `ollama serve`:
+OLLAMA_ORIGINS=https://jarvis-backend-rhnc.onrender.com ollama serve
+```
+
+Sem isso o navegador recusa antes de qualquer resposta, e reporta apenas
+`Failed to fetch` — sem dizer o motivo nem o campo. O botão **Testar e carregar
+modelos** traduz isso para o comando acima, já com o seu endereço.
+
+**Mas leia esta parte.** Uma entrada de Ollama é um **provedor**: ela responde e
+nada mais. As ferramentas `device_*` vivem no agente do Jarvis, não no modelo,
+então nada dessa ligação chega ao Termux por mais que o modelo saiba chamar
+tools. O painel diz isso em âmbar ao lado da entrada.
+
+Para ter **modelo local e controle do aparelho ao mesmo tempo**, o Jarvis
+precisa rodar no próprio celular:
+
+```bash
+~/jarvis-venv/bin/jarvis serve --engine ollama --model qwen2.5:1.5b
+```
+
+e a página aponta para `http://localhost:8000` — uma entrada de Jarvis, em
+verde. Aí não há rede entre o agente e o telefone, porque são a mesma máquina:
+sem ponte, sem token, sem 403.
+
 ### O modelo precisa saber chamar tools
 
 Toda tool `device_*` chega ao celular por uma **chamada de tool**. Um modelo que
