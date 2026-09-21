@@ -24,6 +24,7 @@ from uuid import uuid4
 
 __all__ = [
     "PROTOCOL_VERSION",
+    "RUNNER_PATH",
     "TOKEN_ENV",
     "URL_ENV",
     "DeviceHub",
@@ -45,6 +46,10 @@ TOKEN_ENV = "JARVIS_DEVICE_TOKEN"
 
 #: Where the runner dials, e.g. wss://jarvis-backend-xxxx.onrender.com
 URL_ENV = "JARVIS_DEVICE_URL"
+
+#: Where this server hands out the runner. Defined here rather than imported
+#: from routes, which imports this module.
+RUNNER_PATH = "/v1/device/runner.py"
 
 #: Grace added to a call's own timeout before the waiting thread gives up, so
 #: the runner's timeout fires first and reports something useful.
@@ -77,6 +82,15 @@ class _Device:
     name: str = "phone"
     binaries: frozenset[str] = field(default_factory=frozenset)
     allows_shell: bool = False
+    allows_ui: bool = False
+    #: False when the runner's hello predates the screen tools.
+    #:
+    #: The runner is a file people download once and keep. There was no way to
+    #: tell a current one from a copy saved weeks ago, so a phone would link
+    #: happily and then refuse `input tap` with a message about a flag its own
+    #: --help had never heard of. `ui` in the hello is the marker: a runner old
+    #: enough not to send it is old enough to be missing the feature.
+    reports_ui: bool = False
 
 
 class DeviceHub:
@@ -100,6 +114,21 @@ class DeviceHub:
     def allows_shell(self) -> bool:
         return bool(self._device and self._device.allows_shell)
 
+    @property
+    def allows_ui(self) -> bool:
+        """Whether the phone will run the screen binaries.
+
+        A free shell covers them too, so --allow-shell implies this.
+        """
+        if not self._device:
+            return False
+        return self._device.allows_ui or self._device.allows_shell
+
+    @property
+    def runner_is_stale(self) -> bool:
+        """True when the linked runner is older than the screen tools."""
+        return bool(self._device and not self._device.reports_ui)
+
     def has_binary(self, name: str) -> bool:
         """Whether the phone reported this helper as installed.
 
@@ -117,6 +146,8 @@ class DeviceHub:
             "linked": True,
             "name": self._device.name,
             "shell": self._device.allows_shell,
+            "ui": self.allows_ui,
+            "stale": self.runner_is_stale,
             "binaries": sorted(self._device.binaries),
         }
 
@@ -134,14 +165,24 @@ class DeviceHub:
             name=str(hello.get("device") or "phone")[:64],
             binaries=frozenset(str(b) for b in hello.get("binaries") or ()),
             allows_shell=bool(hello.get("shell")),
+            allows_ui=bool(hello.get("ui")),
+            reports_ui="ui" in hello,
         )
         self._device = device
         logger.info(
-            "device bridge: %s linked (%d helpers, shell=%s)",
+            "device bridge: %s linked (%d helpers, shell=%s, ui=%s)",
             device.name,
             len(device.binaries),
             device.allows_shell,
+            device.allows_ui,
         )
+        if not device.reports_ui:
+            logger.warning(
+                "device bridge: %s is running an old runner — it cannot control the "
+                "screen. Update it: curl -O <este-servidor>%s",
+                device.name,
+                RUNNER_PATH,
+            )
         return device
 
     def detach(self, device: _Device) -> None:

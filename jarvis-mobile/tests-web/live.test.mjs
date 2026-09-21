@@ -310,7 +310,14 @@ function failWith(code) {
   return Failing;
 }
 
-/** Collect the events a WakeWord emits while an error code is in force. */
+/**
+ * Collect the events a WakeWord emits while an error code is in force.
+ *
+ * The wait is one macrotask, not a stretch of milliseconds. The fake fires its
+ * error from a microtask, and microtasks always drain before the next
+ * macrotask — so this is ordered by the event loop rather than by how busy the
+ * machine happens to be, and cannot slip under load.
+ */
 async function eventsFor(code) {
   failWith(code);
   const wake = new WakeWord();
@@ -319,7 +326,7 @@ async function eventsFor(code) {
     wake.addEventListener(name, () => seen.push(name));
   }
   wake.start();
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setImmediate(resolve));
   const armed = wake.armed;
   wake.stop();
   delete globalThis.SpeechRecognition;

@@ -264,6 +264,31 @@ há comando: o Android exige o toque de uma pessoa.
 | Contatos | `device_contacts` |
 | SMS | ler a lista de mensagens |
 
+## Atualizar o runner
+
+O runner é **um arquivo só**, que você baixa e guarda. Isso significa que a
+cópia no seu celular pode ser de semanas atrás, e o sintoma é confuso: ela
+conecta normalmente e depois recusa um comando citando uma flag que o próprio
+`--help` dela não conhece.
+
+```
+python: error: unrecognized arguments: --allow-ui
+```
+
+Isso não é erro de digitação — é a cópia velha. O servidor entrega a versão com
+que ele foi construído:
+
+```bash
+curl -O https://seu-backend.onrender.com/v1/device/runner.py
+```
+
+Assim as duas pontas vêm sempre do mesmo build, e não há repositório, branch nem
+URL de raw para acertar.
+
+O servidor também percebe sozinho: um runner antigo o bastante para não anunciar
+`ui` no `hello` aparece como `"stale": true` em `/v1/device`, e as ferramentas de
+tela mandam atualizar em vez de mandar passar a flag.
+
 ## Controlar a tela
 
 As ferramentas de tela — tocar, arrastar, digitar, ler o que está nela, tirar

@@ -10,14 +10,17 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi.responses import PlainTextResponse
 
-from jarvis_mobile.bridge.hub import PROTOCOL_VERSION, DeviceHub
+from jarvis_mobile.bridge import runner as runner_module
+from jarvis_mobile.bridge.hub import PROTOCOL_VERSION, RUNNER_PATH, DeviceHub
 from jarvis_mobile.bridge.hub import hub as default_hub
 
-__all__ = ["DEVICE_PATH", "STATUS_PATH", "create_device_router"]
+__all__ = ["DEVICE_PATH", "RUNNER_PATH", "STATUS_PATH", "create_device_router"]
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +65,26 @@ def create_device_router(token: str, hub: DeviceHub | None = None) -> Any:
         already guards it.
         """
         return target.describe()
+
+    @router.get(RUNNER_PATH)
+    def device_runner() -> Any:
+        """Hand out the runner this server was built with.
+
+        The runner is a single file people download once and keep, and there
+        was no way to tell a current copy from one saved weeks ago. The symptom
+        is a phone that links happily and then refuses a screen command citing
+        a flag its own ``--help`` has never heard of.
+
+        Serving it from here means the copy on the phone and the tools on the
+        server always came from the same build, and updating is one command
+        with no repository, branch or raw URL to get right.
+        """
+        source = Path(runner_module.__file__).read_text(encoding="utf-8")
+        return PlainTextResponse(
+            source,
+            media_type="text/x-python",
+            headers={"Content-Disposition": 'attachment; filename="runner.py"'},
+        )
 
     @router.websocket(DEVICE_PATH)
     async def link(websocket: WebSocket) -> None:  # pragma: no cover - needs a live server
