@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { BargeIn, Envelope, VoiceGate, normalizeSpeech, wakeMatch } from '../web/live.js';
+import { BargeIn, Envelope, VoiceGate, WakeWord, normalizeSpeech, wakeMatch } from '../web/live.js';
 
 /** Feed a constant level for a stretch, returning every transition it caused. */
 function hold(gate, level, ms, { from = 0, step = 16 } = {}) {
@@ -286,4 +286,68 @@ test('normalizeSpeech survives whatever it is handed', () => {
   assert.equal(normalizeSpeech(null), '');
   assert.equal(normalizeSpeech(undefined), '');
   assert.equal(normalizeSpeech('  Olá,   MUNDO!  '), 'ola mundo');
+});
+
+// -- a refusal and an outage are not the same thing -------------------------
+
+/** A recogniser whose only job is to report one error. */
+function failWith(code) {
+  class Failing {
+    constructor() {
+      this.lang = '';
+      Failing.last = this;
+    }
+    start() {
+      // Errors arrive asynchronously in a real browser; keep that shape.
+      queueMicrotask(() => this.onerror?.({ error: code }));
+    }
+    stop() {
+      this.onend?.();
+    }
+  }
+  globalThis.SpeechRecognition = Failing;
+  globalThis.webkitSpeechRecognition = Failing;
+  return Failing;
+}
+
+/** Collect the events a WakeWord emits while an error code is in force. */
+async function eventsFor(code) {
+  failWith(code);
+  const wake = new WakeWord();
+  const seen = [];
+  for (const name of ['denied', 'unavailable']) {
+    wake.addEventListener(name, () => seen.push(name));
+  }
+  wake.start();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const armed = wake.armed;
+  wake.stop();
+  delete globalThis.SpeechRecognition;
+  delete globalThis.webkitSpeechRecognition;
+  return { seen, armed };
+}
+
+test('a person saying no is remembered', async () => {
+  const { seen, armed } = await eventsFor('not-allowed');
+  assert.deepEqual(seen, ['denied']);
+  assert.equal(armed, false, 'a refusal stops the retrying');
+});
+
+test('the service being unreachable is not a refusal', async () => {
+  /* The bug this pins. `service-not-allowed` means the transcription service
+   * could not be reached — nobody was ever asked for permission. Reporting it
+   * as a denial told people they had refused something they never saw, and
+   * switched the wake word off for good over what is usually a hiccup. */
+  const { seen, armed } = await eventsFor('service-not-allowed');
+  assert.deepEqual(seen, ['unavailable']);
+  assert.equal(armed, true, 'it comes back on its own, so keep listening');
+});
+
+test('the ordinary errors are not announced at all', async () => {
+  // Chrome fires these constantly; onend restarts and nobody needs to know.
+  for (const code of ['no-speech', 'aborted', 'network']) {
+    const { seen, armed } = await eventsFor(code);
+    assert.deepEqual(seen, [], code);
+    assert.equal(armed, true, code);
+  }
 });

@@ -269,12 +269,27 @@ def test_the_route_is_mounted_with_a_token(monkeypatch):
 
     monkeypatch.setenv("JARVIS_DEVICE_TOKEN", "s3cr3t")
 
+    class FakeRouter:
+        """A route table with an order, because the order is the whole point.
+
+        The previous version of this fake collected routers in a set-like list
+        with no positions. That is precisely the shape that cannot express "the
+        catch-all is matched first", which is how a real bug lived here: the
+        device routes were appended behind the page route and GET /v1/device
+        answered with HTML.
+        """
+
+        def __init__(self):
+            # Stands in for whatever the server registered before us — the
+            # page's catch-all is always last of those.
+            self.routes = ["/{full_path:path}"]
+
     class FakeApp:
         def __init__(self):
-            self.routers = []
+            self.router = FakeRouter()
 
         def include_router(self, router):
-            self.routers.append(router)
+            self.router.routes.append(router)
 
     class FakeModule:
         @staticmethod
@@ -282,11 +297,13 @@ def test_the_route_is_mounted_with_a_token(monkeypatch):
             return FakeApp()
 
     assert install_module.install(FakeModule) is True
-    assert len(FakeModule.create_app().routers) == 1
+    routes = FakeModule.create_app().router.routes
+    assert len(routes) == 2
+    assert routes[-1] == "/{full_path:path}", "the device routes must come first"
 
     # Idempotent: installing twice must not stack two routers.
     install_module.install(FakeModule)
-    assert len(FakeModule.create_app().routers) == 1
+    assert len(FakeModule.create_app().router.routes) == 2
 
 
 def test_the_protocol_version_is_shared_by_both_ends():
@@ -474,3 +491,86 @@ def test_the_status_endpoint_tracks_the_link():
         "binaries": ["termux-battery-status"],
     }
     assert client.get(STATUS_PATH).json() == {"linked": False}, "a disconnect must show"
+
+
+# -- the catch-all that swallowed the status endpoint ------------------------
+
+
+def _app_with_catch_all():
+    """A server shaped like the real one: the page served from a catch-all.
+
+    OpenJarvis registers ``/{full_path:path}`` to serve the single-page
+    interface, and it is the *last* route in the table. Anything mounted after
+    it is unreachable over HTTP.
+    """
+    fastapi = pytest.importorskip("fastapi")
+    app = fastapi.FastAPI()
+
+    @app.get("/{full_path:path}")
+    def page(full_path: str):
+        return fastapi.responses.HTMLResponse("<!DOCTYPE html><html></html>")
+
+    return app
+
+
+def test_the_status_endpoint_is_not_swallowed_by_the_page():
+    """The bug: GET /v1/device answered with the HTML page, and 200.
+
+    Starlette matches routes in registration order, so a plain include_router
+    put the device routes behind the catch-all. It reads as working — a 200,
+    a body — and tells you nothing, which is worse than a 404. It is also the
+    one endpoint anybody diagnosing a phone that will not connect reaches for.
+    """
+    from fastapi.testclient import TestClient
+
+    from jarvis_mobile.bridge.install import _mount_first
+    from jarvis_mobile.bridge.routes import STATUS_PATH, create_device_router
+
+    app = _app_with_catch_all()
+    _mount_first(app, create_device_router("segredo", DeviceHub()))
+
+    response = TestClient(app).get(STATUS_PATH)
+    assert response.json() == {"linked": False}
+    assert "html" not in response.text.lower()
+
+
+def test_and_the_page_is_still_served():
+    """The other half: mounting first must not shadow the interface itself."""
+    from fastapi.testclient import TestClient
+
+    from jarvis_mobile.bridge.install import _mount_first
+    from jarvis_mobile.bridge.routes import create_device_router
+
+    app = _app_with_catch_all()
+    _mount_first(app, create_device_router("segredo", DeviceHub()))
+
+    client = TestClient(app)
+    for path in ("/", "/app.js", "/qualquer/coisa"):
+        assert "html" in client.get(path).text.lower(), path
+
+
+def test_the_websocket_was_never_the_broken_half():
+    """Why a phone could link while the status endpoint lied.
+
+    An HTTP route does not match a WebSocket scope, so the catch-all never
+    shadowed /v1/device/link. The runner connected, the server agreed, and the
+    only thing that looked wrong was the endpoint for checking it.
+    """
+    import json as _json
+
+    from fastapi.testclient import TestClient
+
+    from jarvis_mobile.bridge.install import _mount_first
+    from jarvis_mobile.bridge.routes import STATUS_PATH, create_device_router
+
+    hub = DeviceHub()
+    app = _app_with_catch_all()
+    _mount_first(app, create_device_router("segredo", hub))
+    client = TestClient(app)
+
+    with client.websocket_connect(
+        "/v1/device/link", headers={"Authorization": "Bearer segredo"}
+    ) as ws:
+        ws.send_text(_json.dumps(_hello(binaries=["termux-battery-status"])))
+        ws.receive_text()
+        assert client.get(STATUS_PATH).json()["linked"] is True

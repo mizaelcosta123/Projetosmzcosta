@@ -60,21 +60,36 @@
     <form method="dialog">
       <h2>Conexão</h2>
 
-      <label for="server-url">Servidor</label>
-      <!-- The placeholder used to read http://localhost:8000, which invited
-           people to type *an* address. The two addresses in play at this
-           moment are this backend and the model provider, and picking the
-           second one fails with a browser message that names neither. -->
-      <input id="server-url" type="url" inputmode="url" placeholder="este mesmo servidor">
-      <p class="hint" id="server-hint">Endereço do Jarvis — não o do provedor de modelos. Deixe vazio se esta página veio dele.</p>
+      <label for="provider">Onde ele pensa</label>
+      <select id="provider"></select>
+      <p class="hint" id="provider-role"></p>
 
-      <label for="api-key">Chave de API</label>
-      <input id="api-key" type="password" placeholder="a chave do Jarvis, não a do provedor">
-      <p class="hint">É o <code>OPENJARVIS_API_KEY</code> do servidor. A chave do provedor fica no backend, nunca aqui.</p>
+      <div id="provider-edit" class="stack">
+        <label for="provider-name">Nome</label>
+        <input id="provider-name" type="text" placeholder="como você chama este" autocapitalize="off">
+
+        <label for="provider-url">Endereço</label>
+        <input id="provider-url" type="url" inputmode="url" placeholder="este mesmo servidor" autocapitalize="off" spellcheck="false">
+        <p class="hint" id="provider-hint">Vazio é esta mesma página. Um Jarvis alcança o seu aparelho; um provedor só responde.</p>
+
+        <label for="provider-key">Chave</label>
+        <input id="provider-key" type="password" placeholder="deixe vazio se não pedir" autocapitalize="off">
+
+        <menu class="row">
+          <button type="button" id="provider-test" class="quiet">Testar e carregar modelos</button>
+          <button type="button" id="provider-remove" class="quiet danger">Remover</button>
+        </menu>
+        <p class="hint" id="provider-status" aria-live="polite"></p>
+      </div>
+
+      <menu class="row">
+        <button type="button" id="provider-add" class="quiet">Adicionar provedor</button>
+        <button type="button" id="provider-ollama" class="quiet">Ollama do Termux</button>
+      </menu>
 
       <label for="model">Modelo</label>
-      <!-- A datalist, not a select: the free catalogue is a convenience, and
-           any model ID must stay typeable whether or not it is listed. -->
+      <!-- A datalist, not a select: the catalogue is a convenience, and any
+           model ID must stay typeable whether or not it came back in the list. -->
       <input id="model" type="text" list="model-options" placeholder="padrão do servidor" autocapitalize="off" spellcheck="false">
       <datalist id="model-options"></datalist>
       <p class="hint" id="model-hint"></p>

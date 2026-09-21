@@ -55,13 +55,34 @@ def install(app_module: Any = None) -> bool:
             # to run this. Said once, at startup, so it is findable later.
             logger.info("device bridge off — set %s to let a phone link to this server", TOKEN_ENV)
             return application
-        application.include_router(create_device_router(token))
+        _mount_first(application, create_device_router(token))
         logger.info("device bridge on — a runner may link with %s", TOKEN_ENV)
         return application
 
     setattr(create_app, _MARK, True)
     app_module.create_app = create_app
     return bool(configured_token())
+
+
+def _mount_first(application: Any, router: Any) -> None:
+    """Include ``router`` and move its routes to the front of the table.
+
+    OpenJarvis serves the single-page interface from a catch-all
+    ``/{full_path:path}`` route, and Starlette matches routes in the order they
+    were registered. A plain ``include_router`` appends, so the catch-all was
+    matched first and ``GET /v1/device`` answered with the HTML page — a 200
+    full of markup, which reads as working and tells you nothing.
+
+    The WebSocket at ``/v1/device/link`` was never affected: an HTTP route does
+    not match a WebSocket scope. That is why a phone could link successfully
+    while the endpoint for *checking* whether it had linked was unreachable —
+    the one endpoint anybody diagnosing this would reach for.
+    """
+    before = len(application.router.routes)
+    application.include_router(router)
+    added = application.router.routes[before:]
+    del application.router.routes[before:]
+    application.router.routes[0:0] = added
 
 
 def main(argv: list[str] | None = None) -> int:
