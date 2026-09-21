@@ -38,6 +38,17 @@
 
   <form id="composer" class="composer" autocomplete="off">
     <input id="prompt" type="text" placeholder="Fale com ele" aria-label="Mensagem" enterkeyhint="send">
+    <!-- Three bars, not the header's three lines: this one opens the
+         microphone, and a control that does that should never be mistaken for
+         a menu. It is off until pressed — nothing listens by default. -->
+    <button id="live" type="button" class="live-btn" aria-label="Conversar ao vivo"
+            aria-pressed="false" title="Conversar ao vivo">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <line x1="6" y1="7.5" x2="6" y2="12.5" />
+        <line x1="10" y1="4" x2="10" y2="16" />
+        <line x1="14" y1="7.5" x2="14" y2="12.5" />
+      </svg>
+    </button>
     <button id="send" type="submit" aria-label="Enviar">
       <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
         <path d="M3 10h13M11 5l5 5-5 5" />
@@ -73,6 +84,12 @@
         <span>Falar as respostas em voz alta</span>
       </label>
       <p class="hint" id="voice-mode"></p>
+
+      <label class="switch">
+        <input id="wake" type="checkbox" checked>
+        <span>Atender quando eu disser “Jarvis”</span>
+      </label>
+      <p class="hint">Para ouvir uma palavra ele precisa ouvir todas: o microfone fica aberto enquanto isto estiver ligado. Nada é gravado nem enviado — só a frase que acorda ele. Desligue e resta o botão de ondas.</p>
 
       <menu>
         <button value="demo" id="demo-btn" class="quiet">Ver sem servidor</button>

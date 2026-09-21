@@ -32,6 +32,20 @@ export class VoiceDriver extends EventTarget {
     this.speaking = false;
   }
 
+  /**
+   * Lower or restore the voice without ending it.
+   *
+   * Live mode ducks him the moment the microphone hears something, before it
+   * knows whether that something was speech. Drivers that cannot change
+   * volume mid-sentence pause instead, which is the same promise kept a
+   * different way.
+   *
+   * @param {number} _volume 0..1.
+   */
+  setVolume(_volume) {
+    /* silent driver: nothing to lower */
+  }
+
   _emitEnd() {
     this.level = 0;
     this.spread = 0;
@@ -108,6 +122,12 @@ export class AnalyserDriver extends VoiceDriver {
       audio.addEventListener('error', done);
     });
     this._emitEnd();
+  }
+
+  setVolume(volume) {
+    // The element's own volume applies ahead of the graph, so this works even
+    // though playback is routed through the analyser.
+    if (this.audio) this.audio.volume = volume;
   }
 
   /**
@@ -247,6 +267,14 @@ export class SynthesisDriver extends VoiceDriver {
     const decay = Math.exp(-sinceWord * 1.8);
     this.level = Math.min(1, 0.25 + carrier * decay * 0.85);
     return this.level;
+  }
+
+  setVolume(volume) {
+    // An utterance's volume is fixed once it starts, so ducking is a pause.
+    // It is abrupt where the audio driver fades, and it is the same contract.
+    if (!SynthesisDriver.available || !this.speaking) return;
+    if (volume < 1) window.speechSynthesis.pause();
+    else window.speechSynthesis.resume();
   }
 
   stop() {

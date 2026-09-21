@@ -186,6 +186,41 @@ html, body {
 .composer button:focus-visible { opacity: 1; transform: none; outline: 1px solid var(--accent); outline-offset: 2px; }
 .composer button:disabled { opacity: 0.35; cursor: default; }
 
+/* -- live voice ----------------------------------------------------------- */
+
+/* Not a send affordance: this one has to be findable on an *empty* composer,
+   because an empty composer is exactly when you reach for it. */
+.composer .live-btn {
+  opacity: 0.5;
+  transform: none;
+}
+.composer .live-btn:hover,
+.composer .live-btn:focus-visible { opacity: 1; }
+
+/* The three bars move only while the session is open, and the middle one
+   leads — the same shape as a meter, which is what it is standing for. */
+.composer[data-live="on"] .live-btn { opacity: 1; color: var(--accent); }
+.composer[data-live="on"] .live-btn line {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bar 1.25s var(--ease) infinite;
+}
+.composer[data-live="on"] .live-btn line:nth-child(1) { animation-delay: -0.42s; }
+.composer[data-live="on"] .live-btn line:nth-child(3) { animation-delay: -0.84s; }
+
+/* Hearing you: the bars stop idling and stand up, so the page shows it is
+   taking your turn rather than filling silence. */
+.composer[data-live="hearing"] .live-btn line { animation-duration: 0.55s; }
+
+@keyframes bar {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer[data-live] .live-btn line { animation: none; }
+}
+
 /* -- settings ------------------------------------------------------------- */
 
 .sheet {
