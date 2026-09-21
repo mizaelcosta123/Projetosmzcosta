@@ -79,7 +79,12 @@ export class AnalyserDriver extends VoiceDriver {
     // 1024 is a good trade at 60fps: enough samples for a stable RMS, short
     // enough that the level tracks syllables rather than smearing across them.
     this.analyser.fftSize = 1024;
-    this.analyser.smoothingTimeConstant = 0.6;
+    // Smoothing here is averaging with the previous frame's spectrum, and at
+    // 0.6 it carried roughly 100ms of the past into every reading — on top of
+    // the field's own smoothing. The mouth lagged the voice by most of a
+    // syllable. 0.25 still steadies the formant bands that decide lip shape
+    // without putting the face behind the sound.
+    this.analyser.smoothingTimeConstant = 0.25;
     this.buffer = new Uint8Array(this.analyser.fftSize);
     this.spectrum = new Uint8Array(this.analyser.frequencyBinCount);
     this.analyser.connect(this.context.destination);

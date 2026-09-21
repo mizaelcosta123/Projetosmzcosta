@@ -135,10 +135,21 @@ class WakeWord extends EventTarget {
       }
     };
     recognition.onerror = (event) => {
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      // Two errors that look alike and are not. `not-allowed` is a person
+      // saying no, and it should be remembered. `service-not-allowed` is the
+      // transcription service being unreachable — no one was ever asked, and
+      // it comes back on its own, so remembering it would switch the feature
+      // off for good over a network hiccup.
+      if (event.error === 'not-allowed') {
         this.armed = false;
         this.dispatchEvent(new CustomEvent('denied', { detail: { reason: event.error } }));
+        return;
       }
+      if (event.error === 'service-not-allowed') {
+        this.dispatchEvent(new CustomEvent('unavailable', { detail: { reason: event.error } }));
+        return;
+      }
+      // `no-speech`, `aborted` and `network` are ordinary: onend restarts.
     };
     recognition.onend = () => {
       if (!this.armed) return;

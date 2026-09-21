@@ -20,6 +20,14 @@ import { sampleOrb } from './orb.js';
 
 const TAU = Math.PI * 2;
 
+/**
+ * The sphere's outer edge, squared.
+ *
+ * Particles at this radius get no outward push at all, which is what keeps the
+ * shell inside a phone's width (about 0.89 of these units) at full volume.
+ */
+const ORB_EDGE2 = 0.43;
+
 export { ROLE, sampleFace, sampleOrb };
 
 /**
@@ -49,6 +57,24 @@ export const SHAPES = { orb: sampleOrb, face: sampleFace };
  * about audio plumbing or the network: callers push a level in, which keeps
  * the visual testable with synthetic input.
  */
+/**
+ * Move `current` toward `target` by a time constant, not by a fixed fraction.
+ *
+ * A per-frame coefficient is really a per-frame *rate*: the same `0.45` settles
+ * twice as fast on a 120Hz phone as on a 60Hz one, so the mouth tracked the
+ * voice differently depending on the display. `tau` is the seconds it takes to
+ * cover ~63% of the remaining distance, and it means the same thing at any
+ * frame rate.
+ *
+ * @param {number} current
+ * @param {number} target
+ * @param {number} tau Seconds.
+ * @param {number} step Seconds since the last frame.
+ */
+function approach(current, target, tau, step) {
+  return current + (target - current) * (1 - Math.exp(-step / tau));
+}
+
 export class ParticleField {
   /**
    * @param {HTMLCanvasElement} canvas
@@ -187,14 +213,16 @@ export class ParticleField {
     const step = Math.min(dt, 0.05);
     this.time += step;
 
-    // Attack fast, release slow — speech should grab the field immediately and
-    // let it settle gently, the way a voice actually decays.
+    // Attack fast, release quick enough to stay on the words. The release used
+    // to take ~200ms, which is longer than a syllable: the mouth was still
+    // closing on one sound while the voice was already into the next, and the
+    // whole face read as dubbed. 70ms keeps the shape without the lag.
     const rising = this.level > this.smoothLevel;
-    this.smoothLevel += (this.level - this.smoothLevel) * (rising ? 0.45 : 0.08);
+    this.smoothLevel = approach(this.smoothLevel, this.level, rising ? 0.028 : 0.07, step);
     if (this.smoothLevel < 0.002) this.smoothLevel = 0;
     // Lips are muscle: they cannot snap between shapes the way a spectrum
     // reading can, and an unsmoothed spread reads as a flutter.
-    this.smoothSpread += (this.spread - this.smoothSpread) * 0.22;
+    this.smoothSpread = approach(this.smoothSpread, this.spread, 0.067, step);
 
     if (this.morph < 1) this.morph = Math.min(1, this.morph + step * 1.5);
 
@@ -202,7 +230,7 @@ export class ParticleField {
     // rather than as a pulse waiting to be dismissed. It fades in and out so
     // entering and leaving the state is never a jump.
     const wanted = this.thinking ? Math.sin(this.time * 2.1) * 0.5 + 0.5 : 0;
-    this.thinkLevel += (wanted - this.thinkLevel) * 0.06;
+    this.thinkLevel = approach(this.thinkLevel, wanted, 0.27, step);
     if (!this.thinking && this.thinkLevel < 0.004) this.thinkLevel = 0;
     // Speech always wins: once he answers, the breath stops competing.
     const breath = this.smoothLevel > 0.05 ? 0 : this.thinkLevel;
@@ -217,6 +245,17 @@ export class ParticleField {
     const { x, y, vx, vy, phase, ctx } = this;
     const scale = this.scale;
     const spread = 1 + energy * 0.05 + breath * 0.035;
+
+    // How much of what is on screen is the sphere. The face expresses speech
+    // through a jaw and lips; the sphere has neither, so without this it could
+    // only swell by 5% and a shout looked like a whisper. During a morph both
+    // shapes are partly present, so this follows the blend rather than
+    // switching at the halfway point.
+    const orbness =
+      this.targetShape === 'orb' ? m : this.currentShape === 'orb' ? 1 - m : 0;
+    // The shell comes apart rather than simply inflating: each particle gets
+    // its own share of the push, so the gaps between them open up.
+    const burst = energy * orbness;
     // How wide the mouth is held, and how wide the opening between the lips
     // is: "ee" stretches both, "oo" purses both.
     const lips = this.smoothSpread * energy;
@@ -265,9 +304,38 @@ export class ParticleField {
           goalX *= 1 + energy * 0.16;
           goalY *= 1 + energy * 0.16;
         } else {
-          const wobble = Math.sin(this.time * 5.5 + phase[i]);
-          goalX += wobble * energy * 0.022;
-          goalY += Math.cos(this.time * 4.6 + phase[i]) * energy * 0.022;
+          // Louder is not just wider, it is busier: the shimmer speeds up with
+          // the voice, so a raised voice reads as agitation and not only as
+          // size. Each particle keeps its own phase, so the field never
+          // pulses in lockstep.
+          const rate = 5.5 + energy * 7;
+          const shake = energy * (0.05 + 0.05 * energy);
+          goalX += Math.sin(this.time * rate + phase[i]) * shake;
+          goalY += Math.cos(this.time * (rate * 0.84) + phase[i]) * shake;
+
+          if (burst > 0) {
+            // Per-particle, so the sphere separates into a cloud instead of
+            // scaling up as one solid shell. `phase` is already the field's
+            // per-particle randomness, so it doubles as the share each one
+            // takes — no extra array, no extra memory on a phone.
+            //
+            // The halo is deliberately outside this: it starts at twice the
+            // shell's radius and already spreads on its own just above, so
+            // pushing it again threw the outermost points clean off the
+            // canvas at anything above half volume.
+            const share = 0.5 + 0.5 * Math.sin(phase[i] * 3.1);
+            // Weighted by how far in the particle already sits: the crowded
+            // interior opens up and the rim barely moves. That is what makes
+            // this read as coming apart rather than as a balloon inflating —
+            // and it is also what keeps the sphere on a phone screen, which
+            // is only ~0.89 of these units wide. Squared radius, so no
+            // square root runs for every particle on every frame.
+            const near = goalX * goalX + goalY * goalY;
+            const room = near < ORB_EDGE2 ? 1 - near / ORB_EDGE2 : 0;
+            const push = 1 + burst * 1.6 * share * room;
+            goalX *= push;
+            goalY *= push;
+          }
         }
       } else if (this.restDrift > 0) {
         goalX += Math.sin(this.time + phase[i]) * this.restDrift;

@@ -619,13 +619,29 @@ function armWake() {
     wake.addEventListener('wake', (event) => toggleLive(event.detail.rest));
     wake.addEventListener('denied', () => {
       // Refusing the microphone is an answer. Remember it instead of asking
-      // again on every visit, and say what still works.
+      // again on every visit, and say what still works — and where to undo it,
+      // because a setting that turns itself off and does not say where it
+      // lives is a setting nobody finds again.
       settings = { ...settings, wake: false };
       saveSettings(settings);
+      el.wake.checked = false;
       setStatus('erro', 'error');
       setCaption(
-        'Sem permissão para o microfone, então desliguei o atendimento por voz. ' +
-          'O botão de ondas continua funcionando.'
+        'Sem permissão para o microfone, então desliguei o atendimento pelo nome. ' +
+          'O botão de ondas continua funcionando, e você pode religar em ' +
+          'Configurações → Atender pelo nome.'
+      );
+    });
+    wake.addEventListener('unavailable', () => {
+      // Not a refusal: the transcription service could not be reached, and
+      // nobody was asked anything. It comes back on its own, so the setting
+      // stays on and the recogniser keeps retrying — saying "sem permissão"
+      // here would be a lie that also switches the feature off for good.
+      if (unavailableSaid) return;
+      unavailableSaid = true;
+      setCaption(
+        'O serviço de transcrição não respondeu agora — continuo tentando. ' +
+          'O botão de ondas funciona normalmente.'
       );
     });
   }
@@ -637,9 +653,18 @@ function armWake() {
   }
 }
 
-// A page cannot open a microphone before the person has touched it, so the
-// first touch is when this can begin.
-document.addEventListener('pointerdown', armWake, { once: true });
+/** Said once per visit: a service outage repeats, and so would the caption. */
+let unavailableSaid = false;
+
+// A page cannot open a microphone before the person has touched it, so a touch
+// has to come first — but not *any* touch. Arming on the first pointerdown
+// anywhere put a permission prompt in front of someone who had just tapped the
+// settings gear, with nothing on screen explaining why, and dismissing that
+// prompt used to switch the feature off permanently. The composer is where
+// talking to him starts, so that is where the microphone may be asked for.
+el.prompt.addEventListener('focus', armWake, { once: true });
+el.live.addEventListener('pointerdown', armWake, { once: true });
+el.canvas.addEventListener('pointerdown', armWake, { once: true });
 
 // The toggle stays as a manual override; asking him is the intended path.
 el.shape.addEventListener('click', () => {
