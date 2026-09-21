@@ -98,7 +98,7 @@ export function faceDepth(x, y) {
 
   // Base: a dome that falls off towards the silhouette on both axes.
   const across = Math.min(1, Math.abs(x) / halfWidth);
-  let z = 0.55 * Math.cos((across * Math.PI) / 2) * Math.cos((y * Math.PI) / 2.6);
+  let z = 0.55 * Math.cos((across * Math.PI) / 2) * Math.cos((y * Math.PI) / 3.4);
 
   // Brow ridge, heavier towards the outer third of each eye.
   z += 0.13 * ridge(Math.abs(x) - 0.28, y - L.browY, 0.34, 0.1);
@@ -169,6 +169,17 @@ function featureAt(x, y) {
   if (eyeD < 1) return { gain: -1, role: ROLE.EYE };
   // Lash line: a dark rim hugging the upper lid.
   if (eyeD < 1.24 && y < L.eyeY) return { gain: 0.2, role: ROLE.EYE };
+
+  // Brow: an arc that arches towards its middle and thins at the tail, which
+  // is what keeps it from reading as a drawn-on bar.
+  if (ax > 0.1 && ax < 0.54) {
+    const along = (ax - 0.1) / 0.44;
+    const arch = L.browY - 0.045 * Math.sin(along * Math.PI);
+    const thickness = 0.042 * (1 - 0.55 * Math.abs(along - 0.4) * 2);
+    if (Math.abs(y - arch) < Math.max(0.012, thickness)) {
+      return { gain: 0.12, role: ROLE.SKIN };
+    }
+  }
 
   // Nostrils.
   if (Math.hypot((ax - L.nostrilX) / 0.05, (y - L.nostrilY) / 0.032) < 1) {
@@ -381,7 +392,7 @@ export function sampleFace(count, seed = 11) {
       const edge = smoothstep(0.82, 1, Math.abs(fx) / Math.max(halfWidth, 1e-6));
       const brightness = Math.max(
         floor,
-        Math.min(1, (0.1 + lambert * 0.62) * gain + edge * 0.34),
+        Math.min(1, (0.15 + lambert * 0.66) * gain + edge * 0.32),
       );
 
       px.push(fx);

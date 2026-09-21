@@ -13,8 +13,38 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 | `face.js` | The anatomy: silhouette profile, depth field, feature masks, the eye pass, jaw and aperture |
 | `particles.js` | The field: slots, morphing, the spring, the renderer |
 | `voice.js` | Two ways to answer "how loud is he right now?" |
-| `app.js` | Wiring: settings, chat streaming, speech |
-| `index.html` / `styles.css` | The shell around the canvas |
+| `app.js` | Wiring: settings, chat streaming, speech, the agent's mode switch |
+| `index.html` / `styles.css` | The frame around the canvas |
+
+## The frame
+
+He is the interface, so the chrome recedes. Two dim icons at the top, a
+hairline composer that brightens on focus, and a caption that floats over the
+field on a mask rather than inside a panel. The send control has no contrast
+until there is something to send, so an empty composer is just a line.
+
+There is no status banner. The field already says what he is doing, and a
+label repeating it in the centre of the screen competed with his face for the
+one thing the screen is for. The `role="status"` line is still there and still
+announced — it just only becomes *visible* for an error, which is the one state
+the field cannot express.
+
+## Three states, and why stillness is one of them
+
+| State | What the field does |
+|---|---|
+| Idle | Nothing. Measured drift after a second of silence is exactly `0`. |
+| Thinking | A slow breath, about one every three seconds, fading in and out. |
+| Speaking | Driven by the measured amplitude of the voice. |
+
+Thinking earns its own channel rather than borrowing speech's: he is not
+talking, so there is no jaw drop and no cavity. Speech always wins — an answer
+arriving mid-thought stops the breath instead of stacking two motions that
+would read as one confused state.
+
+Stillness being a real state is the part worth protecting. "It still looks
+alive at rest" is exactly the regression a screenshot review waves through, so
+`tests-web/field.test.mjs` asserts zero drift instead.
 
 ## Two forms
 

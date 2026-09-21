@@ -217,17 +217,25 @@ function base64url(value) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** Switch form, keeping the manual toggle's label honest. */
+/** Switch form, keeping the manual override's icon honest. */
 function applyMode(mode) {
   field.setShape(mode);
-  el.shape.textContent = mode === 'face' ? 'esfera' : 'rosto';
+  el.shape.dataset.shape = mode;
 }
 
 // -- status and caption -----------------------------------------------------
 
+/**
+ * Announce what he is doing.
+ *
+ * The field already shows it — still, breathing, speaking — so this is the
+ * accessible equivalent, and it becomes visible only for an error, which the
+ * field has no way to express.
+ */
 function setStatus(text, state = '') {
   el.status.textContent = text;
   el.status.dataset.state = state;
+  field.setThinking(state === 'thinking');
 }
 
 function setCaption(text) {
@@ -307,6 +315,12 @@ async function streamReply(text, onChunk) {
 
 let busy = false;
 
+const syncReady = () => {
+  el.composer.dataset.ready = String(el.prompt.value.trim().length > 0);
+};
+el.prompt.addEventListener('input', syncReady);
+syncReady();
+
 el.composer.addEventListener('submit', async (event) => {
   event.preventDefault();
   const text = el.prompt.value.trim();
@@ -315,6 +329,7 @@ el.composer.addEventListener('submit', async (event) => {
   busy = true;
   el.send.disabled = true;
   el.prompt.value = '';
+  syncReady();
   setCaption('');
   setStatus('pensando');
 
@@ -330,6 +345,7 @@ el.composer.addEventListener('submit', async (event) => {
     setStatus('erro', 'error');
     setCaption(String(error.message || error));
   } finally {
+    field.setThinking(false);
     busy = false;
     el.send.disabled = false;
   }

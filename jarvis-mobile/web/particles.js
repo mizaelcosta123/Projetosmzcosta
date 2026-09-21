@@ -103,6 +103,8 @@ export class ParticleField {
 
     this.level = 0;
     this.smoothLevel = 0;
+    this.thinking = false;
+    this.thinkLevel = 0;
     this.time = 0;
 
     this.resize();
@@ -151,6 +153,20 @@ export class ParticleField {
   }
 
   /**
+   * Mark him as working on an answer.
+   *
+   * A deliberate third state, distinct from both silence and speech. Idle is
+   * still — that contract does not bend — and speech is driven by measured
+   * amplitude. Thinking is a slow breath the field takes on its own, so a wait
+   * reads as attention rather than as a frozen screen.
+   *
+   * @param {boolean} value
+   */
+  setThinking(value) {
+    this.thinking = Boolean(value);
+  }
+
+  /**
    * Advance the simulation and draw one frame.
    *
    * @param {number} dt Seconds since the previous frame.
@@ -169,6 +185,15 @@ export class ParticleField {
 
     if (this.morph < 1) this.morph = Math.min(1, this.morph + step * 1.5);
 
+    // Roughly one breath every three seconds — slow enough to read as thought
+    // rather than as a pulse waiting to be dismissed. It fades in and out so
+    // entering and leaving the state is never a jump.
+    const wanted = this.thinking ? Math.sin(this.time * 2.1) * 0.5 + 0.5 : 0;
+    this.thinkLevel += (wanted - this.thinkLevel) * 0.06;
+    if (!this.thinking && this.thinkLevel < 0.004) this.thinkLevel = 0;
+    // Speech always wins: once he answers, the breath stops competing.
+    const breath = this.smoothLevel > 0.05 ? 0 : this.thinkLevel;
+
     const energy = this.smoothLevel;
     const from = this.shapes[this.currentShape];
     const to = this.shapes[this.targetShape];
@@ -178,7 +203,7 @@ export class ParticleField {
 
     const { x, y, vx, vy, phase, ctx } = this;
     const scale = this.scale;
-    const spread = 1 + energy * 0.05;
+    const spread = 1 + energy * 0.05 + breath * 0.035;
 
     // Buckets let the renderer set fillStyle a handful of times per frame
     // instead of once per particle, which is the difference between smooth and
@@ -245,7 +270,7 @@ export class ParticleField {
       }
 
       const speed = Math.abs(vx[i]) + Math.abs(vy[i]);
-      const lit = Math.min(1, baseBright + speed * 1.6 + energy * 0.12);
+      const lit = Math.min(1, baseBright + speed * 1.6 + energy * 0.12 + breath * 0.14);
       const level = Math.min(LEVELS - 1, Math.floor(lit * LEVELS));
       const hueBucket = (blended ? to.accent[i] : to.accent[i]) * LEVELS;
 

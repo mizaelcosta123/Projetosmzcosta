@@ -192,3 +192,26 @@ test('the orb stays inside its own radius', () => {
     assert.ok(Math.hypot(xs[i], ys[i]) < 0.72, 'shell within the orb radius');
   }
 });
+
+test('the brows read as dark arcs above the eyes', () => {
+  const { xs, ys, bright } = sampleFace(6500);
+  let brow = [];
+  let forehead = [];
+  for (let i = 0; i < xs.length; i += 1) {
+    const ax = Math.abs(xs[i]);
+    if (ax < 0.15 || ax > 0.5) continue;
+    if (Math.abs(ys[i] - (LANDMARKS.browY - 0.03)) < 0.04) brow.push(bright[i]);
+    else if (Math.abs(ys[i] - (LANDMARKS.browY - 0.3)) < 0.06) forehead.push(bright[i]);
+  }
+  assert.ok(brow.length > 40, 'the brow band is populated');
+  const mean = (values) => values.reduce((a, b) => a + b, 0) / values.length;
+  assert.ok(mean(brow) < mean(forehead) * 0.6, 'the brow is markedly darker than the brow ridge above it');
+});
+
+test('the lower face is lit, not lost in shadow', () => {
+  /* An over-steep dome put the jaw in near-darkness while the forehead blazed,
+     which read as a face fading out halfway down. */
+  const forehead = faceDepth(0, -0.6);
+  const chin = faceDepth(0, 0.82);
+  assert.ok(chin > forehead * 0.75, `chin ${chin.toFixed(3)} too dark against forehead ${forehead.toFixed(3)}`);
+});
