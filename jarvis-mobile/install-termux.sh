@@ -33,7 +33,9 @@ PY="$VENV/bin/python"
 # loop, and an OpenAI-compatible cloud engine. Verified by installing exactly
 # this set and driving a request end to end.
 CORE_DEPS=(click croniter httpx rich tomlkit websockets pyyaml)
-SERVER_DEPS=(fastapi uvicorn python-multipart pydantic)
+# `requests` rides with the server set: openjarvis.server.app imports it
+# transitively (connectors.embeddings) and refuses to start without it.
+SERVER_DEPS=(fastapi uvicorn python-multipart pydantic requests)
 
 say()  { printf '\n\033[36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m !\033[0m %s\n' "$*" >&2; }

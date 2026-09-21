@@ -46,7 +46,7 @@ git clone https://github.com/mizaelcosta123/Projetosmzcosta ~/mzc
 
 python3 -m venv ~/jarvis-venv
 ~/jarvis-venv/bin/pip install click croniter httpx rich tomlkit websockets pyyaml \
-                              fastapi uvicorn python-multipart pydantic
+                              fastapi uvicorn python-multipart pydantic requests
 ~/jarvis-venv/bin/pip install --no-deps ~/openjarvis
 ~/jarvis-venv/bin/pip install ~/mzc/jarvis-mobile
 

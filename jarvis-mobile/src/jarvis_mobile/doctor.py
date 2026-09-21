@@ -78,7 +78,10 @@ def _plugin() -> Row:
 
 def _server_deps() -> Row:
     missing = []
-    for module in ("fastapi", "uvicorn", "pydantic"):
+    # `requests` looks redundant next to httpx and is not: the server app
+    # imports it transitively, so a venv without it starts the CLI fine and then
+    # fails at `jarvis serve`. Checking it here names that before it happens.
+    for module in ("fastapi", "uvicorn", "pydantic", "requests"):
         try:
             __import__(module)
         except ImportError:
@@ -89,7 +92,7 @@ def _server_deps() -> Row:
             "server deps",
             f"missing: {', '.join(missing)}. Install: pip install {' '.join(missing)}",
         )
-    return (OK, "server deps", "fastapi, uvicorn, pydantic present")
+    return (OK, "server deps", "fastapi, uvicorn, pydantic, requests present")
 
 
 def _interface() -> Row:

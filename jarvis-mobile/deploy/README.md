@@ -66,13 +66,30 @@ O servidor foi **subido com exatamente esta configuração** e verificado:
 | Interface na mesma origem | HTTP 200 |
 | Conversa de ponta a ponta | mensagem enviada de um navegador real, resposta na legenda, sem erro de console |
 
-**Não provado:** o build da imagem (este ambiente não tem daemon Docker) e a
-chamada de rede ao `openrouter.ai` (bloqueada pelo proxy daqui). A receita
-dentro do Dockerfile é a mesma sequência que rodou neste container; o caminho de
+**Não provado:** o build da imagem em si (o registro do Docker Hub é bloqueado
+pelo proxy deste ambiente) e a chamada de rede real ao `openrouter.ai` (idem).
+O que *foi* provado é a receita: cada passo do Dockerfile — os dois `git clone`
+rasos, o `pip install --no-deps` do OpenJarvis, a instalação deste pacote, as
+vozes e a interface — rodou aqui num virtualenv limpo com exatamente a lista de
+dependências da imagem, e o `jarvis serve` resultante respondeu. O caminho de
 rede foi provado contra um backend compatível com OpenAI local.
 
-Se o build falhar, a primeira suspeita é o `pip install` do `pydantic` na imagem
-slim — `apt-get install build-essential` antes dele resolve.
+### Dois erros que já derrubaram este deploy
+
+Ambos corrigidos; ficam registrados porque nenhum dos dois aparece no código.
+
+1. **`Unable to locate package mbrola`.** O MBROLA mora na área `contrib` do
+   Debian — o sintetizador é livre, as vozes de origem não são —, e a imagem
+   slim habilita só `main`. O Dockerfile acrescenta a fonte `contrib` antes do
+   `apt-get update`, e ainda assim instala o MBROLA numa linha própria que pode
+   falhar sem derrubar a imagem.
+2. **`ModuleNotFoundError: No module named 'requests'`.** Importar
+   `openjarvis.server.app` passa por `research_router` → `research_loop` →
+   `hybrid_search` → `connectors.embeddings`, que importa `requests` no topo do
+   módulo. Com `httpx` no conjunto mínimo isso parece redundante e não é: sem
+   `requests` a CLI funciona, o `jarvis serve` morre antes de abrir a porta, e o
+   Render mostra apenas *Failed deploy*. Vale igual no Termux — está no
+   `install-termux.sh` e o `jarvis-doctor` avisa.
 
 ## Um detalhe sobre qual motor atende
 
