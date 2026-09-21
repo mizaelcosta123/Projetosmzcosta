@@ -35,7 +35,22 @@ services:
       # que vai em Configurações → Chave de API na interface.
       - key: OPENJARVIS_API_KEY
         generateValue: true
-    disk:
-      name: jarvis-data
-      mountPath: /data
-      sizeGB: 1
+
+# SEM DISCO, E ISSO É DE PROPÓSITO
+#
+# O plano gratuito do Render não aceita disco persistente — um bloco `disk:`
+# aqui faz o blueprint ser rejeitado antes de construir qualquer coisa.
+#
+# A consequência: o sistema de arquivos volta ao estado da imagem a cada deploy
+# ou reinício. O que se perde é o `memory.db` e o `traces.db` — histórico de
+# conversas e telemetria. O que NÃO se perde é a configuração, que está dentro
+# da imagem, nem a interface. Conversar funciona igual; ele só não lembra de
+# ontem.
+#
+# Para manter memória, troque para um plano pago e acrescente:
+#
+#     plan: starter
+#     disk:
+#       name: jarvis-data
+#       mountPath: /data
+#       sizeGB: 1

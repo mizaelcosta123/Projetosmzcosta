@@ -28,6 +28,22 @@ escutar fora do loopback, que é o comportamento certo para algo na internet
 aberta. Guarde esse valor: é ele que você põe em **Configurações → Chave de
 API** na interface.
 
+### Duas coisas do plano gratuito que vão te surpreender
+
+**Sem disco persistente.** O Render rejeita um bloco `disk:` num serviço
+gratuito — o blueprint nem chega a construir. Por isso ele não tem um. A
+consequência: o sistema de arquivos volta ao estado da imagem a cada deploy ou
+reinício, e o que se perde é `memory.db` e `traces.db` — histórico e telemetria.
+A configuração não se perde, porque está dentro da imagem. Conversar funciona
+igual; ele só não lembra de ontem.
+
+Para manter memória, troque `plan: free` por `plan: starter` e acrescente o
+bloco `disk:` que está comentado no fim do `render.yaml`.
+
+**Ele dorme.** Serviço gratuito hiberna depois de um tempo sem uso, e a primeira
+requisição depois disso leva perto de um minuto para acordar. Da interface isso
+parece travamento. Espere, ou mantenha algo pingando `/health`.
+
 ## Sua própria máquina ou VPS
 
 ```bash

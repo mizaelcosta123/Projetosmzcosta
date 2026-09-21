@@ -52,10 +52,13 @@ RUN pip install /opt/jarvis-mobile \
     && python -m jarvis_mobile.speech.install_voices --source /opt/brasiltts \
     && python -m jarvis_mobile.deploy --source /opt/jarvis-mobile/web
 
-# Config lives in a volume so a redeploy does not wipe memory or traces.
+# Config and state live under /data. No VOLUME is declared here on purpose:
+# whether that path survives a restart is the platform's decision, not the
+# image's — Render mounts a disk there on a paid plan and ignores it on the
+# free one, and compose mounts a named volume. Declaring it would only create
+# anonymous volumes nobody asked for.
 ENV HOME=/data
 RUN mkdir -p /data/.openjarvis
-VOLUME ["/data"]
 COPY deploy/config.toml /data/.openjarvis/config.toml
 
 # Loopback would make the server unreachable from outside the container.
