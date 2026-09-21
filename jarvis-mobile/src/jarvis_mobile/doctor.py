@@ -32,9 +32,10 @@ _TIMEOUT = 8.0
 #: answer "is there one here that works".
 _MAX_MODELS = 8
 
-#: Small, runs on a phone, and advertises tool calling — which the coder
-#: variants of the same family do not.
-_SUGGESTED = "qwen2.5:3b"
+#: The same 1.5B — and the same ~1GB — as the qwen2.5-coder people tend to have
+#: pulled, without the code-completion training that costs the tool call. On a
+#: phone this swap is free: it weighs what the coder weighed.
+_SUGGESTED = "qwen2.5:1.5b"
 
 Row = tuple[str, str, str]
 

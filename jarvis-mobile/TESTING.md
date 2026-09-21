@@ -112,7 +112,7 @@ então consertar a primeira costuma apagar o resto.
 ### Usando Ollama em vez da nuvem
 
 ```bash
-~/jarvis-venv/bin/jarvis serve --engine ollama --model qwen2.5:3b
+~/jarvis-venv/bin/jarvis serve --engine ollama --model qwen2.5:1.5b
 ```
 
 **Se o Ollama roda em outra máquina que não a do Jarvis** — o caso silencioso —
@@ -162,14 +162,35 @@ O doctor pergunta isso direto ao Ollama, antes de qualquer adivinhação:
 ```
 
 ```
-[  ok  ] ollama · http://localhost:11434    2 models: qwen2.5-coder:1.5b, qwen2.5:3b
+[  ok  ] ollama · http://localhost:11434    2 models: qwen2.5-coder:1.5b, qwen2.5:1.5b
 [ fail ] tool calling                       qwen2.5-coder:1.5b cannot call tools, so no
                                             device_* tool will ever run …
 ```
 
 Sem `--model`, ele pergunta sobre **todos** os modelos baixados e diz quais
-servem — que costuma ser a resposta útil. `qwen2.5:3b` roda em celular e sabe
-chamar tools; o `-coder` do mesmo tamanho não.
+servem — que costuma ser a resposta útil.
+
+### O que cabe num celular
+
+O `-coder` e o normal **do mesmo tamanho pesam o mesmo**. Trocar um pelo outro
+não custa memória nenhuma; custa só o download.
+
+| modelo | tamanho | chama tools |
+|---|---|---|
+| `qwen2.5-coder:1.5b` | ~1 GB | **não** |
+| `qwen2.5:1.5b` | ~1 GB | sim |
+| `qwen2.5:0.5b` | ~400 MB | sim, mas erra bastante |
+| `llama3.2:1b` | ~1,3 GB | sim |
+
+`qwen2.5:1.5b` é a troca direta: mesmo peso do `-coder` que você já tem, e sabe
+chamar tools. `qwen2.5:0.5b` é o piso — cabe em quase tudo, mas 500 milhões de
+parâmetros escolhendo a tool certa e preenchendo os argumentos erra o bastante
+para irritar.
+
+Anunciar a capacidade e acertar são coisas diferentes: quanto menor o modelo,
+mais ele confunde qual tool usar. A tabela diz quem sabe tentar, não quem
+acerta sempre. Em caso de dúvida, pergunte ao seu próprio Ollama — é o que o
+doctor faz, e ele responde sobre os modelos que você realmente tem.
 
 ## Quando algo falha
 
