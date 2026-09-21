@@ -35,6 +35,7 @@ python3 -m venv ~/jarvis-venv
 ~/jarvis-venv/bin/python -m jarvis_mobile.deploy --source ~/mzc/jarvis-mobile/web
 
 export OPENROUTER_API_KEY="sua-chave"
+~/jarvis-venv/bin/python -m jarvis_mobile.check      # confere antes de subir
 ~/jarvis-venv/bin/jarvis serve --engine openrouter --model openrouter/auto
 ```
 
@@ -113,14 +114,25 @@ toda semana, e alguns já vêm com data de remoção anunciada. Um ID fixo aqui
 falharia na hora da requisição sem explicar por quê. Rode o comando de novo
 quando quiser uma lista atual.
 
-Confira sua chave antes de instalar qualquer coisa:
+Confira a conexão antes de instalar o resto:
 
 ```bash
-curl https://openrouter.ai/api/v1/models \
-  -H "Authorization: Bearer $OPENROUTER_API_KEY" | head -c 200
+~/jarvis-venv/bin/python -m jarvis_mobile.check
 ```
 
-Se isso devolver JSON, a chave está boa.
+Ele verifica a chave, alcança o catálogo e **manda uma requisição de verdade**
+— a única que prova que a cobrança também funciona. Com o `openrouter/auto`,
+ele informa qual modelo de fato respondeu, então "auto" deixa de ser caixa
+preta e vira algo que você confere contra a fatura.
+
+```
+[  ok   ] api key                    key found, ending …123456
+[  ok   ] catalogue                  312 models reachable, 18 of them free
+[  ok   ] chat · openrouter/auto     replied 'ok' (routed to …), 21 tokens
+```
+
+A chave nunca é impressa inteira — só os últimos seis caracteres, o bastante
+para distinguir duas.
 
 ## O que foi verificado aqui
 

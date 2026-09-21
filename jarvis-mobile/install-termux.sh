@@ -222,8 +222,9 @@ cat <<DONE
   Installed.
 
   1. Put your API key in:  ~/.jarvis-env
-  2. Start it with:        jarvis-start
-  3. Open in the browser:  http://127.0.0.1:8000
+  2. Check it works:       . ~/.jarvis-env && $VENV/bin/python -m jarvis_mobile.check
+  3. Start it with:        jarvis-start
+  4. Open in the browser:  http://127.0.0.1:8000
      Add it to your home screen and it opens like an app.
 
   Ask him to show his face and he will.
