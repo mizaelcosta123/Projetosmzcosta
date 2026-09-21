@@ -44,12 +44,21 @@ const el = {
  */
 function loadSettings() {
   const fallback = { serverUrl: '', apiKey: '', model: '', speak: true };
+  let saved = fallback;
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
+    saved = raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
   } catch {
     return fallback;
   }
+
+  // A provider URL saved before the sheet started refusing them would fail on
+  // every message, forever, on a phone whose owner has no reason to suspect
+  // the stored value. Clearing it here means the page heals itself on the next
+  // visit: blank is same-origin, which is the right answer when this page was
+  // served by the backend.
+  if (providerMistake(saved.serverUrl)) saved.serverUrl = '';
+  return saved;
 }
 
 function saveSettings(settings) {
