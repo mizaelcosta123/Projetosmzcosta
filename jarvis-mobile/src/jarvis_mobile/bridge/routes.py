@@ -17,7 +17,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jarvis_mobile.bridge.hub import PROTOCOL_VERSION, DeviceHub
 from jarvis_mobile.bridge.hub import hub as default_hub
 
-__all__ = ["DEVICE_PATH", "create_device_router"]
+__all__ = ["DEVICE_PATH", "STATUS_PATH", "create_device_router"]
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 #: below /v1 needs the API key — this route does its own check instead, with
 #: its own secret, because the phone is not an API client.
 DEVICE_PATH = "/v1/device/link"
+
+#: The same thing, asked over ordinary HTTP: is a phone on the line?
+STATUS_PATH = "/v1/device"
 
 #: A hello larger than this is not a hello.
 _MAX_HELLO = 64 * 1024
@@ -47,6 +50,18 @@ def create_device_router(token: str, hub: DeviceHub | None = None) -> Any:
     """
     target = hub or default_hub
     router = APIRouter()
+
+    @router.get(STATUS_PATH)
+    def device_status() -> dict[str, Any]:
+        """What the server knows about the linked phone.
+
+        Exists because the alternative was guessing. When a device tool answers
+        "nenhum aparelho conectado" there is no way, from outside, to tell a
+        runner that never connected from one that dropped — and the runner's
+        own log is on a phone, in another room. Under /v1, so the API key
+        already guards it.
+        """
+        return target.describe()
 
     @router.websocket(DEVICE_PATH)
     async def link(websocket: WebSocket) -> None:  # pragma: no cover - needs a live server

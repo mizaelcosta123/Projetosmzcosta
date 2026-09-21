@@ -435,3 +435,42 @@ def test_probe_never_raises():
 
     assert _probe("http://127.0.0.1:1/health", timeout=0.5) is None
     assert _probe("nao-e-uma-url", timeout=0.5) is None
+
+
+# -- asking the server whether a phone is on the line ------------------------
+
+
+def test_the_status_endpoint_tracks_the_link():
+    """Without this there is no way to tell "never connected" from "dropped".
+
+    A device tool answering "nenhum aparelho conectado" says the same thing in
+    both cases, and the runner's own log is on a phone in another room.
+    """
+    import json as _json
+
+    fastapi = pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from jarvis_mobile.bridge.routes import STATUS_PATH, create_device_router
+
+    hub = DeviceHub()
+    app = fastapi.FastAPI()
+    app.include_router(create_device_router("segredo", hub))
+    client = TestClient(app)
+
+    assert client.get(STATUS_PATH).json() == {"linked": False}
+
+    with client.websocket_connect(
+        "/v1/device/link", headers={"Authorization": "Bearer segredo"}
+    ) as ws:
+        ws.send_text(_json.dumps(_hello(binaries=["termux-battery-status"], shell=True)))
+        ws.receive_text()  # welcome
+        linked = client.get(STATUS_PATH).json()
+
+    assert linked == {
+        "linked": True,
+        "name": "pixel",
+        "shell": True,
+        "binaries": ["termux-battery-status"],
+    }
+    assert client.get(STATUS_PATH).json() == {"linked": False}, "a disconnect must show"
