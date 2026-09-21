@@ -50,10 +50,16 @@
       <h2>Conexão</h2>
 
       <label for="server-url">Servidor</label>
-      <input id="server-url" type="url" inputmode="url" placeholder="http://localhost:8000">
+      <!-- The placeholder used to read http://localhost:8000, which invited
+           people to type *an* address. The two addresses in play at this
+           moment are this backend and the model provider, and picking the
+           second one fails with a browser message that names neither. -->
+      <input id="server-url" type="url" inputmode="url" placeholder="este mesmo servidor">
+      <p class="hint" id="server-hint">Endereço do Jarvis — não o do provedor de modelos. Deixe vazio se esta página veio dele.</p>
 
       <label for="api-key">Chave de API</label>
-      <input id="api-key" type="password" placeholder="opcional">
+      <input id="api-key" type="password" placeholder="a chave do Jarvis, não a do provedor">
+      <p class="hint">É o <code>OPENJARVIS_API_KEY</code> do servidor. A chave do provedor fica no backend, nunca aqui.</p>
 
       <label for="model">Modelo</label>
       <!-- A datalist, not a select: the free catalogue is a convenience, and
