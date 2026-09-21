@@ -123,3 +123,87 @@ def test_warnings_do_not_fail_the_run(monkeypatch, capsys):
     monkeypatch.setattr(doctor, "run", lambda *a, **k: [(doctor.WARN, "speech", "no voice")])
     assert doctor.main([]) == 0
     assert "worth doing" in capsys.readouterr().out
+
+
+# -- can the model call a tool at all ---------------------------------------
+
+
+def _show(capabilities):
+    """A fake `POST /api/show`, keyed by what the model advertises."""
+
+    def post(url, json=None, **kwargs):
+        request = httpx.Request("POST", url)
+        payload = {"model": json["model"]}
+        if capabilities is not None:
+            payload["capabilities"] = capabilities
+        return httpx.Response(200, json=payload, request=request)
+
+    return post
+
+
+def test_a_model_without_tools_is_the_failure_not_the_bridge(monkeypatch):
+    """The whole point: this is why nothing reaches the phone."""
+    monkeypatch.setattr(httpx, "post", _show(["completion"]))
+    status, label, detail = doctor._tool_calling("ollama", None, "qwen2.5-coder:1.5b")
+    assert status == doctor.FAIL
+    assert label == "tool calling"
+    assert "device_*" in detail, "it has to name what breaks, not just the capability"
+    assert "ollama pull" in detail, "and hand over the fix"
+
+
+def test_a_model_with_tools_passes(monkeypatch):
+    monkeypatch.setattr(httpx, "post", _show(["completion", "tools"]))
+    status, _, detail = doctor._tool_calling("ollama", None, "qwen2.5:3b")
+    assert status == doctor.OK
+    assert "qwen2.5:3b" in detail
+
+
+def test_an_ollama_too_old_to_answer_warns_instead_of_passing(monkeypatch):
+    """Silence is not consent: an unknown capability must not read as working."""
+    monkeypatch.setattr(httpx, "post", _show(None))
+    status, _, detail = doctor._tool_calling("ollama", None, "qwen2.5:3b")
+    assert status == doctor.WARN
+    assert "0.6" in detail
+
+
+def test_with_no_model_named_every_pulled_one_is_asked(monkeypatch):
+    """Which is the useful answer: is there anything here that works."""
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *a, **k: _response(
+            payload={"models": [{"name": "qwen2.5-coder:1.5b"}, {"name": "qwen2.5:3b"}]}
+        ),
+    )
+
+    def per_model(url, json=None, **kwargs):
+        request = httpx.Request("POST", url)
+        able = json["model"] == "qwen2.5:3b"
+        return httpx.Response(
+            200,
+            json={"capabilities": ["completion", "tools"] if able else ["completion"]},
+            request=request,
+        )
+
+    monkeypatch.setattr(httpx, "post", per_model)
+    status, _, detail = doctor._tool_calling("ollama", None, None)
+    assert status == doctor.OK
+    assert "qwen2.5:3b" in detail
+    assert "qwen2.5-coder:1.5b" not in detail, "only the ones that work are the answer"
+
+
+def test_a_dead_ollama_leaves_the_engine_row_to_report_it(monkeypatch):
+    """One fault, one line: this check stays quiet rather than repeating it."""
+
+    def refuse(*args, **kwargs):
+        raise httpx.ConnectError("Connection refused")
+
+    monkeypatch.setattr(httpx, "get", refuse)
+    monkeypatch.setattr(httpx, "post", refuse)
+    status, _, _ = doctor._tool_calling("ollama", None, None)
+    assert status == doctor.SKIP
+
+
+def test_the_check_sits_right_after_the_engine_it_asks_about():
+    labels = [label for _, label, _ in doctor.run(engine_id="ollama")]
+    assert labels.index("tool calling") == labels.index("ollama · http://localhost:11434") + 1

@@ -55,7 +55,7 @@ No model list is hardcoded. Catalogs change weekly, so every engine inherits
 ```python
 import jarvis_mobile
 
-engine = jarvis_mobile.build_engine("nous")   # key read from NOUS_API_KEY
+engine = jarvis_mobile.build_engine("nous")  # key read from NOUS_API_KEY
 print(engine.list_models())
 ```
 
