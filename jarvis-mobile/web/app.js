@@ -245,6 +245,38 @@ function setCaption(text) {
 
 // -- talking to the server --------------------------------------------------
 
+
+/**
+ * The model to ask for.
+ *
+ * The server rejects a request without one — a 422, not a default — so leaving
+ * the field blank in settings has to mean "whatever this server serves", not
+ * "omit it". The first model from `/v1/models` is that, and it is cached for
+ * the session because it cannot change without the server restarting.
+ */
+let resolvedModel = '';
+
+async function modelFor(base, headers) {
+  if (settings.model) return settings.model;
+  if (resolvedModel) return resolvedModel;
+
+  const response = await fetch(`${base}/v1/models`, { headers });
+  if (!response.ok) {
+    throw new Error(
+      `Não consegui listar os modelos do servidor (${response.status}). ` +
+        'Escolha um em Configurações → Modelo.',
+    );
+  }
+  const first = (await response.json())?.data?.[0]?.id;
+  if (!first) {
+    throw new Error(
+      'O servidor não expôs nenhum modelo. Escolha um em Configurações → Modelo.',
+    );
+  }
+  resolvedModel = first;
+  return first;
+}
+
 /**
  * Stream a chat completion.
  *
@@ -263,10 +295,10 @@ async function streamReply(text, onChunk) {
   if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
 
   const body = {
+    model: await modelFor(base, headers),
     messages: [{ role: 'user', content: text }],
     stream: true,
   };
-  if (settings.model) body.model = settings.model;
 
   const response = await fetch(`${base}/v1/chat/completions`, {
     method: 'POST',
@@ -376,6 +408,7 @@ el.settings.addEventListener('close', () => {
     model: el.model.value.trim(),
     speak: el.speak.checked,
   };
+  resolvedModel = '';
   saveSettings(settings);
   watchAgentEvents();
 });

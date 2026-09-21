@@ -22,6 +22,15 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jarvis_mobile"]
+# The autoload shim is a top-level module, not part of the package.
+only-include = ["src/jarvis_mobile", "src/jarvis_mobile_autoload.py"]
+sources = ["src"]
+
+# Lands in site-packages root, where Python reads .pth files at startup. This
+# is what makes the `jarvis` CLI see our tools and engines: OpenJarvis has no
+# plugin entry point, so registration happens by import or not at all.
+[tool.hatch.build.targets.wheel.force-include]
+"jarvis_mobile_autoload.pth" = "jarvis_mobile_autoload.pth"
 
 [tool.ruff]
 line-length = 100
