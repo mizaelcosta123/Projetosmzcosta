@@ -152,6 +152,77 @@ function adoptDriver(next) {
   return next;
 }
 
+
+// -- the agent changing how he looks ---------------------------------------
+
+/**
+ * Listen for the agent switching his own appearance.
+ *
+ * Nothing new crosses the wire for this. `ToolExecutor` already publishes
+ * `tool_call_start` with `{tool, arguments}`, and the server already forwards
+ * agent events over `/v1/agents/events`, so the tool call *is* the message.
+ *
+ * Browsers cannot set an Authorization header on a WebSocket, so the key rides
+ * in the subprotocol list — the encoding makes it valid syntax, not secret.
+ */
+function watchAgentEvents() {
+  const base = serverOf(settings);
+  if (!base) return;
+
+  const url = base.replace(/^http/, 'ws') + '/v1/agents/events';
+  const protocols = settings.apiKey
+    ? ['openjarvis.auth.v1', 'openjarvis.key.b64url.' + base64url(settings.apiKey)]
+    : [];
+
+  let socket;
+  try {
+    socket = protocols.length ? new WebSocket(url, protocols) : new WebSocket(url);
+  } catch (error) {
+    console.warn('event stream unavailable', error);
+    return;
+  }
+
+  socket.addEventListener('message', (event) => {
+    let payload;
+    try {
+      payload = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (payload.type !== 'tool_call_start') return;
+    const { tool, arguments: args } = payload.data ?? {};
+    if (tool !== 'set_display_mode') return;
+    const mode = args?.mode;
+    if (mode && field.shapes[mode]) applyMode(mode);
+  });
+
+  // Reconnect with a ceiling: a phone that sleeps or changes network drops the
+  // socket routinely, and a tight retry loop would drain the battery.
+  socket.addEventListener('close', () => {
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    setTimeout(watchAgentEvents, reconnectDelay);
+  });
+  socket.addEventListener('open', () => {
+    reconnectDelay = 1000;
+  });
+}
+
+let reconnectDelay = 1000;
+
+/** Base64url without padding — what the server's subprotocol scheme expects. */
+function base64url(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Switch form, keeping the manual toggle's label honest. */
+function applyMode(mode) {
+  field.setShape(mode);
+  el.shape.textContent = mode === 'face' ? 'esfera' : 'rosto';
+}
+
 // -- status and caption -----------------------------------------------------
 
 function setStatus(text, state = '') {
@@ -264,10 +335,9 @@ el.composer.addEventListener('submit', async (event) => {
   }
 });
 
+// The toggle stays as a manual override; asking him is the intended path.
 el.shape.addEventListener('click', () => {
-  const next = field.targetShape === 'face' ? 'orb' : 'face';
-  field.setShape(next);
-  el.shape.textContent = next === 'face' ? 'esfera' : 'rosto';
+  applyMode(field.targetShape === 'face' ? 'orb' : 'face');
 });
 
 el.menu.addEventListener('click', () => {
@@ -291,6 +361,7 @@ el.settings.addEventListener('close', () => {
     speak: el.speak.checked,
   };
   saveSettings(settings);
+  watchAgentEvents();
 });
 
 /**
@@ -307,6 +378,8 @@ async function runDemo() {
   setCaption(line);
   await say(line);
 }
+
+watchAgentEvents();
 
 // First run: nothing saved and nothing to talk to, so offer the demo rather
 // than an input box that can only fail.

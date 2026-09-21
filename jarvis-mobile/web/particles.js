@@ -16,10 +16,11 @@
  */
 
 import { ROLE, sampleFace } from './face.js';
+import { sampleOrb } from './orb.js';
 
 const TAU = Math.PI * 2;
 
-export { ROLE, sampleFace };
+export { ROLE, sampleFace, sampleOrb };
 
 /**
  * Deterministic PRNG (mulberry32).
@@ -37,39 +38,6 @@ export function makeRandom(seed = 0x9e3779b9) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-/**
- * Scatter `count` particles through a shell, in unit space (-1..1).
- *
- * This is the resting form — what he looks like when he is not wearing a face.
- */
-export function sampleOrb(count, seed = 1) {
-  const random = makeRandom(seed);
-  const xs = new Float32Array(count);
-  const ys = new Float32Array(count);
-  const roles = new Uint8Array(count);
-  const bright = new Float32Array(count);
-  const sizes = new Float32Array(count);
-  const accent = new Uint8Array(count);
-
-  for (let i = 0; i < count; i += 1) {
-    const angle = random() * TAU;
-    // Bias outward so the orb reads as a shell with a soft core rather than a
-    // flat disc: area grows with r², so sqrt gives even coverage, and the
-    // offset pushes the mass into the outer band.
-    const radius = 0.52 + 0.48 * Math.sqrt(random());
-    xs[i] = Math.cos(angle) * radius;
-    ys[i] = Math.sin(angle) * radius;
-    roles[i] = ROLE.RIM;
-    // Light the shell from the same upper-left key the face uses, so switching
-    // shapes does not switch lighting.
-    const lit = 0.5 - (Math.cos(angle) * 0.45 + Math.sin(angle) * 0.6) * 0.5;
-    bright[i] = Math.min(1, 0.22 + lit * 0.85 * radius);
-    sizes[i] = 0.6 + random() * 0.9;
-    accent[i] = random() < 0.06 ? 1 : 0;
-  }
-  return { xs, ys, roles, bright, sizes, accent };
 }
 
 export const SHAPES = { orb: sampleOrb, face: sampleFace };
@@ -96,7 +64,7 @@ export class ParticleField {
   constructor(canvas, options = {}) {
     const {
       count = 6500,
-      shape = 'orb',
+      shape = 'orb', // he wears a face only on request
       restDrift = 0,
       hue = 192,
       accentHue = 38,
@@ -227,12 +195,19 @@ export class ParticleField {
       let goalY = ty * spread;
 
       if (energy > 0) {
-        if (role === ROLE.MOUTH) {
-          // The lips part: points above the seam rise, points below drop.
-          const side = Math.sign(ty - 0.52) || 1;
-          goalY += side * energy * 0.085;
-          goalX *= 1 - energy * 0.04;
-        } else if (role === ROLE.HALO) {
+        // The mandible swings open and carries the lower face with it, so the
+        // gap between the lips widens instead of the lips sliding over a
+        // frozen chin. The lip seam holds no particles, so the opening reads
+        // as a real cavity.
+        const drop = blended
+          ? from.jaw[i] + (to.jaw[i] - from.jaw[i]) * m
+          : to.jaw[i];
+        goalY += drop * energy * 0.26;
+
+        if (role === ROLE.MOUTH && drop < 0.05) {
+          goalY -= energy * 0.045; // the upper lip lifts a little
+        }
+        if (role === ROLE.HALO) {
           // Loose points drift further out as he speaks.
           goalX *= 1 + energy * 0.16;
           goalY *= 1 + energy * 0.16;
@@ -260,6 +235,15 @@ export class ParticleField {
 
       // Movement adds light on top of the shape's own shading, so speech reads
       // even where the displacement itself is small.
+      if (energy > 0.04) {
+        const inside = blended
+          ? from.aperture[i] + (to.aperture[i] - from.aperture[i]) * m
+          : to.aperture[i];
+        // The opening grows with the voice; anything within it is inside his
+        // mouth, and drawing it would fill the cavity back in.
+        if (inside < energy) continue;
+      }
+
       const speed = Math.abs(vx[i]) + Math.abs(vy[i]);
       const lit = Math.min(1, baseBright + speed * 1.6 + energy * 0.12);
       const level = Math.min(LEVELS - 1, Math.floor(lit * LEVELS));

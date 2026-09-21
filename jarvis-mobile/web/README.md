@@ -9,11 +9,40 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 
 | File | Role |
 |---|---|
-| `face.js` | The anatomy: silhouette profile, depth field, feature masks, the eye pass |
+| `orb.js` | The resting form: a 3D shell with fractal turbulence |
+| `face.js` | The anatomy: silhouette profile, depth field, feature masks, the eye pass, jaw and aperture |
 | `particles.js` | The field: slots, morphing, the spring, the renderer |
 | `voice.js` | Two ways to answer "how loud is he right now?" |
 | `app.js` | Wiring: settings, chat streaming, speech |
 | `index.html` / `styles.css` | The shell around the canvas |
+
+## Two forms
+
+**The orb is the default.** He wears a face only when asked for one.
+
+The orb is built in three dimensions and projected flat, and that is the whole
+trick behind its look: points spread evenly over a sphere pile up towards the
+silhouette when you flatten them, so the rim glows and the centre stays open
+without a line of special-case code. Fractal noise then carves the filaments
+and voids that keep it from reading as a smooth ball. A test holds the effect
+in place — rim density must stay more than double the centre's.
+
+## Asking him to change form
+
+You ask in your own words. "Mostre seu rosto", "volte para a esfera", "show me
+your face" — the model decides that `set_display_mode` is what you meant. There
+is no phrase list and no keyword matching in the interface; understanding the
+request is the model's job, and it gets better at it the way it gets better at
+everything else.
+
+Delivery costs nothing extra. `ToolExecutor` already publishes
+`tool_call_start` with `{tool, arguments}`, and the server already forwards
+agent events over `/v1/agents/events`, so **the tool call is the message** —
+there is no second channel to keep in sync. `app.js` opens that WebSocket,
+watches for the tool by name, and reads the mode straight off the event.
+
+The chip in the corner stays as a manual override, but asking him is the
+intended path.
 
 ## How the face is built
 
@@ -47,8 +76,14 @@ not a slower animation — it is zero displacement, so the field comes to an
 actual stop. That is verified: after a second of silence, maximum particle
 drift is exactly `0`.
 
-While he speaks, the lips part around the seam, the halo drifts outward, and
-the mesh shimmers — all scaled by the measured level.
+While he speaks the whole mandible swings open. Each point carries a
+`jawWeight` — 0 above the lip seam, most of the way at the lower lip, full at
+the chin, falling off towards the hinges by the ears — so the lower face opens
+as one piece instead of the lips sliding over a frozen chin. At the same time
+`mouthAperture` carves the opening: points inside the growing ellipse are not
+drawn at all, which turns the drop into a real cavity with a lip beneath it.
+The halo drifts outward and the mesh shimmers, all scaled by the measured
+level.
 
 ## Where the level comes from
 

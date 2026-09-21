@@ -188,6 +188,40 @@ function featureAt(x, y) {
 }
 
 
+
+/**
+ * How much of the jaw's drop a point at (x, y) follows.
+ *
+ * The mandible hinges near the ears, so the chin swings furthest, the sides
+ * travel less, and everything above the lip seam stays put. Returning a weight
+ * per point lets the whole lower face open as one piece instead of the lips
+ * sliding over a frozen chin.
+ *
+ * @returns {number} 0 for no movement, 1 for the full drop.
+ */
+export function jawWeight(x, y) {
+  const L = LANDMARKS;
+  // Nothing above the seam moves; the upper lip is handled separately.
+  const vertical = smoothstep(L.mouthY - 0.01, L.mouthY + 0.1, y);
+  // Hinges sit out by the ears, so travel falls off towards the sides.
+  const lateral = 1 - 0.55 * smoothstep(0.18, 0.66, Math.abs(x));
+  return vertical * lateral;
+}
+
+
+/**
+ * How far inside the mouth opening a point lies, as a normalised radius.
+ *
+ * 0 at the centre of the mouth, 1 at the edge of a fully open one, larger
+ * elsewhere. The renderer hides points below the current opening, which is
+ * what turns a jaw drop into a cavity with a lip beneath it rather than a
+ * stretched patch of skin.
+ */
+export function mouthAperture(x, y) {
+  const L = LANDMARKS;
+  return Math.hypot(x / (L.mouthHalfW * 0.92), (y - L.mouthY - 0.035) / 0.115);
+}
+
 /**
  * Detail points for one eye, at a density the face grid cannot reach.
  *
@@ -204,7 +238,7 @@ function sampleEye(side, count, random, out) {
   const L = LANDMARKS;
   const cx = side * L.eyeX;
   const cy = L.eyeY;
-  const [px, py, pr, pb, ps, pa] = out;
+  const [px, py, pz, pr, pb, ps, pa, pj, pm] = out;
 
   // Almond aperture: two arcs meeting at the corners.
   const inAperture = (x, y) => {
@@ -231,7 +265,8 @@ function sampleEye(side, count, random, out) {
     if (!inAperture(x, y)) continue;
     // Bright towards the pupil edge, softer at the limbus.
     const fade = 1 - t * 0.35;
-    px.push(x); py.push(y); pr.push(ROLE.EYE);
+    px.push(x); py.push(y); pz.push(0.45); pj.push(0); pm.push(9);
+    pr.push(ROLE.EYE);
     pb.push(Math.min(1, 0.72 + fade * 0.3));
     ps.push(0.75 + fade * 0.9);
     pa.push(random() < 0.16 ? 1 : 0);
@@ -243,6 +278,7 @@ function sampleEye(side, count, random, out) {
     const r = random() * L.pupilR * 0.85;
     px.push(cx - L.irisR * 0.42 + Math.cos(angle) * r);
     py.push(cy - L.irisR * 0.42 + Math.sin(angle) * r);
+    pz.push(0.5); pj.push(0); pm.push(9);
     pr.push(ROLE.EYE); pb.push(1); ps.push(1.5); pa.push(0);
   }
 
@@ -252,7 +288,8 @@ function sampleEye(side, count, random, out) {
     const y = cy + (random() * 2 - 1) * L.eyeHalfH;
     if (!inAperture(x, y)) continue;
     if (Math.hypot(x - cx, y - cy) < L.irisR * 0.98) continue;
-    px.push(x); py.push(y); pr.push(ROLE.EYE);
+    px.push(x); py.push(y); pz.push(0.42); pj.push(0); pm.push(9);
+    pr.push(ROLE.EYE);
     pb.push(0.42 + random() * 0.22);
     ps.push(0.5 + random() * 0.4);
     pa.push(0);
@@ -266,6 +303,7 @@ function sampleEye(side, count, random, out) {
     const lid = cy - L.eyeHalfH * Math.sqrt(Math.max(0, 1 - (u / (L.eyeHalfW * 1.04)) ** 2));
     px.push(cx + u);
     py.push(lid - 0.004 - random() * 0.012);
+    pz.push(0.4); pj.push(0); pm.push(9);
     pr.push(ROLE.EYE);
     pb.push(0.55 + random() * 0.4);
     ps.push(0.7 + random() * 0.7);
@@ -310,10 +348,13 @@ export function sampleFace(count, seed = 11) {
 
   const px = [];
   const py = [];
+  const pz = [];
   const pr = [];
   const pb = [];
   const ps = [];
   const pa = [];
+  const pj = [];
+  const pm = [];
 
   for (let y = -1; y <= 1; y += spacing) {
     const halfWidth = faceHalfWidth(y);
@@ -346,6 +387,9 @@ export function sampleFace(count, seed = 11) {
       px.push(fx);
       // Rows ride the surface: nearer points sit slightly higher on screen.
       py.push(fy - z * 0.12);
+      pz.push(z);
+      pj.push(jawWeight(fx, fy));
+      pm.push(mouthAperture(fx, fy));
       pr.push(edge > 0.55 ? ROLE.RIM : role);
       pb.push(brightness);
       // Nearer and brighter points are larger, as they are in the reference.
@@ -355,8 +399,8 @@ export function sampleFace(count, seed = 11) {
     }
   }
 
-  sampleEye(-1, Math.floor(eyeCount / 2), random, [px, py, pr, pb, ps, pa]);
-  sampleEye(1, Math.ceil(eyeCount / 2), random, [px, py, pr, pb, ps, pa]);
+  sampleEye(-1, Math.floor(eyeCount / 2), random, [px, py, pz, pr, pb, ps, pa, pj, pm]);
+  sampleEye(1, Math.ceil(eyeCount / 2), random, [px, py, pz, pr, pb, ps, pa, pj, pm]);
 
   // Halo: loose points drifting off the silhouette.
   for (let i = 0; i < haloCount; i += 1) {
@@ -364,6 +408,9 @@ export function sampleFace(count, seed = 11) {
     const radius = 1.05 + random() * 0.75;
     px.push(Math.cos(angle) * radius * 0.95);
     py.push(Math.sin(angle) * radius);
+    pz.push(0);
+    pj.push(0);
+    pm.push(9);
     pr.push(ROLE.HALO);
     pb.push(0.18 + random() * 0.5);
     ps.push(0.4 + random() * 1.3);
@@ -374,22 +421,27 @@ export function sampleFace(count, seed = 11) {
   // pad by duplicating with a nudge.
   while (px.length > count) {
     const i = Math.floor(random() * px.length);
-    px.splice(i, 1); py.splice(i, 1); pr.splice(i, 1);
+    px.splice(i, 1); py.splice(i, 1); pz.splice(i, 1); pr.splice(i, 1);
     pb.splice(i, 1); ps.splice(i, 1); pa.splice(i, 1);
+    pj.splice(i, 1); pm.splice(i, 1);
   }
   while (px.length < count) {
     const i = Math.floor(random() * px.length);
     px.push(px[i] + (random() - 0.5) * spacing);
     py.push(py[i] + (random() - 0.5) * spacing);
-    pr.push(pr[i]); pb.push(pb[i]); ps.push(ps[i]); pa.push(pa[i]);
+    pz.push(pz[i]); pr.push(pr[i]); pb.push(pb[i]);
+    ps.push(ps[i]); pa.push(pa[i]); pj.push(pj[i]); pm.push(pm[i]);
   }
 
   return {
     xs: Float32Array.from(px),
     ys: Float32Array.from(py),
+    zs: Float32Array.from(pz),
     roles: Uint8Array.from(pr),
     bright: Float32Array.from(pb),
     sizes: Float32Array.from(ps),
     accent: Uint8Array.from(pa),
+    jaw: Float32Array.from(pj),
+    aperture: Float32Array.from(pm),
   };
 }

@@ -15,8 +15,14 @@ import {
   ROLE,
   faceDepth,
   faceHalfWidth,
+  jawWeight,
+  mouthAperture,
   sampleFace,
 } from '../web/face.js';
+import { sampleOrb } from '../web/orb.js';
+
+/** Kept as a helper so the articulation tests read as a group. */
+const require_jaw = () => ({ jawWeight, mouthAperture });
 
 test('the silhouette is bounded by the head', () => {
   assert.equal(faceHalfWidth(-1.2), 0, 'nothing above the crown');
@@ -124,5 +130,65 @@ test('the layout is reproducible across calls', () => {
   for (let i = 0; i < a.xs.length; i += 97) {
     assert.equal(a.xs[i], b.xs[i]);
     assert.equal(a.bright[i], b.bright[i]);
+  }
+});
+
+test('the mandible carries the lower lip, not just the chin', () => {
+  const { jawWeight } = require_jaw();
+  assert.equal(jawWeight(0, LANDMARKS.mouthY - 0.05), 0, 'the upper lip is fixed');
+  assert.ok(jawWeight(0, LANDMARKS.mouthY + 0.06) > 0.5, 'the lower lip travels');
+  assert.ok(jawWeight(0, LANDMARKS.chinY) > 0.95, 'the chin takes the full drop');
+});
+
+test('the jaw hinges at the sides', () => {
+  const { jawWeight } = require_jaw();
+  const centre = jawWeight(0, LANDMARKS.chinY);
+  const side = jawWeight(0.62, LANDMARKS.chinY);
+  assert.ok(side < centre, 'travel falls off towards the hinges');
+  assert.ok(side > 0, 'the sides still move');
+});
+
+test('the mouth aperture is centred on the mouth', () => {
+  const { mouthAperture } = require_jaw();
+  assert.ok(mouthAperture(0, LANDMARKS.mouthY + 0.035) < 0.1, 'zero at the centre');
+  assert.ok(mouthAperture(0.5, 0) > 3, 'the cheek is far outside it');
+  assert.ok(mouthAperture(0, LANDMARKS.browY) > 3, 'the brow is far outside it');
+});
+
+test('the orb never carves a mouth into itself', () => {
+  const { aperture } = sampleOrb(2000);
+  for (const value of aperture) {
+    assert.ok(value > 1, 'every orb point sits outside any opening');
+  }
+});
+
+test('the two shapes are interchangeable slot for slot', () => {
+  const face = sampleFace(2500);
+  const orb = sampleOrb(2500);
+  assert.deepEqual(Object.keys(face).sort(), Object.keys(orb).sort());
+  for (const key of Object.keys(face)) {
+    assert.equal(orb[key].length, face[key].length, key);
+  }
+});
+
+test('the orb reads as a hollow shell once projected', () => {
+  const { xs, ys } = sampleOrb(6000);
+  let inner = 0;
+  let rim = 0;
+  for (let i = 0; i < xs.length; i += 1) {
+    const r = Math.hypot(xs[i], ys[i]);
+    if (r < 0.3) inner += 1;
+    else if (r > 0.48 && r < 0.66) rim += 1;
+  }
+  // Points spread evenly over a sphere pile up at the silhouette when
+  // flattened; that is what makes the rim glow without special-casing it.
+  assert.ok(rim > inner * 2, `rim ${rim} should dominate the centre ${inner}`);
+});
+
+test('the orb stays inside its own radius', () => {
+  const { xs, ys, roles } = sampleOrb(4000);
+  for (let i = 0; i < xs.length; i += 1) {
+    if (roles[i] === ROLE.HALO) continue;
+    assert.ok(Math.hypot(xs[i], ys[i]) < 0.72, 'shell within the orb radius');
   }
 });

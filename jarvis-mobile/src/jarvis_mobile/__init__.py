@@ -26,8 +26,11 @@ from jarvis_mobile.providers import (
     register_providers,
     resolve_api_key,
 )
-from jarvis_mobile.tools import (
+from jarvis_mobile.tools import (  # noqa: F401  (registration side effect)
+    DISPLAY_MODES,
+    MOBILE_TOOL_IDS,
     TERMUX_TOOL_IDS,
+    current_mode,
     is_termux,
     termux_api_available,
 )
@@ -39,11 +42,13 @@ __version__ = "0.1.0"
 register_providers()
 
 __all__ = [
+    "DISPLAY_MODES",
     "PROVIDERS",
     "TERMUX_TOOL_IDS",
     "Provider",
     "__version__",
     "build_engine",
+    "current_mode",
     "get_provider",
     "is_termux",
     "missing_key_hint",
