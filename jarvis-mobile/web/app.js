@@ -8,6 +8,7 @@
 import { ParticleField } from './particles.js';
 import { AnalyserDriver, SynthesisDriver, createVoiceDriver } from './voice.js';
 
+import { details, fetchDevice, summarize } from './device.js';
 import { explain } from './diagnose.js';
 import { LiveSession, WakeWord } from './live.js';
 import {
@@ -45,6 +46,9 @@ const el = {
   providerAdd: document.getElementById('provider-add'),
   providerOllama: document.getElementById('provider-ollama'),
   providerStatus: document.getElementById('provider-status'),
+  deviceState: document.getElementById('device-state'),
+  deviceDetail: document.getElementById('device-detail'),
+  deviceRefresh: document.getElementById('device-refresh'),
   model: document.getElementById('model'),
   speak: document.getElementById('speak'),
   voiceMode: document.getElementById('voice-mode'),
@@ -812,8 +816,54 @@ async function loadModels() {
   }
 }
 
+/**
+ * Ask the server what the phone can do, and put it on screen.
+ *
+ * Not awaited by the sheet's open handler: a backend that is asleep takes
+ * seconds to answer, and the settings must be usable meanwhile.
+ */
+async function loadDevice() {
+  el.deviceState.textContent = 'Conferindo…';
+  el.deviceState.dataset.tone = '';
+  el.deviceDetail.hidden = true;
+  el.deviceRefresh.disabled = true;
+
+  const base = serverOf(settings);
+  if (!base) {
+    el.deviceState.textContent = 'Sem servidor configurado, não há aparelho para conferir.';
+    el.deviceRefresh.disabled = false;
+    return;
+  }
+
+  try {
+    const state = await fetchDevice(base, headersFor(activeProvider()));
+    const { tone, text } = summarize(state);
+    el.deviceState.textContent = text;
+    el.deviceState.dataset.tone = tone;
+
+    const rows = details(state);
+    el.deviceDetail.replaceChildren(
+      ...rows.flatMap(({ label, value }) => {
+        const term = document.createElement('p');
+        term.className = 'hint';
+        term.textContent = `${label}: ${value}`;
+        return [term];
+      })
+    );
+    el.deviceDetail.hidden = rows.length === 0;
+  } catch (error) {
+    el.deviceState.textContent = String(error.message || error);
+    el.deviceState.dataset.tone = 'bad';
+  } finally {
+    el.deviceRefresh.disabled = false;
+  }
+}
+
+el.deviceRefresh.addEventListener('click', () => loadDevice());
+
 el.menu.addEventListener('click', () => {
   renderProviders();
+  loadDevice();
   // Asking on open is what "the models load by themselves" means. It is not
   // awaited: the sheet must be usable while a slow or dead endpoint times out.
   loadModels();

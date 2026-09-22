@@ -23,6 +23,7 @@ import logging
 import sys
 from typing import Any
 
+from jarvis_mobile.bridge import ssh
 from jarvis_mobile.bridge.hub import TOKEN_ENV, configured_token
 from jarvis_mobile.bridge.routes import create_device_router
 
@@ -50,18 +51,31 @@ def install(app_module: Any = None) -> bool:
     def create_app(*args: Any, **kwargs: Any) -> Any:
         application = original(*args, **kwargs)
         token = configured_token()
-        if not token:
+        over_ssh = ssh.configured_target()
+        if not token and over_ssh is None:
             # Not an error: a backend with no phone to reach is a normal way
             # to run this. Said once, at startup, so it is findable later.
             logger.info("device bridge off — set %s to let a phone link to this server", TOKEN_ENV)
             return application
+
         _mount_first(application, create_device_router(token))
-        logger.info("device bridge on — a runner may link with %s", TOKEN_ENV)
+        if token:
+            logger.info("device bridge on — a runner may link with %s", TOKEN_ENV)
+        if over_ssh is not None:
+            logger.info(
+                "device over ssh — %s:%s (this is a full shell on that device)",
+                over_ssh.destination,
+                over_ssh.port,
+            )
         return application
 
     setattr(create_app, _MARK, True)
     app_module.create_app = create_app
-    return bool(configured_token())
+    return (
+        bool(configured_token())
+        or ssh.configured_target() is not None
+        or ssh.configured_target() is not None
+    )
 
 
 def _mount_first(application: Any, router: Any) -> None:

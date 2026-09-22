@@ -17,6 +17,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 
 from jarvis_mobile.bridge import runner as runner_module
+from jarvis_mobile.bridge import ssh as ssh_module
 from jarvis_mobile.bridge.hub import PROTOCOL_VERSION, RUNNER_PATH, DeviceHub
 from jarvis_mobile.bridge.hub import hub as default_hub
 
@@ -64,7 +65,17 @@ def create_device_router(token: str, hub: DeviceHub | None = None) -> Any:
         own log is on a phone, in another room. Under /v1, so the API key
         already guards it.
         """
-        return target.describe()
+        state = target.describe()
+        # Which road is actually in use. Without this the interface can say a
+        # phone is reachable but not how, and "reachable" means different
+        # things: a runner enforces a policy, an SSH target is a full shell.
+        from jarvis_mobile.tools.termux import is_termux
+
+        state["transport"] = ssh_module.transport_for(target.linked, termux=is_termux())
+        ssh_target = ssh_module.configured_target()
+        if ssh_target is not None:
+            state["ssh"] = f"{ssh_target.destination}:{ssh_target.port}"
+        return state
 
     @router.get(RUNNER_PATH)
     def device_runner() -> Any:
@@ -85,6 +96,14 @@ def create_device_router(token: str, hub: DeviceHub | None = None) -> Any:
             media_type="text/x-python",
             headers={"Content-Disposition": 'attachment; filename="runner.py"'},
         )
+
+    if not token:
+        # No secret, no bridge — but the status and the runner download still
+        # make sense. An SSH-only server reaches a phone without a token, and
+        # an earlier version of this mounted nothing at all in that case, so
+        # /v1/device answered with the interface and looked like the old
+        # catch-all bug all over again.
+        return router
 
     @router.websocket(DEVICE_PATH)
     async def link(websocket: WebSocket) -> None:  # pragma: no cover - needs a live server

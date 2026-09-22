@@ -383,3 +383,28 @@ html, body {
 #provider-status[data-state='good'] {
   color: #9fe8c0;
 }
+
+/* -- the device panel ------------------------------------------------------ */
+
+/* The tone is the whole point of this line: "connected" is not one state.
+   A runner with a policy and a free shell are both connected, and one of
+   them is a much larger thing to have agreed to. */
+#device-state {
+  font-weight: 600;
+}
+
+#device-state[data-tone='good'] {
+  color: #9fe8c0;
+}
+
+#device-state[data-tone='warn'] {
+  color: #ffd9a0;
+}
+
+#device-state[data-tone='bad'] {
+  color: #ffb4a8;
+}
+
+#device-detail p {
+  margin: 0.15rem 0;
+}

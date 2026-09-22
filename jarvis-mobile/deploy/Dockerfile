@@ -10,6 +10,12 @@
 
 FROM python:3.12-slim-bookworm
 
+# openssh-client is the other road to a phone: JARVIS_DEVICE_SSH points at a
+# Termux sshd, for the case where the server and the phone are on the same
+# network. From Render they are not, so there it is dead weight — a few
+# hundred kilobytes against a branch that would otherwise fail with a
+# confusing 'ssh não está instalado' the first time anyone tried it.
+#
 # espeak-ng turns text into phonemes and MBROLA turns phonemes into a voice, so
 # the container speaks Portuguese with no network and no model. git is only
 # needed to fetch OpenJarvis and the voice data during the build.
@@ -32,7 +38,9 @@ RUN set -eux; \
     echo 'deb http://deb.debian.org/debian bookworm contrib' \
         > /etc/apt/sources.list.d/contrib.list; \
     apt-get update; \
-    apt-get install -y --no-install-recommends git ca-certificates espeak-ng; \
+    apt-get install -y --no-install-recommends \
+        git ca-certificates espeak-ng \
+        openssh-client; \
     apt-get install -y --no-install-recommends mbrola \
         || echo 'WARNING: mbrola unavailable; local Brazilian voice disabled'; \
     rm -rf /var/lib/apt/lists/*
