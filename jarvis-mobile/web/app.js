@@ -326,6 +326,10 @@ function watchAgentEvents() {
     if (payload.type === 'tool_call_start' && data.tool === 'set_display_mode') {
       const mode = data.arguments?.mode;
       if (mode && field.shapes[mode]) applyMode(mode);
+      // The same tool carries an optional feeling. A model that never sends
+      // one costs nothing: the status machine keeps driving the face.
+      const feeling = data.arguments?.expression;
+      if (feeling) field.setExpression(feeling);
       return;
     }
 
@@ -377,10 +381,30 @@ function applyMode(mode) {
  * accessible equivalent, and it becomes visible only for an error, which the
  * field has no way to express.
  */
+/**
+ * What his face does in each state.
+ *
+ * Deliberately understated. These run under everything else the face is
+ * doing -- blinking, the speech overlay, the asymmetry -- so a strong
+ * expression here reads as a grimace held for minutes. `atento` is a quarter
+ * of a brow raise; that is enough to tell attention from repose.
+ *
+ * Speaking is absent on purpose: whatever he was feeling when he started
+ * talking is what he should still be wearing while he says it.
+ */
+const STATUS_FACE = {
+  thinking: 'pensativo',
+  listening: 'atento',
+  error: 'receoso',
+  '': 'neutro',
+};
+
 function setStatus(text, state = '') {
   el.status.textContent = text;
   el.status.dataset.state = state;
   field.setThinking(state === 'thinking');
+  const face = STATUS_FACE[state];
+  if (face) field.setExpression(face);
 }
 
 function setCaption(text) {
@@ -599,6 +623,21 @@ const LIVE_STATUS = {
   off: 'em repouso',
 };
 
+/**
+ * The same states, as far as his face is concerned.
+ *
+ * 'speaking' is not in STATUS_FACE, which is what leaves the expression alone
+ * while he answers -- exactly what is wanted here too.
+ */
+const LIVE_FACE = {
+  listening: 'listening',
+  hearing: 'listening',
+  'cutting-in': 'listening',
+  asking: 'thinking',
+  answering: 'speaking',
+  off: '',
+};
+
 function showLive(mode) {
   // Drives the button's animation: absent when off, idling when listening,
   // quickened while it has your voice.
@@ -648,7 +687,7 @@ async function toggleLive(first = '') {
     if (state === 'answering') return;
     if (state === 'asking') return; // ask() takes it from here
 
-    setStatus(LIVE_STATUS[state] ?? 'ouvindo');
+    setStatus(LIVE_STATUS[state] ?? 'ouvindo', LIVE_FACE[state] ?? 'listening');
     // Interim words, shown as they arrive: proof it is hearing you, and the
     // only feedback there is before the answer starts.
     if (text) setCaption(text);

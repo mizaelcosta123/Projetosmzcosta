@@ -154,5 +154,25 @@ export function sampleOrb(count, seed = 3, role = { RIM: 1, HALO: 4 }) {
     accent[i] = random() < 0.22 ? 1 : 0;
   }
 
-  return { xs, ys, zs, roles, bright, sizes, accent, jaw, aperture };
+  // The sphere has no brow and no lip corners, but it has to carry the same
+  // columns as the face: the renderer morphs between the two slot for slot,
+  // and a missing column reads as undefined, which becomes NaN on the first
+  // blended frame and throws every particle off screen.
+  const none = () => new Float32Array(count);
+  return {
+    xs,
+    ys,
+    zs,
+    roles,
+    bright,
+    sizes,
+    accent,
+    jaw,
+    aperture,
+    brow: none(),
+    lid: none(),
+    cheek: none(),
+    corner: none(),
+    nose: none(),
+  };
 }

@@ -234,6 +234,50 @@ export function mouthAperture(x, y) {
 }
 
 /**
+ * How much each action unit moves the point at (x, y).
+ *
+ * The face has no bones and no skin, so an action unit cannot be a muscle —
+ * it has to be a field over the head saying how strongly this point belongs
+ * to the thing that moves. A brow raise is "how much of a brow is here",
+ * falling off through the forehead; a smile is "how much of a lip corner is
+ * here", which is a spot on each side and nothing in the middle.
+ *
+ * Returned as one small object per point, sampled once when the cloud is
+ * built. Computing this per frame for 6500 points would be the whole budget.
+ *
+ * @param {number} x
+ * @param {number} y -1 at the crown, 1 at the chin.
+ * @returns {{brow: number, lid: number, cheek: number, corner: number, nose: number}}
+ */
+export function regionWeights(x, y) {
+  const L = LANDMARKS;
+  const ax = Math.abs(x);
+
+  // The brow ridge, fading up into the forehead and out past the temple. The
+  // inner end is nearer the nose, which is what lets AU1 and AU2 differ.
+  const brow =
+    bump(ax - 0.27, y - L.browY, 0.3) * (1 - 0.4 * smoothstep(0.45, 0.72, ax));
+
+  // The upper lid: the top half of the eye, plus a little of the fold above.
+  const lid =
+    bump(ax - L.eyeX, y - (L.eyeY - 0.035), 0.155) * smoothstep(L.eyeY + 0.08, L.eyeY - 0.1, y);
+
+  // The cheek, below and outside the eye. AU6 pushes it up and narrows the
+  // eye from beneath, which is the half of a smile people read as sincere.
+  const cheek = bump(ax - 0.33, y - 0.08, 0.26);
+
+  // The corners of the mouth: two spots, and nothing in the middle. Signed by
+  // side so a pull goes outward on both, not rightward on both.
+  const corner = bump(ax - L.mouthHalfW * 0.86, y - L.mouthY, 0.12);
+
+  // The bridge and wings of the nose.
+  const nose = bump(x, y - (L.mouthY - 0.28), 0.16);
+
+  return { brow, lid, cheek, corner, nose };
+}
+
+
+/**
  * Detail points for one eye, at a density the face grid cannot reach.
  *
  * Built in polar coordinates around the iris so the striations run radially,
@@ -246,6 +290,27 @@ export function mouthAperture(x, y) {
  * @param {Array} out Parallel arrays pushed into: [x, y, role, bright, size, accent].
  */
 function sampleEye(side, count, random, out) {
+  // The eye's own points get the lid region by position like everything else,
+  // and nothing else: a lid raise should carry them, a smile should not.
+  //
+  // Destructured here rather than indexed at every push, because `out` grew
+  // from six arrays to eleven and positional pushes are how 69 points ended
+  // up without region weights the first time — silently, because a shorter
+  // array reads as `undefined` and NaN propagates from there.
+  const [outX, outY, , , , , , , , outBrow, outLid, outCheek, outCorner, outNose] = out;
+
+  // Reads the point that was just pushed rather than taking coordinates.
+  // Half these call sites push a computed expression with no local to pass,
+  // and passing the wrong pair would land a lid weight on an eyelash — which
+  // is exactly the silent kind of wrong this whole function is prone to.
+  const pushRegion = () => {
+    const region = regionWeights(outX[outX.length - 1], outY[outY.length - 1]);
+    outBrow.push(region.brow);
+    outLid.push(region.lid);
+    outCheek.push(region.cheek);
+    outCorner.push(region.corner);
+    outNose.push(region.nose);
+  };
   const L = LANDMARKS;
   const cx = side * L.eyeX;
   const cy = L.eyeY;
@@ -276,7 +341,7 @@ function sampleEye(side, count, random, out) {
     if (!inAperture(x, y)) continue;
     // Bright towards the pupil edge, softer at the limbus.
     const fade = 1 - t * 0.35;
-    px.push(x); py.push(y); pz.push(0.45); pj.push(0); pm.push(9);
+    px.push(x); py.push(y); pz.push(0.45); pj.push(0); pm.push(9); pushRegion();
     pr.push(ROLE.EYE);
     pb.push(Math.min(1, 0.72 + fade * 0.3));
     ps.push(0.75 + fade * 0.9);
@@ -289,7 +354,7 @@ function sampleEye(side, count, random, out) {
     const r = random() * L.pupilR * 0.85;
     px.push(cx - L.irisR * 0.42 + Math.cos(angle) * r);
     py.push(cy - L.irisR * 0.42 + Math.sin(angle) * r);
-    pz.push(0.5); pj.push(0); pm.push(9);
+    pz.push(0.5); pj.push(0); pm.push(9); pushRegion();
     pr.push(ROLE.EYE); pb.push(1); ps.push(1.5); pa.push(0);
   }
 
@@ -299,7 +364,7 @@ function sampleEye(side, count, random, out) {
     const y = cy + (random() * 2 - 1) * L.eyeHalfH;
     if (!inAperture(x, y)) continue;
     if (Math.hypot(x - cx, y - cy) < L.irisR * 0.98) continue;
-    px.push(x); py.push(y); pz.push(0.42); pj.push(0); pm.push(9);
+    px.push(x); py.push(y); pz.push(0.42); pj.push(0); pm.push(9); pushRegion();
     pr.push(ROLE.EYE);
     pb.push(0.42 + random() * 0.22);
     ps.push(0.5 + random() * 0.4);
@@ -314,7 +379,7 @@ function sampleEye(side, count, random, out) {
     const lid = cy - L.eyeHalfH * Math.sqrt(Math.max(0, 1 - (u / (L.eyeHalfW * 1.04)) ** 2));
     px.push(cx + u);
     py.push(lid - 0.004 - random() * 0.012);
-    pz.push(0.4); pj.push(0); pm.push(9);
+    pz.push(0.4); pj.push(0); pm.push(9); pushRegion();
     pr.push(ROLE.EYE);
     pb.push(0.55 + random() * 0.4);
     ps.push(0.7 + random() * 0.7);
@@ -366,6 +431,13 @@ export function sampleFace(count, seed = 11) {
   const pa = [];
   const pj = [];
   const pm = [];
+  // One array per region an action unit can act on. Parallel to the rest, and
+  // sampled here because doing it per frame for 6500 points is the budget.
+  const pBrow = [];
+  const pLid = [];
+  const pCheek = [];
+  const pCorner = [];
+  const pNose = []; 
 
   for (let y = -1; y <= 1; y += spacing) {
     const halfWidth = faceHalfWidth(y);
@@ -401,6 +473,12 @@ export function sampleFace(count, seed = 11) {
       pz.push(z);
       pj.push(jawWeight(fx, fy));
       pm.push(mouthAperture(fx, fy));
+      const region = regionWeights(fx, fy);
+      pBrow.push(region.brow);
+      pLid.push(region.lid);
+      pCheek.push(region.cheek);
+      pCorner.push(region.corner);
+      pNose.push(region.nose);
       pr.push(edge > 0.55 ? ROLE.RIM : role);
       pb.push(brightness);
       // Nearer and brighter points are larger, as they are in the reference.
@@ -410,8 +488,9 @@ export function sampleFace(count, seed = 11) {
     }
   }
 
-  sampleEye(-1, Math.floor(eyeCount / 2), random, [px, py, pz, pr, pb, ps, pa, pj, pm]);
-  sampleEye(1, Math.ceil(eyeCount / 2), random, [px, py, pz, pr, pb, ps, pa, pj, pm]);
+  const eyeArrays = [px, py, pz, pr, pb, ps, pa, pj, pm, pBrow, pLid, pCheek, pCorner, pNose];
+  sampleEye(-1, Math.floor(eyeCount / 2), random, eyeArrays);
+  sampleEye(1, Math.ceil(eyeCount / 2), random, eyeArrays);
 
   // Halo: loose points drifting off the silhouette.
   for (let i = 0; i < haloCount; i += 1) {
@@ -422,6 +501,11 @@ export function sampleFace(count, seed = 11) {
     pz.push(0);
     pj.push(0);
     pm.push(9);
+    pBrow.push(0);
+    pLid.push(0);
+    pCheek.push(0);
+    pCorner.push(0);
+    pNose.push(0);
     pr.push(ROLE.HALO);
     pb.push(0.18 + random() * 0.5);
     ps.push(0.4 + random() * 1.3);
@@ -430,18 +514,24 @@ export function sampleFace(count, seed = 11) {
 
   // Normalise to exactly `count`: trim at random so thinning stays even, or
   // pad by duplicating with a nudge.
+  //
+  // Over one list of arrays rather than a line of hand-written splices per
+  // array. Fourteen parallel arrays kept in sync by hand is a bug waiting for
+  // the fifteenth: adding the region weights silently left five of them
+  // untrimmed, so the cloud had 6500 points and 6808 brow values, and every
+  // index past the first trim pointed at a different point's face.
+  const every = [px, py, pz, pr, pb, ps, pa, pj, pm, pBrow, pLid, pCheek, pCorner, pNose];
+
   while (px.length > count) {
     const i = Math.floor(random() * px.length);
-    px.splice(i, 1); py.splice(i, 1); pz.splice(i, 1); pr.splice(i, 1);
-    pb.splice(i, 1); ps.splice(i, 1); pa.splice(i, 1);
-    pj.splice(i, 1); pm.splice(i, 1);
+    for (const column of every) column.splice(i, 1);
   }
   while (px.length < count) {
     const i = Math.floor(random() * px.length);
-    px.push(px[i] + (random() - 0.5) * spacing);
-    py.push(py[i] + (random() - 0.5) * spacing);
-    pz.push(pz[i]); pr.push(pr[i]); pb.push(pb[i]);
-    ps.push(ps[i]); pa.push(pa[i]); pj.push(pj[i]); pm.push(pm[i]);
+    for (const column of every) column.push(column[i]);
+    // The duplicate is nudged so it is not exactly on top of its original.
+    px[px.length - 1] += (random() - 0.5) * spacing;
+    py[py.length - 1] += (random() - 0.5) * spacing;
   }
 
   return {
@@ -454,5 +544,10 @@ export function sampleFace(count, seed = 11) {
     accent: Uint8Array.from(pa),
     jaw: Float32Array.from(pj),
     aperture: Float32Array.from(pm),
+    brow: Float32Array.from(pBrow),
+    lid: Float32Array.from(pLid),
+    cheek: Float32Array.from(pCheek),
+    corner: Float32Array.from(pCorner),
+    nose: Float32Array.from(pNose),
   };
 }

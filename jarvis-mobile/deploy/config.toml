@@ -2,9 +2,21 @@
 # environment variable at run time, which is how a host without a shell does it.
 
 [intelligence]
-# The auto router picks per prompt, which is the only sensible default for a
-# catalogue of hundreds. Set OPENROUTER_API_KEY and it works as-is.
-default_model = "openrouter/auto"
+# The dedicated model, as asked for. It is a free tier, so it costs nothing to
+# leave running, and it is a fixed id rather than the auto router: the answers
+# stay consistent from one turn to the next instead of changing character when
+# the router changes its mind.
+#
+# If OpenRouter rejects this id ("model not found"), the id has been renamed or
+# retired -- free slugs come and go. The way out needs no redeploy: pick another
+# model in Configuracoes -> Modelo in the app itself. That choice is per device,
+# it is sent with every request, and it beats whatever is written here.
+# "openrouter/auto" always works and is the fallback worth knowing.
+#
+# This file is baked into the image (see deploy/Dockerfile), so changing the
+# line below means a rebuild and a Manual Deploy. The app's own setting does
+# not.
+default_model = "qwen/qwen3.8-27b:free"
 preferred_engine = "openrouter"
 
 [engine]

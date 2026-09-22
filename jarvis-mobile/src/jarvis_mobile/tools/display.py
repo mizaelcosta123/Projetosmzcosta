@@ -25,7 +25,13 @@ from openjarvis.tools._stubs import BaseTool, ToolSpec
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["DISPLAY_MODES", "SetDisplayModeTool", "current_mode", "state_path"]
+__all__ = [
+    "DISPLAY_MODES",
+    "EXPRESSIONS",
+    "SetDisplayModeTool",
+    "current_mode",
+    "state_path",
+]
 
 #: The forms he can take, and what each one is for.
 DISPLAY_MODES: dict[str, str] = {
@@ -34,6 +40,28 @@ DISPLAY_MODES: dict[str, str] = {
 }
 
 _DEFAULT_MODE = "orb"
+
+#: What his face can be doing, and when each one is true.
+#:
+#: These are not pictures. Each one is a combination of facial action units --
+#: single muscles, in the FACS sense -- which is why they can be worn *while*
+#: he talks instead of instead of talking, and why moving between any two of
+#: them needs no animation: the face holds a target and travels toward it.
+#:
+#: The list mirrors ``EMOTIONS`` in ``web/expression.js``. A name that is not
+#: here is refused rather than sent on, because the browser would quietly
+#: settle to neutral and the model would never learn it had guessed wrong.
+EXPRESSIONS: dict[str, str] = {
+    "neutro": "At rest. The default, and where he returns between subjects.",
+    "atento": "Listening. A quarter of a brow raise, nothing more.",
+    "pensativo": "Working something out. Brows drawn slightly together.",
+    "alegre": "Genuinely pleased — the cheeks rise, not just the mouth.",
+    "triste": "Sorry, or delivering bad news.",
+    "surpreso": "Caught off guard by what was just said.",
+    "bravo": "Firm. For refusing something, not for being cross with the user.",
+    "receoso": "Uneasy — a warning, or an answer he is not sure of.",
+    "enojado": "Distaste. Rare, and worth keeping rare.",
+}
 
 
 def state_path() -> Path:
@@ -81,13 +109,22 @@ class SetDisplayModeTool(BaseTool):
     @property
     def spec(self) -> ToolSpec:
         modes = ", ".join(f"'{key}' — {text}" for key, text in DISPLAY_MODES.items())
+        feelings = ", ".join(f"'{key}' — {text}" for key, text in EXPRESSIONS.items())
         return ToolSpec(
             name="set_display_mode",
             description=(
                 "Change how you appear on screen. Call this whenever the user "
                 "asks to see your face, to go back to the orb, or otherwise "
                 "asks you to change your appearance — in any language and "
-                "however they phrase it. Available modes: " + modes
+                "however they phrase it. Available modes: " + modes + " "
+                "It also carries your expression, which you may set on its own "
+                "and without being asked: pass 'expression' alone to change "
+                "what your face is doing while leaving your form as it is. Do "
+                "that when the feeling of what you are about to say differs "
+                "from the last thing you said — pleased at good news, uneasy "
+                "about a warning, sorry when the answer is no. It shows while "
+                "you speak, so set it before answering, not after. Leave it "
+                "out and your face keeps what it has. Expressions: " + feelings
             ),
             parameters={
                 "type": "object",
@@ -95,31 +132,60 @@ class SetDisplayModeTool(BaseTool):
                     "mode": {
                         "type": "string",
                         "enum": sorted(DISPLAY_MODES),
-                        "description": "The form to take.",
+                        "description": "The form to take. Omit to keep the current one.",
+                    },
+                    "expression": {
+                        "type": "string",
+                        "enum": sorted(EXPRESSIONS),
+                        "description": "What your face is doing. Omit to keep it.",
                     },
                 },
-                "required": ["mode"],
+                "required": [],
             },
             category="interface",
             timeout_seconds=5.0,
         )
 
     def execute(self, **params: Any) -> ToolResult:
-        mode = str(params.get("mode", "")).strip().lower()
-        if mode not in DISPLAY_MODES:
+        mode = str(params.get("mode") or "").strip().lower()
+        feeling = str(params.get("expression") or "").strip().lower()
+
+        if not mode and not feeling:
+            return ToolResult(
+                tool_name=self.tool_id,
+                content="Nothing to change: pass a mode, an expression, or both.",
+                success=False,
+            )
+        if mode and mode not in DISPLAY_MODES:
             known = ", ".join(sorted(DISPLAY_MODES))
             return ToolResult(
                 tool_name=self.tool_id,
                 content=f"Unknown display mode {mode!r}. Available: {known}.",
                 success=False,
             )
+        if feeling and feeling not in EXPRESSIONS:
+            known = ", ".join(sorted(EXPRESSIONS))
+            return ToolResult(
+                tool_name=self.tool_id,
+                content=f"Unknown expression {feeling!r}. Available: {known}.",
+                success=False,
+            )
 
-        warning = _remember(mode)
+        # The expression is not persisted, and that is the point: a form is a
+        # setting and survives a reload, a feeling is about the sentence being
+        # said and should not outlive the conversation that caused it.
+        persisted = True
+        if mode:
+            persisted = _remember(mode) is None
+
+        changed = ", ".join(
+            part for part in (f"mode {mode}" if mode else "", f"expression {feeling}" if feeling else "") if part
+        )
         # Succeed either way: the event carrying the switch has already been
         # published by the executor, so the interface changes regardless.
         return ToolResult(
             tool_name=self.tool_id,
-            content=f"Display mode set to {mode}.",
+            content=f"Display set: {changed}.",
             success=True,
-            metadata={"mode": mode, "persisted": warning is None},
+            metadata={"mode": mode or current_mode(), "expression": feeling, "persisted": persisted},
         )

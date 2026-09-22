@@ -15,7 +15,8 @@
  *     stop.
  */
 
-import { ROLE, sampleFace } from './face.js';
+import { LANDMARKS, ROLE, sampleFace } from './face.js';
+import { AU, Expression } from './expression.js';
 import { sampleOrb } from './orb.js';
 
 const TAU = Math.PI * 2;
@@ -135,6 +136,15 @@ export class ParticleField {
     this.thinkLevel = 0;
     this.time = 0;
 
+    /** What his face is doing besides talking: brows, lids, cheeks, corners.
+     *
+     * Seeded from the same generator as the cloud, so blinks fall at the same
+     * moments every run. Livingness that is random per run is livingness that
+     * makes a test flaky once a fortnight and nobody can reproduce. */
+    this.expression = new Expression({ random: makeRandom(0xb1177 ^ count) });
+    /** The action unit intensities for this frame, in AUS order. */
+    this.au = this.expression.frame(0);
+
     this.resize();
   }
 
@@ -203,6 +213,26 @@ export class ParticleField {
   }
 
   /**
+   * Aim the face at an expression, by name or as action unit intensities.
+   *
+   * Nothing snaps: the field holds a target and moves toward it, so every
+   * transition between every pair of expressions exists without being
+   * authored.
+   *
+   * @param {string|object} what
+   */
+  setExpression(what) {
+    this.expression.set(what);
+    return this;
+  }
+
+  /** Close his eyes now. */
+  blink() {
+    this.expression.blink(this.time * 1000);
+    return this;
+  }
+
+  /**
    * Advance the simulation and draw one frame.
    *
    * @param {number} dt Seconds since the previous frame.
@@ -242,6 +272,13 @@ export class ParticleField {
     const m = this.morph >= 1 ? 1 : this.morph * this.morph * (3 - 2 * this.morph);
     const blended = m > 0 && m < 1;
 
+    // Where the face is this frame. Speech feeds in so the brows lift on the
+    // loud syllables — which is most of what separates somebody talking from
+    // a jaw opening and closing.
+    this.au = this.expression.frame(this.time * 1000, energy);
+    const au = this.au;
+    const faceness = this.targetShape === 'face' ? m : this.currentShape === 'face' ? 1 - m : 0;
+
     const { x, y, vx, vy, phase, ctx } = this;
     const scale = this.scale;
     const spread = 1 + energy * 0.05 + breath * 0.035;
@@ -275,6 +312,73 @@ export class ParticleField {
 
       let goalX = tx * spread;
       let goalY = ty * spread;
+
+      // -- the face, apart from the mouth ---------------------------------
+      //
+      // Each unit is a displacement scaled by how much of the moving thing is
+      // here. The weights come from the sampler, so this is five multiplies
+      // per particle and no geometry.
+      //
+      // `faceness` gates the whole block: the sphere carries zero weights, so
+      // this would be arithmetic on nothing, sixty times a second.
+      if (faceness > 0.001) {
+        const brow = (blended ? from.brow[i] + (to.brow[i] - from.brow[i]) * m : to.brow[i]) * faceness;
+        const lid = (blended ? from.lid[i] + (to.lid[i] - from.lid[i]) * m : to.lid[i]) * faceness;
+        const cheek = (blended ? from.cheek[i] + (to.cheek[i] - from.cheek[i]) * m : to.cheek[i]) * faceness;
+        const corner = (blended ? from.corner[i] + (to.corner[i] - from.corner[i]) * m : to.corner[i]) * faceness;
+        const nose = (blended ? from.nose[i] + (to.nose[i] - from.nose[i]) * m : to.nose[i]) * faceness;
+
+        if (brow > 0.001) {
+          // Inner and outer raisers differ by *where* along the brow they
+          // pull, which is why they are two units and not one: surprise
+          // lifts the whole arch, sadness lifts only the inner ends.
+          const inner = 1 - Math.min(1, Math.abs(tx) / 0.34);
+          const outer = Math.min(1, Math.abs(tx) / 0.4);
+          goalY -= brow * (au[AU.browInner] * inner + au[AU.browOuter] * outer) * 0.085;
+          // Lowering also knits: the brows come down and toward each other.
+          goalY += brow * au[AU.browLower] * 0.07;
+          goalX -= brow * au[AU.browLower] * Math.sign(tx) * 0.022;
+        }
+
+        if (lid > 0.001) {
+          goalY -= lid * au[AU.lidRaise] * 0.035;
+          goalY += lid * (au[AU.lidTighten] + au[AU.blink]) * 0.055;
+        }
+
+        if (cheek > 0.001) {
+          goalY -= cheek * au[AU.cheekRaise] * 0.05;
+        }
+
+        const pull = au[AU.lipPull] - au[AU.lipDepress];
+
+        if (corner > 0.001) {
+          // Outward and up for a pull, inward and down for a depressor. The
+          // sign carries the side, so both corners move away from the middle
+          // rather than the whole mouth sliding right.
+          const side = Math.sign(tx) || 1;
+          goalY -= corner * pull * 0.06;
+          goalX += corner * side * (au[AU.lipPull] * 0.03 + au[AU.lipStretch] * 0.05);
+        }
+
+        // A smile is an arc, not two corners.
+        //
+        // The corner weight reaches only about 150 points on the whole face,
+        // and barely sixty of them are lip: lifting those alone left the
+        // middle of the mouth dead straight, and at phone size `alegre` and
+        // `triste` came out indistinguishable. Weighting the lift by the
+        // square of the distance from the centre bends the entire lip line,
+        // which is the shape a mouth actually makes. The corner term above
+        // still runs; it is what carries the ends past the arc and pulls
+        // them outward.
+        if (role === ROLE.MOUTH && pull !== 0) {
+          const across = Math.min(1, Math.abs(tx) / LANDMARKS.mouthHalfW);
+          goalY -= faceness * pull * across * across * 0.075;
+        }
+
+        if (nose > 0.001) {
+          goalY -= nose * au[AU.noseWrinkle] * 0.03;
+        }
+      }
 
       if (energy > 0) {
         // The mandible swings open and carries the lower face with it, so the
@@ -365,6 +469,11 @@ export class ParticleField {
         // vowel narrows the opening even at the same loudness.
         if (inside < energy / apertureWidth) continue;
       }
+
+      // A blink is not a lid sliding down over dots — there is nothing to
+      // slide. Withholding the eye's own points for the length of it is what
+      // reads as the eye closing.
+      if (role === ROLE.EYE && au[AU.blink] > 0.55 && faceness > 0.5) continue;
 
       const speed = Math.abs(vx[i]) + Math.abs(vy[i]);
       const lit = Math.min(1, baseBright + speed * 1.6 + energy * 0.12 + breath * 0.14);
