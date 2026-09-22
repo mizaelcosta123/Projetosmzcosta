@@ -103,6 +103,37 @@ check(
   await status()
 );
 
+console.log('\n--- o painel do aparelho ---');
+const deviceText = () => page.locator('#device-state').textContent();
+const deviceTone = () => page.locator('#device-state').getAttribute('data-tone');
+
+// A phone linked with an old runner: connected, and unable to tap anything.
+await page.route('**/v1/device', (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      linked: true,
+      name: 'pixel',
+      transport: 'bridge',
+      stale: true,
+      ui: false,
+      shell: false,
+      binaries: ['termux-open-url', 'termux-battery-status'],
+    }),
+  })
+);
+await page.locator('#device-refresh').click();
+await page.waitForTimeout(600);
+check('diz que o aparelho está ligado', (await deviceText()).includes('pixel'), await deviceText());
+check('e avisa que o runner é antigo', (await deviceText()).includes('runner antigo'), await deviceText());
+check('em âmbar, não em verde', (await deviceTone()) === 'warn', `tone=${await deviceTone()}`);
+check(
+  'os detalhes apareceram',
+  !(await page.locator('#device-detail').isHidden()),
+  await page.locator('#device-detail').textContent()
+);
+
 console.log('\n--- remover ---');
 const before = (await options()).length;
 await page.locator('#provider-remove').click();

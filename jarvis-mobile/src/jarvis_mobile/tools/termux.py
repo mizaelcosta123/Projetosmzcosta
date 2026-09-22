@@ -35,7 +35,7 @@ from openjarvis.core.registry import ToolRegistry
 from openjarvis.core.types import ToolResult
 from openjarvis.tools._stubs import BaseTool, ToolSpec
 
-from jarvis_mobile.bridge import DeviceOffline, hub
+from jarvis_mobile.bridge import DeviceOffline, hub, ssh
 
 __all__ = [
     "TERMUX_TOOL_IDS",
@@ -47,6 +47,7 @@ __all__ = [
     "DeviceStatusTool",
     "is_termux",
     "termux_api_available",
+    "transport",
 ]
 
 # Per-call ceiling. Every helper here is interactive-fast; anything slower is
@@ -89,14 +90,27 @@ def termux_api_available() -> bool:
     return shutil.which("termux-battery-status") is not None
 
 
+def transport() -> str:
+    """Which of the three ways to the phone is in play: local, bridge or ssh.
+
+    The order is not a preference so much as a fact about each one. Running
+    inside Termux means there is no phone to reach. A linked runner is a live
+    connection that already told us what it has and what it will run, so it
+    beats a configured SSH target that may be a sleeping phone on a network
+    nobody is on. SSH is what is left, and it is enough.
+    """
+    return ssh.transport_for(hub.linked, termux=is_termux())
+
+
 def _run(args: Sequence[str], *, stdin: str | None = None) -> Any:
     """Run a helper on the phone, wherever the phone is.
 
-    Returns something shaped like :class:`subprocess.CompletedProcess` — the
-    bridge's :class:`~jarvis_mobile.bridge.Ran` matches it field for field, so
-    callers never learn which side of the socket they are on.
+    Returns something shaped like :class:`subprocess.CompletedProcess` — both
+    the bridge's :class:`~jarvis_mobile.bridge.Ran` and the SSH transport match
+    it field for field, so callers never learn which one served them.
     """
-    if is_termux():
+    which = transport()
+    if which == "local":
         return subprocess.run(
             list(args),
             capture_output=True,
@@ -105,6 +119,10 @@ def _run(args: Sequence[str], *, stdin: str | None = None) -> Any:
             input=stdin,
             check=False,
         )
+    if which == "ssh":
+        return ssh.run(ssh.configured_target(), list(args), stdin=stdin, timeout=_TIMEOUT)
+    # Either a linked runner, or nothing — and the hub's refusal is the one
+    # that explains how to link a phone.
     return hub.run(list(args), stdin=stdin, timeout=_TIMEOUT)
 
 
@@ -114,14 +132,17 @@ def _which(name: str) -> str | None:
     Remotely this is the list the runner reported when it linked, so a helper
     installed on the phone mid-session needs the runner restarted.
     """
-    if is_termux():
+    which = transport()
+    if which == "local":
         return shutil.which(name)
+    if which == "ssh":
+        return name if ssh.has_binary(ssh.configured_target(), name, timeout=_TIMEOUT) else None
     return name if hub.has_binary(name) else None
 
 
 def device_reachable() -> bool:
     """Whether device tools can do anything at all right now."""
-    return is_termux() or hub.linked
+    return transport() != "none"
 
 
 class _TermuxTool(BaseTool):

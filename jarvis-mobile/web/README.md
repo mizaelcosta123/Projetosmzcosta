@@ -184,3 +184,69 @@ jaw to chin without discontinuities, that the nose tip is nearer than the cheek
 and the cheek nearer than the eye socket, that the iris is a populated ring
 around an empty centre, and that the arrays the renderer reads stay the same
 length.
+
+
+## Mostrar algo a ele, e ver o que ele escreveu
+
+O botão de **câmera** abre um visor sobre o campo; o de **clipe** abre o seletor
+do sistema, que no Android também oferece a câmera. São dois porque "tirar uma
+foto agora" e "mandar aquela de terça" são intenções diferentes, e o seletor
+enterra a primeira.
+
+A imagem é reduzida para 1280px no maior lado e reenviada como JPEG antes de
+sair: um celular entrega 4000px, o modelo reamostra para algumas centenas de
+qualquer jeito, e a diferença no fio são megabytes de base64 numa subida móvel.
+
+**Uma imagem só chega ao modelo por um provedor direto.** O `ChatMessage` do
+OpenJarvis tipa `content` como `str`, então uma lista de blocos é recusada com
+422 antes de qualquer modelo ver. Quando isso acontece, a mensagem de erro diz
+isso e aponta para Configurações → Onde ele pensa — um código de status não
+apontaria para lugar nenhum.
+
+Arquivos de texto são **citados dentro da mensagem** em vez de virarem blocos:
+nenhum backend recusa uma string mais longa, e assim um `.csv` continua
+funcionando contra um servidor que recusaria blocos.
+
+O botão de **microfone** é segurar para ditar. Áudio cru não é opção — quase
+nenhum modelo aceita, e os que aceitam não são para onde este app aponta. O
+navegador já transcreve, então o ditado põe palavras no campo e o campo faz o
+que sempre fez.
+
+Quando a resposta traz um bloco `html` ou `svg`, aparece um botão para **rodar**.
+Ele executa código que um modelo escreveu, na mesma tela que a chave de API, e
+a segurança disso inteira é um par de atributos: o iframe recebe
+`sandbox="allow-scripts"` e **não** `allow-same-origin`. Juntos, os dois
+colocariam o quadro nesta origem, onde o script leria o `localStorage`. Separados,
+ele roda numa origem opaca que não alcança nem o armazenamento nem o documento.
+Não existe terceira opção que rode script com segurança, então isso não é uma
+configuração.
+
+
+## Criar uma imagem, sem configurar nada
+
+A estrela no compositor troca o que o campo significa: em vez de falar com ele,
+você descreve uma imagem. É um **modo**, e não um palpite — perguntar a um modelo
+se uma frase era um pedido de imagem erra o suficiente para irritar.
+
+O serviço é o [Pollinations](https://pollinations.ai): a imagem é um GET, o
+texto vai no caminho, e a resposta é a figura. Sem chave, sem cadastro. É a única
+razão pela qual isso pode vir pré-configurado, e vale ser exato sobre o preço:
+
+- **o tráfego anônimo é limitado**, mais ou menos um pedido a cada 15 segundos, e
+  é o primeiro a ser barrado quando o serviço está cheio. Por isso o botão
+  *Gerar outra* segura e mostra o contador, em vez de deixar você apertar quatro
+  vezes e concluir que quebrou;
+- a imagem vai com `nologo` e `private`, então não leva marca d'água nem cai num
+  feed público.
+
+O texto é **codificado** antes de virar caminho. Uma barra, uma interrogação ou
+um `#` na sua frase terminariam o caminho e o serviço geraria outra coisa — uma
+falha silenciosa, que devolve uma imagem errada sem dizer nada.
+
+### Vídeo não está na mesma categoria
+
+O mesmo serviço gera vídeo, mas **medido por créditos**, com uma franquia semanal
+que dá para poucos segundos. Não existe botão de vídeo aqui de propósito: ele
+pareceria igual ao que funciona e custaria um minuto de espera para falhar. A
+tabela `CAPABILITIES` em `generate.js` carrega esse fato, e um teste o fixa —
+se algum dia virar gratuito de verdade, é lá que muda.

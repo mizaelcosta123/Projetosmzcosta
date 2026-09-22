@@ -8,6 +8,10 @@
 import { ParticleField } from './particles.js';
 import { AnalyserDriver, SynthesisDriver, createVoiceDriver } from './voice.js';
 
+import { buildContent, explainRefusal, isImage, isText, toDataUrl } from './attach.js';
+import { details, fetchDevice, summarize } from './device.js';
+import { COOLDOWN_MS, explainFailure, imageUrl, newSeed } from './generate.js';
+import { SANDBOX, asDocument, describe as describeRun, previewable } from './preview.js';
 import { explain } from './diagnose.js';
 import { LiveSession, WakeWord } from './live.js';
 import {
@@ -45,6 +49,30 @@ const el = {
   providerAdd: document.getElementById('provider-add'),
   providerOllama: document.getElementById('provider-ollama'),
   providerStatus: document.getElementById('provider-status'),
+  camera: document.getElementById('camera'),
+  attach: document.getElementById('attach'),
+  file: document.getElementById('file'),
+  record: document.getElementById('record'),
+  create: document.getElementById('create'),
+  gallery: document.getElementById('gallery'),
+  made: document.getElementById('made'),
+  madeNote: document.getElementById('made-note'),
+  again: document.getElementById('again'),
+  save: document.getElementById('save'),
+  closeGallery: document.getElementById('close-gallery'),
+  tray: document.getElementById('tray'),
+  viewfinder: document.getElementById('viewfinder'),
+  preview: document.getElementById('preview'),
+  shoot: document.getElementById('shoot'),
+  flip: document.getElementById('flip'),
+  closeCamera: document.getElementById('close-camera'),
+  run: document.getElementById('run'),
+  stage: document.getElementById('stage'),
+  frame: document.getElementById('frame'),
+  closeStage: document.getElementById('close-stage'),
+  deviceState: document.getElementById('device-state'),
+  deviceDetail: document.getElementById('device-detail'),
+  deviceRefresh: document.getElementById('device-refresh'),
   model: document.getElementById('model'),
   speak: document.getElementById('speak'),
   voiceMode: document.getElementById('voice-mode'),
@@ -129,6 +157,16 @@ let live = null;
 
 /** @type {WakeWord|null} Listens for his name while nothing else listens. */
 let wake = null;
+
+/** What is riding along with the next message.
+ *
+ * Up here for the same reason as the two above: streamReply reads it, and a
+ * `let` further down would be in the temporal dead zone for any earlier
+ * caller.
+ *
+ * @type {{id: string, kind: string, dataUrl?: string, text?: string, name: string}[]}
+ */
+let attached = [];
 
 // Served from the OpenJarvis server itself? Then it is the default target and
 // no one has to type a URL.
@@ -419,9 +457,15 @@ async function streamReply(text, onChunk) {
   const headers = { 'Content-Type': 'application/json' };
   Object.assign(headers, headersFor(activeProvider()));
 
+  // A string when nothing is attached, content blocks when a picture is.
+  // Reaching for blocks without a reason would break a Jarvis backend, whose
+  // `content` field is typed as a string.
+  const content = buildContent(text, attached);
+  const carriedImage = Array.isArray(content);
+
   const body = {
     model: await modelFor(base, headers),
-    messages: [{ role: 'user', content: text }],
+    messages: [{ role: 'user', content }],
     stream: true,
   };
 
@@ -432,6 +476,11 @@ async function streamReply(text, onChunk) {
   });
 
   if (!response.ok) {
+    // The likeliest refusal when a picture is riding along, and the one a
+    // status code explains worst: a Jarvis backend rejects the whole message
+    // before any model sees the image.
+    const about = explainRefusal(response.status, carriedImage, reachesDevice(activeProvider()));
+    if (about) throw new Error(about);
     const detail = await response.text().catch(() => '');
     throw new Error(`${response.status} ${response.statusText} ${detail}`.trim());
   }
@@ -473,7 +522,9 @@ async function streamReply(text, onChunk) {
 let busy = false;
 
 const syncReady = () => {
-  el.composer.dataset.ready = String(el.prompt.value.trim().length > 0);
+  // An attachment alone is something to send, so the composer counts it too.
+  const ready = el.prompt.value.trim().length > 0 || attached.length > 0;
+  el.composer.dataset.ready = String(ready);
 };
 el.prompt.addEventListener('input', syncReady);
 syncReady();
@@ -487,19 +538,31 @@ syncReady();
  * @param {string} text
  */
 async function ask(text) {
-  if (!text || busy) return;
+  // A photo with no words is a message: "what is this?" is the question, and
+  // buildContent supplies it. Only an empty field *and* an empty tray is
+  // nothing to send.
+  if ((!text && attached.length === 0) || busy) return;
 
   busy = true;
   el.send.disabled = true;
   setCaption('');
+  offerPreview('');
   setStatus('pensando', 'thinking');
 
   try {
     let shown = '';
+    const sent = attached;
     const reply = await streamReply(text, (chunk) => {
       shown += chunk;
       setCaption(shown);
     });
+    // Only once it got through: a refused image should still be in the tray,
+    // so fixing the setting and pressing send again is all it takes.
+    if (attached === sent) {
+      attached = [];
+      renderTray();
+    }
+    offerPreview(reply);
     await say(reply);
     if (!settings.speak) setStatus('em repouso');
   } catch (error) {
@@ -517,6 +580,10 @@ el.composer.addEventListener('submit', (event) => {
   const text = el.prompt.value.trim();
   el.prompt.value = '';
   syncReady();
+  if (creating) {
+    if (text) makePicture(text);
+    return;
+  }
   ask(text);
 });
 
@@ -677,6 +744,307 @@ el.shape.addEventListener('click', () => {
   applyMode(field.targetShape === 'face' ? 'orb' : 'face');
 });
 
+// -- making a picture ---------------------------------------------------------
+
+/** Whether the field describes a picture rather than addresses him. */
+let creating = false;
+
+/** The prompt behind what is on screen, so "outra" can re-roll the same one. */
+let madePrompt = '';
+
+/** The object URL currently shown, revoked before the next one replaces it. */
+let madeUrl = '';
+
+/** When the free tier will accept another request. */
+let readyAt = 0;
+
+el.create.addEventListener('click', () => {
+  creating = !creating;
+  el.create.setAttribute('aria-pressed', String(creating));
+  el.prompt.placeholder = creating ? 'Descreva a imagem' : 'Fale com ele';
+  el.prompt.focus();
+});
+
+function noteMade(text, state = '') {
+  el.madeNote.textContent = text;
+  el.madeNote.dataset.state = state;
+}
+
+/** Keep the buttons honest about the service's rate cap. */
+function holdButtons() {
+  const left = Math.max(0, readyAt - Date.now());
+  el.again.disabled = left > 0;
+  if (left === 0) {
+    el.again.textContent = 'Gerar outra';
+    return;
+  }
+  el.again.textContent = `Aguarde ${Math.ceil(left / 1000)}s`;
+  setTimeout(holdButtons, 500);
+}
+
+/**
+ * Fetch the picture and show it.
+ *
+ * Through fetch rather than by pointing an `<img>` at the URL: an `<img>` that
+ * fails gives an error event and no status, and the two failures that actually
+ * happen — the rate cap and a busy service — are exactly the ones worth
+ * telling apart. The blob is also what makes saving possible.
+ */
+async function makePicture(prompt) {
+  madePrompt = prompt;
+  el.gallery.hidden = false;
+  el.made.removeAttribute('src');
+  el.save.disabled = true;
+  noteMade('Desenhando…');
+  holdButtons();
+
+  const url = imageUrl(prompt, { seed: newSeed(), size: 'quadrado' });
+  let response;
+  try {
+    response = await fetch(url);
+  } catch {
+    noteMade(explainFailure(0), 'bad');
+    return;
+  }
+  readyAt = Date.now() + COOLDOWN_MS;
+  holdButtons();
+
+  if (!response.ok) {
+    noteMade(explainFailure(response.status), 'bad');
+    return;
+  }
+
+  // Revoke the previous one: object URLs are held until the page goes away,
+  // and a few full-size images add up on a phone.
+  if (madeUrl) URL.revokeObjectURL(madeUrl);
+  madeUrl = URL.createObjectURL(await response.blob());
+  el.made.src = madeUrl;
+  el.made.alt = prompt;
+  el.save.disabled = false;
+  noteMade(prompt);
+}
+
+el.again.addEventListener('click', () => madePrompt && makePicture(madePrompt));
+
+el.save.addEventListener('click', () => {
+  if (!madeUrl) return;
+  const link = document.createElement('a');
+  link.href = madeUrl;
+  // A filename from the prompt, so a folder of these is readable later.
+  link.download = `${madePrompt.slice(0, 40).replace(/[^\w\s-]/g, '').trim() || 'imagem'}.jpg`;
+  link.click();
+});
+
+el.closeGallery.addEventListener('click', () => {
+  el.gallery.hidden = true;
+});
+
+// -- running what he wrote ---------------------------------------------------
+
+/** @type {{language: string, code: string}|null} The block the button would run. */
+let runnable = null;
+
+/** Offer a preview when the reply carries a page, and withdraw it when not. */
+function offerPreview(reply) {
+  runnable = previewable(reply);
+  el.run.hidden = runnable === null;
+  el.run.textContent = describeRun(runnable);
+}
+
+el.run.addEventListener('click', () => {
+  if (!runnable) return;
+  // Set here rather than in the markup so it comes from the same constant the
+  // tests assert on. allow-scripts without allow-same-origin: the frame runs
+  // the code and cannot read this origin's localStorage, where the key lives.
+  el.frame.setAttribute('sandbox', SANDBOX);
+  el.frame.srcdoc = asDocument(runnable);
+  el.stage.hidden = false;
+});
+
+el.closeStage.addEventListener('click', () => {
+  el.stage.hidden = true;
+  el.frame.srcdoc = ''; // stop whatever it was doing
+});
+
+// -- what goes along with the message ---------------------------------------
+
+/** Redraw the tray. Hidden when empty, so the composer never moves. */
+function renderTray() {
+  el.tray.hidden = attached.length === 0;
+  syncReady();
+  el.tray.replaceChildren(
+    ...attached.map((item) => {
+      const figure = document.createElement('figure');
+      if (item.kind === 'image') {
+        const image = document.createElement('img');
+        image.src = item.dataUrl;
+        image.alt = item.name;
+        figure.append(image);
+      } else {
+        const box = document.createElement('span');
+        box.className = 'doc';
+        box.textContent = item.name;
+        figure.append(box);
+      }
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remover ${item.name}`);
+      remove.addEventListener('click', () => {
+        attached = attached.filter((row) => row.id !== item.id);
+        renderTray();
+      });
+      figure.append(remove);
+      return figure;
+    })
+  );
+}
+
+/** Add a file the person picked, or a frame the camera took. */
+async function addFile(file) {
+  const name = file.name || 'imagem.jpg';
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  try {
+    if (isImage(file.type)) {
+      attached.push({ id, kind: 'image', name, dataUrl: await toDataUrl(file) });
+    } else if (isText(file.type, name)) {
+      attached.push({ id, kind: 'text', name, text: await file.text() });
+    } else {
+      setCaption(`Não sei o que fazer com ${name}. Mande uma imagem ou um texto.`);
+      return;
+    }
+  } catch (error) {
+    setCaption(`Não consegui ler ${name}: ${error.message || error}`);
+    return;
+  }
+  renderTray();
+}
+
+el.attach.addEventListener('click', () => el.file.click());
+el.file.addEventListener('change', async () => {
+  for (const file of el.file.files) await addFile(file);
+  el.file.value = ''; // so picking the same file twice still fires
+});
+
+// -- the camera ---------------------------------------------------------------
+
+let stream = null;
+let facing = 'environment'; // the back camera is what you point at things
+
+async function openCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing },
+      audio: false,
+    });
+  } catch (error) {
+    setStatus('erro', 'error');
+    setCaption(
+      error?.name === 'NotAllowedError'
+        ? 'Sem permissão para a câmera. Libere nas configurações do navegador.'
+        : `Não consegui abrir a câmera: ${error.message || error}`
+    );
+    return;
+  }
+  el.preview.srcObject = stream;
+  el.viewfinder.hidden = false;
+  el.camera.dataset.on = 'yes';
+}
+
+function closeCamera() {
+  // Every track, explicitly: dropping the reference leaves the camera light on.
+  stream?.getTracks().forEach((track) => track.stop());
+  stream = null;
+  el.preview.srcObject = null;
+  el.viewfinder.hidden = true;
+  el.camera.dataset.on = '';
+}
+
+el.camera.addEventListener('click', () => (stream ? closeCamera() : openCamera()));
+el.closeCamera.addEventListener('click', closeCamera);
+
+el.flip.addEventListener('click', async () => {
+  facing = facing === 'environment' ? 'user' : 'environment';
+  closeCamera();
+  await openCamera();
+});
+
+el.shoot.addEventListener('click', async () => {
+  const video = el.preview;
+  if (!video.videoWidth) return; // the first frame has not arrived yet
+
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+  closeCamera();
+  if (blob) await addFile(new File([blob], 'camera.jpg', { type: 'image/jpeg' }));
+  el.prompt.focus();
+});
+
+// -- holding the button to dictate --------------------------------------------
+
+/** @type {any} The dictation recogniser, separate from the live session's. */
+let dictation = null;
+
+function startDictation() {
+  const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+  if (!Recognition) {
+    setCaption('Este navegador não transcreve fala.');
+    return;
+  }
+  if (dictation) return;
+
+  // Raw audio is not an option: almost no model takes it, and the ones that do
+  // are not what this app points at. The browser already transcribes, so this
+  // puts words in the field and the field does what it always did.
+  dictation = new Recognition();
+  dictation.lang = 'pt-BR';
+  dictation.interimResults = true;
+  const before = el.prompt.value;
+
+  dictation.onresult = (event) => {
+    let heard = '';
+    for (let index = 0; index < event.results.length; index += 1) {
+      heard += event.results[index][0]?.transcript ?? '';
+    }
+    el.prompt.value = before ? `${before} ${heard}` : heard;
+  };
+  dictation.onerror = (event) => {
+    if (event.error === 'not-allowed') setCaption('Sem permissão para o microfone.');
+  };
+  dictation.onend = () => {
+    dictation = null;
+    el.record.dataset.on = '';
+  };
+
+  try {
+    dictation.start();
+    el.record.dataset.on = 'yes';
+  } catch {
+    dictation = null;
+  }
+}
+
+function stopDictation() {
+  try {
+    dictation?.stop();
+  } catch {
+    /* already stopping */
+  }
+}
+
+// Press and hold. pointerup anywhere, not just on the button, or letting go
+// with your thumb slightly off leaves it recording.
+el.record.addEventListener('pointerdown', (event) => {
+  event.preventDefault();
+  startDictation();
+});
+for (const name of ['pointerup', 'pointercancel']) {
+  window.addEventListener(name, () => dictation && stopDictation());
+}
+
 // -- the settings sheet -----------------------------------------------------
 
 /** Redraw the picker from the saved list, keeping the active one selected. */
@@ -812,8 +1180,54 @@ async function loadModels() {
   }
 }
 
+/**
+ * Ask the server what the phone can do, and put it on screen.
+ *
+ * Not awaited by the sheet's open handler: a backend that is asleep takes
+ * seconds to answer, and the settings must be usable meanwhile.
+ */
+async function loadDevice() {
+  el.deviceState.textContent = 'Conferindo…';
+  el.deviceState.dataset.tone = '';
+  el.deviceDetail.hidden = true;
+  el.deviceRefresh.disabled = true;
+
+  const base = serverOf(settings);
+  if (!base) {
+    el.deviceState.textContent = 'Sem servidor configurado, não há aparelho para conferir.';
+    el.deviceRefresh.disabled = false;
+    return;
+  }
+
+  try {
+    const state = await fetchDevice(base, headersFor(activeProvider()));
+    const { tone, text } = summarize(state);
+    el.deviceState.textContent = text;
+    el.deviceState.dataset.tone = tone;
+
+    const rows = details(state);
+    el.deviceDetail.replaceChildren(
+      ...rows.flatMap(({ label, value }) => {
+        const term = document.createElement('p');
+        term.className = 'hint';
+        term.textContent = `${label}: ${value}`;
+        return [term];
+      })
+    );
+    el.deviceDetail.hidden = rows.length === 0;
+  } catch (error) {
+    el.deviceState.textContent = String(error.message || error);
+    el.deviceState.dataset.tone = 'bad';
+  } finally {
+    el.deviceRefresh.disabled = false;
+  }
+}
+
+el.deviceRefresh.addEventListener('click', () => loadDevice());
+
 el.menu.addEventListener('click', () => {
   renderProviders();
+  loadDevice();
   // Asking on open is what "the models load by themselves" means. It is not
   // awaited: the sheet must be usable while a slow or dead endpoint times out.
   loadModels();

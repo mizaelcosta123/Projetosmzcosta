@@ -479,7 +479,7 @@ def test_the_status_endpoint_tracks_the_link():
     app.include_router(create_device_router("segredo", hub))
     client = TestClient(app)
 
-    assert client.get(STATUS_PATH).json() == {"linked": False}
+    assert client.get(STATUS_PATH).json()["linked"] is False
 
     with client.websocket_connect(
         "/v1/device/link", headers={"Authorization": "Bearer segredo"}
@@ -495,8 +495,13 @@ def test_the_status_endpoint_tracks_the_link():
         "ui": True,  # a free shell covers the screen binaries too
         "stale": True,
         "binaries": ["termux-battery-status"],
+        # Which road served it, which is not the same question as whether a
+        # phone is reachable: a runner enforces a policy, SSH is a full shell.
+        "transport": "bridge",
     }
-    assert client.get(STATUS_PATH).json() == {"linked": False}, "a disconnect must show"
+    after = client.get(STATUS_PATH).json()
+    assert after["linked"] is False, "a disconnect must show"
+    assert after["transport"] == "none"
 
 
 # -- the catch-all that swallowed the status endpoint ------------------------
@@ -536,7 +541,7 @@ def test_the_status_endpoint_is_not_swallowed_by_the_page():
     _mount_first(app, create_device_router("segredo", DeviceHub()))
 
     response = TestClient(app).get(STATUS_PATH)
-    assert response.json() == {"linked": False}
+    assert response.json()["linked"] is False
     assert "html" not in response.text.lower()
 
 

@@ -264,6 +264,66 @@ há comando: o Android exige o toque de uma pessoa.
 | Contatos | `device_contacts` |
 | SMS | ler a lista de mensagens |
 
+## Alcançar o Termux por SSH
+
+Há dois caminhos até o aparelho, e eles servem para coisas diferentes.
+
+| | quando serve | o que o aparelho aceita |
+|---|---|---|
+| **ponte** (runner) | o servidor está na nuvem e o celular na sua rede | o que a política do runner permitir — `--allow-ui`, `--allow-shell` |
+| **SSH** | servidor e celular na mesma rede | **tudo**: é um shell |
+
+**O navegador não faz isso.** SSH é TCP cru e uma página tem HTTP e WebSocket. O
+SSH roda na máquina onde o servidor está, nunca na interface.
+
+**E o Jarvis no Render não alcança o seu celular por SSH.** Seu telefone não tem
+endereço fixo, e o Render não abre conexão para dentro da sua rede. É exatamente
+o problema que a ponte existe para resolver — o celular disca para fora. Para o
+SSH valer, o Jarvis precisa estar num computador na mesma rede do aparelho.
+
+No celular:
+
+```bash
+pkg install openssh
+passwd          # o sshd do Termux não aceita login sem senha ou chave
+sshd            # sobe na porta 8022
+whoami          # o usuário, algo como u0_a123
+ifconfig        # o endereço na sua rede
+```
+
+Onde o Jarvis roda:
+
+```bash
+export JARVIS_DEVICE_SSH=u0_a123@192.168.0.10:8022
+export JARVIS_DEVICE_SSH_KEY=~/.ssh/id_ed25519   # recomendado
+```
+
+A porta é 8022 e não 22 porque o Android não deixa um processo comum usar as
+portas privilegiadas.
+
+### Qual caminho está valendo
+
+Configurações → **Aparelho**, no próprio app. Ou:
+
+```bash
+curl -s https://seu-backend/v1/device | python -m json.tool
+```
+
+```json
+{"linked": false, "transport": "ssh", "ssh": "u0_a123@192.168.0.10:8022"}
+```
+
+Quando os dois estão disponíveis, a **ponte ganha**: o runner já disse o que tem
+e o que aceita rodar, enquanto um alvo SSH pode ser um celular dormindo numa
+rede em que ninguém está.
+
+### O que você está autorizando
+
+Uma entrada de SSH não tem política. Quem configura `JARVIS_DEVICE_SSH` deu um
+shell completo naquele aparelho — não há `--allow-ui` que limite isso, porque o
+limite mora no runner e aqui não há runner. É uma escolha razoável na sua
+própria máquina, na sua própria rede, e não é a mesma coisa que a ponte.
+
 ## Atualizar o runner
 
 O runner é **um arquivo só**, que você baixa e guarda. Isso significa que a
