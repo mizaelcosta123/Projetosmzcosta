@@ -36,6 +36,32 @@
 
   <p id="caption" class="caption" aria-live="polite"></p>
 
+  <!-- What is going along with the next message. Empty and hidden until
+       something is attached, so the composer keeps its shape. -->
+  <div id="tray" class="tray" hidden aria-label="Anexos"></div>
+
+  <!-- Offered under the caption when a reply carries a page worth running. -->
+  <button id="run" type="button" class="quiet run-btn" hidden></button>
+
+  <!-- Where a model's code runs. The sandbox attribute is set in JS, from one
+       exported constant, so it cannot drift from what the tests assert. -->
+  <div id="stage" class="viewfinder" hidden>
+    <iframe id="frame" title="Prévia"></iframe>
+    <menu class="row">
+      <button type="button" id="close-stage" class="quiet">Fechar</button>
+    </menu>
+  </div>
+
+  <!-- The viewfinder, over everything, while the camera is open. -->
+  <div id="viewfinder" class="viewfinder" hidden>
+    <video id="preview" playsinline muted autoplay></video>
+    <menu class="row">
+      <button type="button" id="shoot">Tirar</button>
+      <button type="button" id="flip" class="quiet">Virar</button>
+      <button type="button" id="close-camera" class="quiet">Fechar</button>
+    </menu>
+  </div>
+
   <form id="composer" class="composer" autocomplete="off">
     <input id="prompt" type="text" placeholder="Fale com ele" aria-label="Mensagem" enterkeyhint="send">
     <!-- Three bars, not the header's three lines: this one opens the
@@ -47,6 +73,28 @@
         <line x1="6" y1="7.5" x2="6" y2="12.5" />
         <line x1="10" y1="4" x2="10" y2="16" />
         <line x1="14" y1="7.5" x2="14" y2="12.5" />
+      </svg>
+    </button>
+    <!-- The camera opens a viewfinder over the field; the clip opens the
+         system picker, which on Android offers the camera too. Two buttons
+         because "take a photo now" and "send that one from Tuesday" are
+         different intentions and the picker buries the first. -->
+    <button id="camera" type="button" class="ghost-btn composer-btn" aria-label="Mostrar algo pela câmera" title="Câmera">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M2.5 6h3l1.2-1.8h6.6L14.5 6h3v9h-15z" />
+        <circle cx="10" cy="10.5" r="3" />
+      </svg>
+    </button>
+    <button id="attach" type="button" class="ghost-btn composer-btn" aria-label="Anexar arquivo" title="Anexar">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M13.5 8.5l-5 5a2.5 2.5 0 01-3.5-3.5l6-6a4 4 0 015.5 5.5l-6 6" />
+      </svg>
+    </button>
+    <input id="file" type="file" accept="image/*,text/*,.md,.csv,.json,.log" multiple hidden>
+    <button id="record" type="button" class="ghost-btn composer-btn" aria-label="Segure para ditar" title="Segure para ditar">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <rect x="7.5" y="3" width="5" height="9" rx="2.5" />
+        <path d="M4.5 9.5a5.5 5.5 0 0011 0M10 15v2.5" />
       </svg>
     </button>
     <button id="send" type="submit" aria-label="Enviar">
