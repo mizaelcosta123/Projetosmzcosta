@@ -169,9 +169,16 @@ html, body {
   border: 0;
   border-radius: 50%;
   cursor: pointer;
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+/* Only the send control hides. The comment above was always about it, but the
+   rule sat on every button in the row — so the camera, the clip, the create
+   toggle and the microphone were all invisible until you typed something,
+   which is precisely backwards: you press those *before* there is text. */
+#send {
   opacity: 0;
   transform: translateX(-4px);
-  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease), color 0.2s var(--ease);
 }
 .composer button svg {
   width: 19px;
@@ -182,7 +189,7 @@ html, body {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.composer[data-ready="true"] button { opacity: 1; transform: none; color: var(--accent); }
+.composer[data-ready="true"] #send { opacity: 1; transform: none; color: var(--accent); }
 .composer button:focus-visible { opacity: 1; transform: none; outline: 1px solid var(--accent); outline-offset: 2px; }
 .composer button:disabled { opacity: 0.35; cursor: default; }
 
@@ -422,6 +429,12 @@ html, body {
 
 .composer-btn {
   flex: 0 0 auto;
+  opacity: 0.5; /* present but quiet, like the live button beside them */
+}
+
+.composer-btn:hover,
+.composer-btn:focus-visible {
+  opacity: 1;
 }
 
 .composer-btn[data-on='yes'] {
@@ -533,4 +546,51 @@ html, body {
   border: 0;
   background: #0b1017;
   min-height: 0;
+}
+
+/* -- making a picture ------------------------------------------------------ */
+
+/* The mode is a state of the composer, not a separate screen: the field is
+   still the field, it is just pointed somewhere else. */
+.composer-btn[aria-pressed='true'] {
+  color: #ffd9a0;
+}
+
+.shot {
+  display: grid;
+  place-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  min-height: 0;
+}
+
+.shot img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 0.6rem;
+  background: rgba(10, 18, 30, 0.85);
+  min-height: 0;
+}
+
+/* Empty until a picture arrives, and the alt text would otherwise draw a
+   broken-image glyph in the middle of the screen. */
+.shot img:not([src]) {
+  display: none;
+}
+
+#made-note {
+  margin: 0;
+  text-align: center;
+}
+
+#made-note[data-state='bad'] {
+  color: #ffb4a8;
+}
+
+/* The cooldown is the service's, not ours — but a button that looks pressable
+   and is refused reads as broken, so it says how long. */
+#again[disabled],
+#save[disabled] {
+  opacity: 0.45;
 }

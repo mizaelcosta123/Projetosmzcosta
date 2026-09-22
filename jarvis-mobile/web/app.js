@@ -10,6 +10,7 @@ import { AnalyserDriver, SynthesisDriver, createVoiceDriver } from './voice.js';
 
 import { buildContent, explainRefusal, isImage, isText, toDataUrl } from './attach.js';
 import { details, fetchDevice, summarize } from './device.js';
+import { COOLDOWN_MS, explainFailure, imageUrl, newSeed } from './generate.js';
 import { SANDBOX, asDocument, describe as describeRun, previewable } from './preview.js';
 import { explain } from './diagnose.js';
 import { LiveSession, WakeWord } from './live.js';
@@ -52,6 +53,13 @@ const el = {
   attach: document.getElementById('attach'),
   file: document.getElementById('file'),
   record: document.getElementById('record'),
+  create: document.getElementById('create'),
+  gallery: document.getElementById('gallery'),
+  made: document.getElementById('made'),
+  madeNote: document.getElementById('made-note'),
+  again: document.getElementById('again'),
+  save: document.getElementById('save'),
+  closeGallery: document.getElementById('close-gallery'),
   tray: document.getElementById('tray'),
   viewfinder: document.getElementById('viewfinder'),
   preview: document.getElementById('preview'),
@@ -572,6 +580,10 @@ el.composer.addEventListener('submit', (event) => {
   const text = el.prompt.value.trim();
   el.prompt.value = '';
   syncReady();
+  if (creating) {
+    if (text) makePicture(text);
+    return;
+  }
   ask(text);
 });
 
@@ -730,6 +742,101 @@ el.canvas.addEventListener('pointerdown', armWake, { once: true });
 // The toggle stays as a manual override; asking him is the intended path.
 el.shape.addEventListener('click', () => {
   applyMode(field.targetShape === 'face' ? 'orb' : 'face');
+});
+
+// -- making a picture ---------------------------------------------------------
+
+/** Whether the field describes a picture rather than addresses him. */
+let creating = false;
+
+/** The prompt behind what is on screen, so "outra" can re-roll the same one. */
+let madePrompt = '';
+
+/** The object URL currently shown, revoked before the next one replaces it. */
+let madeUrl = '';
+
+/** When the free tier will accept another request. */
+let readyAt = 0;
+
+el.create.addEventListener('click', () => {
+  creating = !creating;
+  el.create.setAttribute('aria-pressed', String(creating));
+  el.prompt.placeholder = creating ? 'Descreva a imagem' : 'Fale com ele';
+  el.prompt.focus();
+});
+
+function noteMade(text, state = '') {
+  el.madeNote.textContent = text;
+  el.madeNote.dataset.state = state;
+}
+
+/** Keep the buttons honest about the service's rate cap. */
+function holdButtons() {
+  const left = Math.max(0, readyAt - Date.now());
+  el.again.disabled = left > 0;
+  if (left === 0) {
+    el.again.textContent = 'Gerar outra';
+    return;
+  }
+  el.again.textContent = `Aguarde ${Math.ceil(left / 1000)}s`;
+  setTimeout(holdButtons, 500);
+}
+
+/**
+ * Fetch the picture and show it.
+ *
+ * Through fetch rather than by pointing an `<img>` at the URL: an `<img>` that
+ * fails gives an error event and no status, and the two failures that actually
+ * happen — the rate cap and a busy service — are exactly the ones worth
+ * telling apart. The blob is also what makes saving possible.
+ */
+async function makePicture(prompt) {
+  madePrompt = prompt;
+  el.gallery.hidden = false;
+  el.made.removeAttribute('src');
+  el.save.disabled = true;
+  noteMade('Desenhando…');
+  holdButtons();
+
+  const url = imageUrl(prompt, { seed: newSeed(), size: 'quadrado' });
+  let response;
+  try {
+    response = await fetch(url);
+  } catch {
+    noteMade(explainFailure(0), 'bad');
+    return;
+  }
+  readyAt = Date.now() + COOLDOWN_MS;
+  holdButtons();
+
+  if (!response.ok) {
+    noteMade(explainFailure(response.status), 'bad');
+    return;
+  }
+
+  // Revoke the previous one: object URLs are held until the page goes away,
+  // and a few full-size images add up on a phone.
+  if (madeUrl) URL.revokeObjectURL(madeUrl);
+  madeUrl = URL.createObjectURL(await response.blob());
+  el.made.src = madeUrl;
+  el.made.alt = prompt;
+  el.save.disabled = false;
+  noteMade(prompt);
+}
+
+el.again.addEventListener('click', () => madePrompt && makePicture(madePrompt));
+
+el.save.addEventListener('click', () => {
+  if (!madeUrl) return;
+  const link = document.createElement('a');
+  link.href = madeUrl;
+  // A filename from the prompt, so a folder of these is readable later.
+  link.download = `${madePrompt.slice(0, 40).replace(/[^\w\s-]/g, '').trim() || 'imagem'}.jpg`;
+  link.click();
+});
+
+el.closeGallery.addEventListener('click', () => {
+  el.gallery.hidden = true;
 });
 
 // -- running what he wrote ---------------------------------------------------

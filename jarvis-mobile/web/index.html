@@ -52,6 +52,20 @@
     </menu>
   </div>
 
+  <!-- Where a generated picture lives. Its own surface because a picture needs
+       actions a caption does not: another one, save it, close. -->
+  <div id="gallery" class="viewfinder" hidden>
+    <div class="shot">
+      <img id="made" alt="Imagem gerada">
+      <p id="made-note" class="hint" aria-live="polite"></p>
+    </div>
+    <menu class="row">
+      <button type="button" id="again">Gerar outra</button>
+      <button type="button" id="save" class="quiet">Salvar</button>
+      <button type="button" id="close-gallery" class="quiet">Fechar</button>
+    </menu>
+  </div>
+
   <!-- The viewfinder, over everything, while the camera is open. -->
   <div id="viewfinder" class="viewfinder" hidden>
     <video id="preview" playsinline muted autoplay></video>
@@ -91,6 +105,15 @@
       </svg>
     </button>
     <input id="file" type="file" accept="image/*,text/*,.md,.csv,.json,.log" multiple hidden>
+    <!-- Switches the field from "say something to him" to "describe a picture".
+         A mode rather than a guess: asking a model whether a sentence was a
+         request for an image gets it wrong often enough to be infuriating. -->
+    <button id="create" type="button" class="ghost-btn composer-btn" aria-label="Criar imagem" aria-pressed="false" title="Criar imagem">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5 8.4 10.1 4 8.5l4.4-1.6z" />
+        <path d="M15.5 13.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+      </svg>
+    </button>
     <button id="record" type="button" class="ghost-btn composer-btn" aria-label="Segure para ditar" title="Segure para ditar">
       <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
         <rect x="7.5" y="3" width="5" height="9" rx="2.5" />

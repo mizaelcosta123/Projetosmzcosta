@@ -220,3 +220,33 @@ colocariam o quadro nesta origem, onde o script leria o `localStorage`. Separado
 ele roda numa origem opaca que não alcança nem o armazenamento nem o documento.
 Não existe terceira opção que rode script com segurança, então isso não é uma
 configuração.
+
+
+## Criar uma imagem, sem configurar nada
+
+A estrela no compositor troca o que o campo significa: em vez de falar com ele,
+você descreve uma imagem. É um **modo**, e não um palpite — perguntar a um modelo
+se uma frase era um pedido de imagem erra o suficiente para irritar.
+
+O serviço é o [Pollinations](https://pollinations.ai): a imagem é um GET, o
+texto vai no caminho, e a resposta é a figura. Sem chave, sem cadastro. É a única
+razão pela qual isso pode vir pré-configurado, e vale ser exato sobre o preço:
+
+- **o tráfego anônimo é limitado**, mais ou menos um pedido a cada 15 segundos, e
+  é o primeiro a ser barrado quando o serviço está cheio. Por isso o botão
+  *Gerar outra* segura e mostra o contador, em vez de deixar você apertar quatro
+  vezes e concluir que quebrou;
+- a imagem vai com `nologo` e `private`, então não leva marca d'água nem cai num
+  feed público.
+
+O texto é **codificado** antes de virar caminho. Uma barra, uma interrogação ou
+um `#` na sua frase terminariam o caminho e o serviço geraria outra coisa — uma
+falha silenciosa, que devolve uma imagem errada sem dizer nada.
+
+### Vídeo não está na mesma categoria
+
+O mesmo serviço gera vídeo, mas **medido por créditos**, com uma franquia semanal
+que dá para poucos segundos. Não existe botão de vídeo aqui de propósito: ele
+pareceria igual ao que funciona e custaria um minuto de espera para falhar. A
+tabela `CAPABILITIES` em `generate.js` carrega esse fato, e um teste o fixa —
+se algum dia virar gratuito de verdade, é lá que muda.
