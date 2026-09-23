@@ -1,6 +1,10 @@
 /**
  * The settings sheet, driven the way a person drives it.
  *
+ * Updated for the sheet as it is now: the page adopts a local Ollama by
+ * itself on first run, and the model field is a select of the models kept
+ * for each address, filled from a catalogue, rather than free text.
+ *
  * Everything here is DOM wiring, which unit tests cannot reach: whether the
  * picker fills, whether switching entries clears a model ID that belonged to
  * the other one, whether the sentence about reaching the phone actually
@@ -48,48 +52,57 @@ const options = () =>
   page.$$eval('#provider option', (nodes) => nodes.map((n) => n.textContent));
 const role = () => page.locator('#provider-role').textContent();
 const status = () => page.locator('#provider-status').textContent();
-const models = () => page.$$eval('#model-options option', (n) => n.map((o) => o.value));
+const models = () => page.$$eval('#model option', (n) => n.map((o) => o.value).filter((v) => v && v !== '__outro__'));
+const catalogue = () => page.$$eval('#catalogue-list label', (n) => n.map((l) => l.textContent.trim()));
 
-// Served by a backend, so the page has somewhere to talk to and does not open
-// the sheet by itself. The gear is how you get there.
+// A static server on this machine and an Ollama answering /api/tags: the
+// page finds it and points at it on its own, with nothing configured. The
+// menu is how you get to the sheet afterwards.
 await page.waitForTimeout(400);
-await page.locator('#menu').click();
+if (!(await page.locator('#settings').isVisible())) await page.locator('#menu').click();
 await page.waitForTimeout(400);
 
 console.log('--- primeira abertura ---');
 check('o painel abriu', await page.locator('#settings').isVisible());
-check('há um provedor na lista', (await options()).length >= 1, (await options()).join(', '));
+check('achou o Ollama local sozinho', (await options()).some((n) => n.includes('Ollama')), (await options()).join(', '));
 check(
-  'ele diz que alcança o aparelho',
-  (await role()).includes('alcança o seu aparelho'),
+  'e diz que ele só responde, sem alcançar o aparelho',
+  (await role()).includes('só responde') && (await role()).includes('Termux'),
   await role()
 );
-await page.waitForTimeout(500);
-check('os modelos carregaram sozinhos', (await models()).length > 0, (await models()).join(', '));
+await page.locator('#model-pick').click();
+await page.waitForTimeout(700);
+check(
+  'o catálogo abre com os modelos dele, vindos do /api/tags',
+  (await catalogue()).some((t) => t.includes('qwen2.5:1.5b')),
+  (await catalogue()).join(', ')
+);
+await page.locator('#catalogue-done').click();
+await page.waitForTimeout(200);
 
 console.log('\n--- o Ollama do Termux, num toque ---');
+const count = (await options()).length;
 await page.locator('#provider-ollama').click();
 await page.waitForTimeout(700);
-check('entrou na lista', (await options()).some((n) => n.includes('Ollama')), (await options()).join(', '));
+check('continua na lista, sem duplicar', (await options()).filter((n) => n.includes('Ollama')).length === 1 && (await options()).length === count, (await options()).join(', '));
 check(
   'e avisa que NÃO chega ao Termux',
   (await role()).includes('só responde') && (await role()).includes('Termux'),
   await role()
 );
-check(
-  'os modelos dele vieram pelo /api/tags',
-  (await models()).includes('qwen2.5:1.5b'),
-  (await models()).join(', ')
-);
 
 console.log('\n--- trocar de provedor ---');
-await page.locator('#model').fill('qwen2.5:1.5b');
+await page.locator('#provider-add').click();
+await page.locator('#provider-url').fill('https://openrouter.ai/api/v1');
+await page.locator('#provider-test').click();
+await page.waitForTimeout(900);
+check('o outro endereço listou os modelos dele', (await models()).includes('anthropic/claude-sonnet-4.5'), (await models()).join(', '));
 await page.selectOption('#provider', { index: 0 });
 await page.waitForTimeout(300);
 check(
   'o modelo do outro provedor não ficou para trás',
-  (await page.locator('#model').inputValue()) === '',
-  `modelo=${await page.locator('#model').inputValue()}`
+  !(await models()).includes('anthropic/claude-sonnet-4.5') && (await page.locator('#model').inputValue()) === '',
+  `modelo=${await page.locator('#model').inputValue()}; lista=${(await models()).join(', ')}`
 );
 
 console.log('\n--- um endereço que não responde ---');

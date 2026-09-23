@@ -272,3 +272,39 @@ test('the smoothing means the same thing at any frame rate', () => {
   };
   assert.ok(Math.abs(run(60) - run(120)) < 0.01, `${run(60)} vs ${run(120)}`);
 });
+
+test('running it does not eat its own methods', () => {
+  /* `this.look = ...` in frame() shadowed the `look()` method with a plain
+     object, and every unit test went on passing because none of them called a
+     method after drawing a frame. The browser found it in one click.
+
+     Checked as a class of mistake rather than that one name: any per-frame
+     field that happens to share a method's name does the same thing. */
+  const field = new ParticleField(phoneCanvas(), { count: 400, shape: 'face' });
+  const methods = Object.getOwnPropertyNames(ParticleField.prototype).filter(
+    (name) => name !== 'constructor'
+  );
+  field.setLevel(0.6);
+  settle(field, 120);
+  for (const name of methods) {
+    assert.equal(typeof field[name], 'function', `${name}() deixou de ser função`);
+  }
+});
+
+test('every way of driving the face survives being used', () => {
+  // The whole public surface, in one go, after frames have run.
+  const field = new ParticleField(phoneCanvas(), { count: 400, shape: 'face' });
+  settle(field, 60);
+  assert.doesNotThrow(() => {
+    field.setExpression('alegre');
+    field.look('pensando');
+    field.lookAt(0.5, -0.3);
+    field.rollEyes();
+    field.nod();
+    field.blink();
+    field.setThinking(true);
+    field.setLevel(0.5, 0.3);
+    field.setShape('orb');
+  });
+  settle(field, 60);
+});

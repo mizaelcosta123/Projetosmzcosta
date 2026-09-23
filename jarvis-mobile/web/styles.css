@@ -193,6 +193,262 @@ html, body {
 .composer button:focus-visible { opacity: 1; transform: none; outline: 1px solid var(--accent); outline-offset: 2px; }
 .composer button:disabled { opacity: 0.35; cursor: default; }
 
+/* -- the "+" and what it opens -------------------------------------------- */
+
+/* Findable on an empty composer, for the same reason the live button is: it
+   is what you reach for before there is any text. */
+.composer #more { opacity: 0.5; }
+.composer #more:hover,
+.composer #more:focus-visible { opacity: 1; }
+/* Rotates into an x while the menu is open, so the same button closes it and
+   looks like it would. */
+.composer[data-more="open"] #more { opacity: 1; color: var(--accent); }
+.composer[data-more="open"] #more svg { transform: rotate(45deg); }
+.composer #more svg { transition: transform 0.22s var(--ease); }
+
+.more-menu {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  /* Sits on the composer, which is itself above the safe area. */
+  bottom: calc(env(safe-area-inset-bottom) + 68px);
+  z-index: 6;
+  max-width: 33rem;
+  margin: 0 auto;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: rgba(8, 12, 22, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  /* The blur is what keeps the field readable behind it instead of fighting
+     it: he goes on moving under the menu rather than being covered by it. */
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  transform-origin: left bottom;
+  animation: menu-in 0.18s var(--ease);
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.more-menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 11px;
+  cursor: pointer;
+}
+.more-menu button:hover,
+.more-menu button:focus-visible { background: rgba(56, 189, 248, 0.1); outline: none; }
+.more-menu button svg {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--accent);
+}
+.more-menu button > span { display: grid; gap: 1px; }
+.more-menu small { color: var(--dimmer); font-size: 0.78rem; }
+/* A toggle that is currently on says so, since the menu closes behind you. */
+.more-menu button[aria-pressed="true"] { background: rgba(56, 189, 248, 0.16); }
+.more-menu button[aria-pressed="true"] small::after { content: " · ligado"; color: var(--accent); }
+
+/* -- augmented reality ---------------------------------------------------- */
+
+/* Over everything, and transparent: WebXR puts the camera behind the page,
+   so anything opaque here would be a wall in front of the room. */
+#holo {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  background: transparent;
+}
+
+/* The stage: the same canvas, over the field but under the frame and the
+   composer, and touchable -- the glass is the hand here. z-index auto puts it
+   in document order, which is exactly between the two. */
+#holo[data-stage="on"] {
+  z-index: auto;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.holo-bar {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  top: calc(env(safe-area-inset-top) + 60px);
+  max-width: 33rem;
+  margin: 0 auto;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+.holo-bar .hint { margin: 0; font-size: 0.78rem; color: var(--dim); }
+.holo-bar menu { display: flex; gap: 8px; justify-content: center; margin: 0; padding: 0; }
+.holo-bar button {
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.86rem;
+  color: var(--dim);
+  background: rgba(8, 12, 22, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.holo-bar button:hover, .holo-bar button:focus-visible { color: var(--ink); }
+
+/* The dom-overlay root. WebXR hands the screen to the session, and these are
+   the only controls that survive it — so they are large and few. */
+.ar-overlay {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: calc(env(safe-area-inset-bottom) + 18px);
+  z-index: 9;
+  max-width: 33rem;
+  margin: 0 auto;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(8, 12, 22, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.ar-overlay button {
+  flex: 1;
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--ink);
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.ar-overlay button.quiet { background: transparent; color: var(--dim); }
+.ar-status { margin: 0; font-size: 0.86rem; color: var(--dim); }
+
+/* -- the model catalogue -------------------------------------------------- */
+
+/* Scrolls inside itself, so the search box and the buttons stay put while
+   three hundred rows go past. */
+.catalogue {
+  max-height: 46vh;
+  overflow-y: auto;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.catalogue:empty { display: none; }
+
+/* Scoped under `.sheet` on purpose, and not just for tidiness.
+   `.sheet label` and `.catalogue label` have the same specificity, and
+   `.sheet label` is further down this file — so it won, and every id came out
+   as `LLAMA3.2:3B`. That is not the name of anything: model ids are
+   case-sensitive and get pasted straight into a request. */
+.sheet .catalogue label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+  padding: 10px 12px;
+  font-size: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+  cursor: pointer;
+  /* A hairline between rows, and none under the last. */
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.sheet .catalogue label:last-child { box-shadow: none; }
+.sheet .catalogue label:hover { background: rgba(56, 189, 248, 0.08); }
+.catalogue input[type='checkbox'] { flex: none; width: 17px; height: 17px; accent-color: var(--accent); }
+/* The id is the thing being chosen, so it gets the readable treatment: a
+   monospace face, and it wraps rather than being cut off — "vendor/model:tag"
+   is long and the tail is where the difference usually is. */
+.sheet .catalogue label span {
+  flex: 1;
+  min-width: 0;
+  font: 0.85rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.sheet .catalogue label[data-chosen='yes'] span { color: var(--accent); }
+
+/* The chosen ones float to the top under a heading of their own. */
+.sheet .catalogue .catalogue-group {
+  padding: 7px 12px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+#catalogue-search {
+  width: 100%;
+  padding: 11px 12px;
+  font: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+#catalogue-search:focus { outline: none; border-color: rgba(56, 189, 248, 0.55); }
+
+/* -- permissions ---------------------------------------------------------- */
+
+.perms { display: grid; gap: 6px; }
+.perms-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.perms-row > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.perms-row strong { font-weight: 600; font-size: 0.92rem; }
+.perms-row small { color: var(--dimmer); font-size: 0.78rem; }
+/* The state, as a word rather than a colour alone: a colour-blind eye and a
+   screen reader both need this to survive without the dot. */
+.perms-state { font-size: 0.74rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.perms-row[data-state="granted"] .perms-state { color: #4ade80; }
+.perms-row[data-state="denied"] .perms-state,
+.perms-row[data-state="blocked"] .perms-state,
+.perms-row[data-state="insecure"] .perms-state { color: #fb7185; }
+.perms-row[data-state="prompt"] .perms-state { color: var(--accent); }
+.perms-row[data-state="unknown"] .perms-state,
+.perms-row[data-state="missing"] .perms-state { color: var(--dimmer); }
+.perms-row button { flex: none; }
+/* Nothing to ask for once it is granted, and a denial cannot be undone from
+   here — the browser requires its own UI for that. `blocked` hides it for a
+   third reason: the page is forbidden to ask, so the button could only ever
+   fail. "Conferir de novo" is how you re-check once the server is fixed. */
+.perms-row[data-state="granted"] button,
+.perms-row[data-state="blocked"] button,
+.perms-row[data-state="missing"] button { display: none; }
+
 /* -- live voice ----------------------------------------------------------- */
 
 /* Not a send affordance: this one has to be findable on an *empty* composer,
@@ -363,10 +619,53 @@ html, body {
   white-space: nowrap;
 }
 
-.sheet button.danger {
+/* `menu button` in the selector, or `.sheet menu button.quiet` outranks it
+   and the one destructive button in each row looked like all the others. */
+.sheet button.danger,
+.sheet menu button.danger {
   color: #ffb4a8;
   border-color: rgba(255, 140, 120, 0.35);
 }
+
+/* What he remembers: the newest few, each with a way to take it back. */
+.memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* minmax(0, …): a plain 1fr column grows to fit its longest unbroken line,
+     and one long memory pushed the whole list past the sheet's edge. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.memory-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 0.86rem;
+}
+.memory-list li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memory-list li small { flex: none; color: var(--dimmer); font-size: 0.72rem; }
+.memory-list li button {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font: inherit;
+  line-height: 1;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Three actions with long names: they wrap instead of running off the sheet. */
+.sheet menu.row.wrap { flex-wrap: wrap; }
+.sheet menu.row.wrap button { flex: 1 1 auto; }
 
 /* The one line that says whether this entry can reach the phone. It is the
    difference between "he opened YouTube" and a convincing sentence about a

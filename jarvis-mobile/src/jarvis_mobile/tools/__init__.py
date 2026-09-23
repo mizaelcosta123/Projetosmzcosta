@@ -3,8 +3,8 @@
 Importing this package registers every tool with OpenJarvis's ``ToolRegistry``.
 Three families live here: `termux` and `device_more` reach the Android device
 itself — locally when this runs in Termux, over the bridge when it does not —
-`device_shell` runs commands on it, and `display` lets the agent change how he
-appears on screen.
+`device_shell` runs commands on it, `display` lets the agent change how he
+appears on screen, and `holograms` lets him put 3D objects in front of you.
 """
 
 from __future__ import annotations
@@ -23,6 +23,9 @@ from jarvis_mobile.tools.display import (
     DISPLAY_MODES,
     SetDisplayModeTool,
     current_mode,
+)
+from jarvis_mobile.tools.holograms import (
+    ConjureTool,
 )
 from jarvis_mobile.tools.speak import (
     SpeakTool,
@@ -45,6 +48,7 @@ MOBILE_TOOL_IDS = (
     *DEVICE_MORE_TOOL_IDS,
     *DEVICE_SHELL_TOOL_IDS,
     "set_display_mode",
+    "conjure",
     "speak",
 )
 
@@ -55,6 +59,7 @@ __all__ = [
     "MOBILE_TOOL_IDS",
     "TERMUX_TOOL_IDS",
     "UI_BINARIES",
+    "ConjureTool",
     "DeviceAppLaunchTool",
     "DeviceClipboardTool",
     "DeviceNotifyTool",

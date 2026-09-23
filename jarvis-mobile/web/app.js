@@ -13,6 +13,15 @@ import { details, fetchDevice, summarize } from './device.js';
 import { COOLDOWN_MS, explainFailure, imageUrl, newSeed } from './generate.js';
 import { SANDBOX, asDocument, describe as describeRun, previewable } from './preview.js';
 import { explain } from './diagnose.js';
+import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
+import { Scene } from './holo.js';
+import { Stage } from './stage.js';
+import { conjure, learnedNames, perform, teaching } from './conjure.js';
+import { Memory } from './memory.js';
+import { contextFor as placeContext } from './place.js';
+import { notifyReply, registerWorker } from './pwa.js';
+import { download as downloadNote, fromMarkdown, toMarkdown } from './vault.js';
+import { Decider } from './decide.js';
 import { LiveSession, WakeWord } from './live.js';
 import {
   chatUrl,
@@ -21,8 +30,19 @@ import {
   makeProvider,
   modelsUrl,
   reachesDevice,
+  chooseModel,
+  listModels,
+  relearn,
   termuxOllama,
 } from './providers.js';
+import {
+  PERMISSIONS,
+  SAYS as PERM_SAYS,
+  STATE as PERM_STATE,
+  find as findPerm,
+  inspect as inspectPerms,
+  secure as secureOrigin,
+} from './permissions.js';
 
 const SETTINGS_KEY = 'jarvis.settings.v1';
 
@@ -49,11 +69,38 @@ const el = {
   providerAdd: document.getElementById('provider-add'),
   providerOllama: document.getElementById('provider-ollama'),
   providerStatus: document.getElementById('provider-status'),
-  camera: document.getElementById('camera'),
-  attach: document.getElementById('attach'),
+  more: document.getElementById('more'),
+  moreMenu: document.getElementById('more-menu'),
   file: document.getElementById('file'),
-  record: document.getElementById('record'),
-  create: document.getElementById('create'),
+  photos: document.getElementById('photos'),
+  holo: document.getElementById('holo'),
+  arOverlay: document.getElementById('ar-overlay'),
+  arStatus: document.getElementById('ar-status'),
+  arDrop: document.getElementById('ar-drop'),
+  arClear: document.getElementById('ar-clear'),
+  arStop: document.getElementById('ar-stop'),
+  memoryState: document.getElementById('memory-state'),
+  memoryList: document.getElementById('memory-list'),
+  memoryExport: document.getElementById('memory-export'),
+  memoryImport: document.getElementById('memory-import'),
+  memoryForget: document.getElementById('memory-forget'),
+  memoryFile: document.getElementById('memory-file'),
+  holoBar: document.getElementById('holo-bar'),
+  holoAr: document.getElementById('holo-ar'),
+  holoClear: document.getElementById('holo-clear'),
+  holoClose: document.getElementById('holo-close'),
+  modelPick: document.getElementById('model-pick'),
+  catalogue: document.getElementById('catalogue'),
+  catalogueTitle: document.getElementById('catalogue-title'),
+  catalogueNote: document.getElementById('catalogue-note'),
+  catalogueSearch: document.getElementById('catalogue-search'),
+  catalogueList: document.getElementById('catalogue-list'),
+  catalogueAll: document.getElementById('catalogue-all'),
+  catalogueDone: document.getElementById('catalogue-done'),
+  perms: document.getElementById('perms'),
+  permsNote: document.getElementById('perms-note'),
+  permsRefresh: document.getElementById('perms-refresh'),
+  permsAll: document.getElementById('perms-all'),
   gallery: document.getElementById('gallery'),
   made: document.getElementById('made'),
   madeNote: document.getElementById('made-note'),
@@ -76,7 +123,6 @@ const el = {
   model: document.getElementById('model'),
   speak: document.getElementById('speak'),
   voiceMode: document.getElementById('voice-mode'),
-  modelOptions: document.getElementById('model-options'),
   modelHint: document.getElementById('model-hint'),
   demoBtn: document.getElementById('demo-btn'),
 };
@@ -183,6 +229,50 @@ const serverOf = (s) => {
 // device drops frames — the anatomy degrades gracefully, it does not break.
 const field = new ParticleField(el.canvas, { count: 6500, shape: 'orb' });
 field.start();
+
+// -- what he remembers, and what is in the room -----------------------------
+
+/** Episodes, and the attention that finds them again. Opened at load so the
+ *  first message of a session already has context behind it. */
+const memory = new Memory().open();
+
+/** Which model to send this through, and what it has learned about each.
+ *
+ *  Only consulted when several are chosen and none is pinned: picking for
+ *  somebody who named a model would be taking a decision they already took. */
+const decider = new Decider().open();
+
+/** The holograms. One scene, whether or not a session is open: things made
+ *  by voice before entering AR are there waiting when you do. */
+const scene = new Scene();
+
+/** The AR session. Created eagerly because it owns nothing until started. */
+const reality = new Reality({
+  canvas: el.holo,
+  scene,
+  onStatus: (text) => {
+    el.arStatus.textContent = text;
+    setCaption(text);
+  },
+});
+
+/** The same holograms without AR: over the field, handled with a finger.
+ *  Without it, "cria um cubo" on anything lacking ARCore answered with a
+ *  sentence about an object nobody could see. */
+const stage = new Stage({
+  canvas: el.holo,
+  scene,
+  bar: el.holoBar,
+  onStatus: (text) => setCaption(text),
+  busy: () => reality.running,
+});
+
+/** Show the stage when there is something to show; put it away when not. */
+function refreshStage() {
+  if (reality.running) return;
+  if (scene.items.length > 0) stage.show();
+  else stage.hide();
+}
 
 // Debounced through rAF: orientation changes fire resize in bursts, and the
 // canvas reallocation is the expensive part.
@@ -296,9 +386,27 @@ function adoptDriver(next) {
  * Browsers cannot set an Authorization header on a WebSocket, so the key rides
  * in the subprotocol list — the encoding makes it valid syntax, not secret.
  */
+/**
+ * The one-off movements, by the name the tool uses.
+ *
+ * Kept as a table rather than a switch so an unknown name is simply nothing
+ * happening -- a model will eventually ask him to shrug.
+ */
+const GESTURES = {
+  revirar: () => field.rollEyes(),
+  acenar: () => field.nod(),
+  piscar: () => field.blink(),
+};
+
 function watchAgentEvents() {
   const base = serverOf(settings);
   if (!base) return;
+  // Nothing publishes agent events but an agent. Against Ollama this socket
+  // 404s and the close handler books another try, so it was reconnecting to
+  // a route that does not exist every thirty seconds for as long as the page
+  // stayed open -- which on a phone is all night.
+  const entry = activeProvider();
+  if (!reachesDevice(entry)) return;
 
   const url = base.replace(/^http/, 'ws') + '/v1/agents/events';
   const key = activeProvider().key;
@@ -307,6 +415,7 @@ function watchAgentEvents() {
     : [];
 
   let socket;
+  let opened = false;
   try {
     socket = protocols.length ? new WebSocket(url, protocols) : new WebSocket(url);
   } catch (error) {
@@ -326,6 +435,26 @@ function watchAgentEvents() {
     if (payload.type === 'tool_call_start' && data.tool === 'set_display_mode') {
       const mode = data.arguments?.mode;
       if (mode && field.shapes[mode]) applyMode(mode);
+      // The same tool carries an optional feeling, an optional way of
+      // looking, and an optional one-off movement. A model that never sends
+      // any of them costs nothing: the status machine keeps driving the face.
+      const feeling = data.arguments?.expression;
+      if (feeling) field.setExpression(feeling);
+      const where = data.arguments?.gaze;
+      if (where) field.look(where);
+      GESTURES[data.arguments?.gesture]?.();
+      return;
+    }
+
+    // The model making holograms. On the *end* event, not the start: only a
+    // call the tool accepted is drawn, and its metadata is the arguments
+    // after checking. The start event carries whatever the model sent.
+    if (payload.type === 'tool_call_end' && data.tool === 'conjure' && data.success) {
+      const done = perform(scene, data.metadata ?? {});
+      if (done) {
+        if (reality.running) el.arStatus.textContent = done;
+        refreshStage();
+      }
       return;
     }
 
@@ -344,11 +473,24 @@ function watchAgentEvents() {
   // Reconnect with a ceiling: a phone that sleeps or changes network drops the
   // socket routinely, and a tight retry loop would drain the battery.
   socket.addEventListener('close', () => {
+    // A socket that never opened at all was refused, not dropped: stop, and
+    // do not book another. That ends the loop against an address with no such
+    // route -- but it is deliberately not written down as "no agent here".
+    //
+    // A refused socket cannot tell a missing route from a backend that is
+    // asleep, and Render's free tier sleeps: recording `false` from this
+    // would tell somebody with a perfectly good backend that it only answers
+    // questions, and keep telling them. Only `/v1/device` sees a real status
+    // code, so only it is allowed to settle the question.
+    if (!opened) return;
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
     setTimeout(watchAgentEvents, reconnectDelay);
   });
   socket.addEventListener('open', () => {
+    opened = true;
     reconnectDelay = 1000;
+    // This one *is* proof: only an agent serves this route.
+    rememberAgent(entry.id, true);
   });
 }
 
@@ -377,10 +519,47 @@ function applyMode(mode) {
  * accessible equivalent, and it becomes visible only for an error, which the
  * field has no way to express.
  */
+/**
+ * What his face does in each state.
+ *
+ * Deliberately understated. These run under everything else the face is
+ * doing -- blinking, the speech overlay, the asymmetry -- so a strong
+ * expression here reads as a grimace held for minutes. `atento` is a quarter
+ * of a brow raise; that is enough to tell attention from repose.
+ *
+ * Speaking is absent on purpose: whatever he was feeling when he started
+ * talking is what he should still be wearing while he says it.
+ */
+const STATUS_FACE = {
+  thinking: 'pensativo',
+  listening: 'atento',
+  error: 'receoso',
+  '': 'neutro',
+};
+
+/**
+ * And where his eyes go in each state.
+ *
+ * Looking away while working something out is not decoration: it is what
+ * people do, and its absence is why a face that holds your gaze through a
+ * long pause feels wrong rather than attentive.
+ */
+const STATUS_GAZE = {
+  thinking: 'pensando',
+  listening: 'atento',
+  speaking: 'falando',
+  error: 'atento',
+  '': 'parado',
+};
+
 function setStatus(text, state = '') {
   el.status.textContent = text;
   el.status.dataset.state = state;
   field.setThinking(state === 'thinking');
+  const face = STATUS_FACE[state];
+  if (face) field.setExpression(face);
+  const where = STATUS_GAZE[state];
+  if (where) field.look(where);
 }
 
 function setCaption(text) {
@@ -409,17 +588,41 @@ function setCaption(text) {
  */
 let resolvedModel = '';
 
+/** Which model this request went to, so the outcome can be filed against it. */
+let routedTo = '';
+
 async function modelFor(base, headers) {
-  if (settings.model) return settings.model;
+  if (settings.model) {
+    routedTo = '';
+    return settings.model;
+  }
+
+  // Several kept for this endpoint and none pinned: a real choice, made from
+  // what each has actually done rather than from whichever came first in the
+  // list. One kept is not a choice, and zero is the path below.
+  const kept = activeProvider().models ?? [];
+  if (kept.length > 1) {
+    const picked = decider.pick(kept.map((id) => ({ id, hops: 1 })));
+    if (picked) {
+      routedTo = picked.option.id;
+      return routedTo;
+    }
+  }
+  routedTo = '';
   if (resolvedModel) return resolvedModel;
 
-  const configured = await fetch(`${base}/v1/info`, { headers })
-    .then((response) => (response.ok ? response.json() : null))
-    .then((info) => info?.model)
-    .catch(() => null);
-  if (configured) {
-    resolvedModel = configured;
-    return configured;
+  // `/v1/info` is a Jarvis route. Asking a provider for it buys a 404 before
+  // every first message of every session, and the answer was never going to
+  // be there. The model list below is the path that works everywhere.
+  if (reachesDevice(activeProvider())) {
+    const configured = await fetch(`${base}/v1/info`, { headers })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((info) => info?.model)
+      .catch(() => null);
+    if (configured) {
+      resolvedModel = configured;
+      return configured;
+    }
   }
 
   const response = await fetch(`${base}/v1/models`, { headers });
@@ -463,9 +666,35 @@ async function streamReply(text, onChunk) {
   const content = buildContent(text, attached);
   const carriedImage = Array.isArray(content);
 
+  // What he already knows about you, chosen by attention over everything
+  // remembered. This is the part that gets better with use: the same question
+  // asked in month three arrives with three months of context behind it.
+  //
+  // A system message rather than folded into the user's text, so the model
+  // can tell what you said from what was recalled, and a small one -- five
+  // lines. A context window filled with old chatter is worse than an empty
+  // one, because it crowds out the thing actually being asked.
+  const recalled = text ? memory.recall(text, { count: 5 }) : [];
+  const messages = [];
+  if (recalled.length) {
+    messages.push({
+      role: 'system',
+      content:
+        'Coisas que esta pessoa já disse ou pediu antes, das mais relevantes ' +
+        'para a mensagem atual. Use se ajudar; ignore se não vier ao caso.\n' +
+        recalled.map(({ row }) => `- (${row.kind}) ${row.text}`).join('\n'),
+    });
+  }
+  // Where you are and the weather there -- only for a question about either,
+  // only when location was already granted, and rounded to a kilometre. See
+  // place.js for why each of those three is there.
+  const situated = text ? await placeContext(text).catch(() => '') : '';
+  if (situated) messages.push({ role: 'system', content: situated });
+  messages.push({ role: 'user', content });
+
   const body = {
     model: await modelFor(base, headers),
-    messages: [{ role: 'user', content }],
+    messages,
     stream: true,
   };
 
@@ -537,11 +766,53 @@ syncReady();
  *
  * @param {string} text
  */
+/**
+ * The fast path: things he can do without asking anybody.
+ *
+ * Tried before the network, and only for the two cases where a round trip is
+ * the whole problem. Speaking "cubo" while the camera is up and waiting a
+ * second and a half for an endpoint to agree is not augmented reality, it is
+ * a form with a delay. Rules answer in a frame.
+ *
+ * Returns true when it handled the sentence. Anything it does not recognise
+ * falls through to the model untouched -- guessing here would put a cube in
+ * the room every time somebody asked the time.
+ */
+function handleHere(text) {
+  if (!text) return false;
+
+  // Being taught a name. Stored, so it survives the session.
+  const taught = teaching(text, { aliases: learnedNames(memory) });
+  if (taught) {
+    memory.learn(text, { kind: 'apelido' });
+    setCaption(`Anotado: ${taught.alias} é um ${taught.shape}.`);
+    say(`Anotado. ${taught.alias} é um ${taught.shape}.`).catch(() => {});
+    return true;
+  }
+
+  const done = conjure(scene, text, { aliases: learnedNames(memory) });
+  if (!done) return false;
+  // Worth remembering: what somebody asks for in the room is the best signal
+  // there is about what they will ask for next.
+  memory.learn(text, { kind: 'pedido' });
+  setCaption(done);
+  if (!reality.running) {
+    el.arStatus.textContent = done;
+  }
+  refreshStage();
+  say(done).catch(() => {});
+  return true;
+}
+
 async function ask(text) {
   // A photo with no words is a message: "what is this?" is the question, and
   // buildContent supplies it. Only an empty field *and* an empty tray is
   // nothing to send.
   if ((!text && attached.length === 0) || busy) return;
+
+  // Only when nothing is attached: a picture is a question for the model,
+  // whatever words came with it.
+  if (attached.length === 0 && handleHere(text)) return;
 
   busy = true;
   el.send.disabled = true;
@@ -549,6 +820,7 @@ async function ask(text) {
   offerPreview('');
   setStatus('pensando', 'thinking');
 
+  const began = performance.now();
   try {
     let shown = '';
     const sent = attached;
@@ -556,6 +828,9 @@ async function ask(text) {
       shown += chunk;
       setCaption(shown);
     });
+    // The outcome, filed against whatever was routed to. An empty reply counts
+    // as a failure: a model that answers with nothing has not answered.
+    if (routedTo) decider.learn(routedTo, { ok: reply.trim().length > 0, ms: performance.now() - began });
     // Only once it got through: a refused image should still be in the tray,
     // so fixing the setting and pressing send again is all it takes.
     if (attached === sent) {
@@ -563,9 +838,19 @@ async function ask(text) {
       renderTray();
     }
     offerPreview(reply);
+    // Only does anything if you went to another app while he was thinking,
+    // and only if notifications were granted in the panel.
+    notifyReply(reply).catch(() => {});
+    // What was asked, kept. Not the answer: answers are long, go stale, and
+    // recalling one would put yesterday's reply in today's context as if it
+    // were a fact. The question is what says who you are.
+    if (text) memory.learn(text, { kind: 'pedido' });
     await say(reply);
     if (!settings.speak) setStatus('em repouso');
   } catch (error) {
+    // A refusal is evidence about the route too, and the kind that matters
+    // most: a model that has started failing should stop being chosen.
+    if (routedTo) decider.learn(routedTo, { ok: false, ms: performance.now() - began });
     setStatus('erro', 'error');
     setCaption(explain(error, serverOf(settings)));
   } finally {
@@ -597,6 +882,21 @@ const LIVE_STATUS = {
   asking: 'pensando',
   answering: 'falando',
   off: 'em repouso',
+};
+
+/**
+ * The same states, as far as his face is concerned.
+ *
+ * 'speaking' is not in STATUS_FACE, which is what leaves the expression alone
+ * while he answers -- exactly what is wanted here too.
+ */
+const LIVE_FACE = {
+  listening: 'listening',
+  hearing: 'listening',
+  'cutting-in': 'listening',
+  asking: 'thinking',
+  answering: 'speaking',
+  off: '',
 };
 
 function showLive(mode) {
@@ -648,7 +948,7 @@ async function toggleLive(first = '') {
     if (state === 'answering') return;
     if (state === 'asking') return; // ask() takes it from here
 
-    setStatus(LIVE_STATUS[state] ?? 'ouvindo');
+    setStatus(LIVE_STATUS[state] ?? 'ouvindo', LIVE_FACE[state] ?? 'listening');
     // Interim words, shown as they arrive: proof it is hearing you, and the
     // only feedback there is before the answer starts.
     if (text) setCaption(text);
@@ -758,12 +1058,12 @@ let madeUrl = '';
 /** When the free tier will accept another request. */
 let readyAt = 0;
 
-el.create.addEventListener('click', () => {
+function toggleCreate() {
   creating = !creating;
-  el.create.setAttribute('aria-pressed', String(creating));
+  menuItem('create')?.setAttribute('aria-pressed', String(creating));
   el.prompt.placeholder = creating ? 'Descreva a imagem' : 'Fale com ele';
   el.prompt.focus();
-});
+}
 
 function noteMade(text, state = '') {
   el.madeNote.textContent = text;
@@ -920,11 +1220,13 @@ async function addFile(file) {
   renderTray();
 }
 
-el.attach.addEventListener('click', () => el.file.click());
-el.file.addEventListener('change', async () => {
-  for (const file of el.file.files) await addFile(file);
-  el.file.value = ''; // so picking the same file twice still fires
-});
+// Both pickers land in the same tray; they differ only in what they offer.
+for (const input of [el.file, el.photos]) {
+  input.addEventListener('change', async () => {
+    for (const file of input.files) await addFile(file);
+    input.value = ''; // so picking the same file twice still fires
+  });
+}
 
 // -- the camera ---------------------------------------------------------------
 
@@ -948,7 +1250,7 @@ async function openCamera() {
   }
   el.preview.srcObject = stream;
   el.viewfinder.hidden = false;
-  el.camera.dataset.on = 'yes';
+  menuItem('camera')?.setAttribute('aria-pressed', 'true');
 }
 
 function closeCamera() {
@@ -957,10 +1259,9 @@ function closeCamera() {
   stream = null;
   el.preview.srcObject = null;
   el.viewfinder.hidden = true;
-  el.camera.dataset.on = '';
+  menuItem('camera')?.setAttribute('aria-pressed', 'false');
 }
 
-el.camera.addEventListener('click', () => (stream ? closeCamera() : openCamera()));
 el.closeCamera.addEventListener('click', closeCamera);
 
 el.flip.addEventListener('click', async () => {
@@ -1016,12 +1317,12 @@ function startDictation() {
   };
   dictation.onend = () => {
     dictation = null;
-    el.record.dataset.on = '';
+    menuItem('dictate')?.setAttribute('aria-pressed', 'false');
   };
 
   try {
     dictation.start();
-    el.record.dataset.on = 'yes';
+    menuItem('dictate')?.setAttribute('aria-pressed', 'true');
   } catch {
     dictation = null;
   }
@@ -1035,15 +1336,222 @@ function stopDictation() {
   }
 }
 
-// Press and hold. pointerup anywhere, not just on the button, or letting go
-// with your thumb slightly off leaves it recording.
-el.record.addEventListener('pointerdown', (event) => {
-  event.preventDefault();
-  startDictation();
-});
-for (const name of ['pointerup', 'pointercancel']) {
-  window.addEventListener(name, () => dictation && stopDictation());
+// A toggle, not a hold. Hold-to-talk was right while the microphone had its
+// own button in the bar; from inside a menu that closes on the same press it
+// is unusable, because the finger that opened the item is the finger that
+// would have to stay down.
+function toggleDictation() {
+  if (dictation) stopDictation();
+  else startDictation();
 }
+
+// -- the "+" menu -------------------------------------------------------------
+
+/** One menu row, by what it does. */
+function menuItem(does) {
+  return el.moreMenu.querySelector(`[data-does="${does}"]`);
+}
+
+function showMenu(open) {
+  el.moreMenu.hidden = !open;
+  el.more.setAttribute('aria-expanded', String(open));
+  el.composer.dataset.more = open ? 'open' : '';
+  if (open) el.moreMenu.querySelector('button')?.focus();
+}
+
+const MENU_DOES = {
+  camera: () => (stream ? closeCamera() : openCamera()),
+  gallery: () => el.photos.click(),
+  attach: () => el.file.click(),
+  create: toggleCreate,
+  dictate: toggleDictation,
+  ar: enterAR,
+  permissions: () => {
+    openSettings();
+    // The panel is well down a scrolling sheet; landing on it is the point of
+    // the menu item, so put it in view rather than leaving them to hunt.
+    document.getElementById('perms-heading')?.scrollIntoView({ block: 'start' });
+  },
+};
+
+el.more.addEventListener('click', () => showMenu(el.moreMenu.hidden));
+
+el.moreMenu.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-does]');
+  if (!button) return;
+  showMenu(false);
+  MENU_DOES[button.dataset.does]?.();
+});
+
+// Anywhere else closes it, including the field behind. `capture` so this runs
+// before a click on the composer can act on a menu the user meant to dismiss.
+document.addEventListener(
+  'pointerdown',
+  (event) => {
+    if (el.moreMenu.hidden) return;
+    if (el.moreMenu.contains(event.target) || el.more.contains(event.target)) return;
+    showMenu(false);
+  },
+  true
+);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !el.moreMenu.hidden) {
+    showMenu(false);
+    el.more.focus();
+  }
+});
+
+// -- permissions --------------------------------------------------------------
+
+/**
+ * Draw the panel.
+ *
+ * Built from PERMISSIONS rather than written out in the HTML, so a permission
+ * the code knows how to ask for cannot be missing a row, and a row cannot
+ * exist for something the code cannot ask for.
+ */
+function renderPerms(states, notes = {}) {
+  el.perms.replaceChildren(
+    ...PERMISSIONS.map((entry) => {
+      const state = states[entry.id] ?? PERM_STATE.unknown;
+      const row = document.createElement('div');
+      row.className = 'perms-row';
+      row.dataset.state = state;
+      row.dataset.perm = entry.id;
+
+      const text = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = entry.label;
+      const why = document.createElement('small');
+      why.textContent = notes[entry.id] || entry.why;
+      const says = document.createElement('span');
+      says.className = 'perms-state';
+      says.textContent = PERM_SAYS[state] ?? state;
+      text.append(name, why, says);
+
+      const ask = document.createElement('button');
+      ask.type = 'button';
+      ask.className = 'quiet';
+      // A denial cannot be undone from script — only the browser's own UI can.
+      // Saying "Pedir" there would be a button that provably does nothing.
+      ask.textContent = state === 'denied' ? 'Tentar' : 'Pedir';
+      ask.addEventListener('click', () => askPerm(entry.id));
+
+      row.append(text, ask);
+      return row;
+    })
+  );
+}
+
+/** Refresh every row without prompting for anything. */
+async function refreshPerms() {
+  renderPerms(await inspectPerms());
+  el.permsNote.textContent = secureOrigin()
+    ? ''
+    : 'Esta página está em HTTP, e nesse caso o navegador não deixa nem perguntar. ' +
+      'Abra pelo endereço https.';
+}
+
+/** Actually ask. This is the call that makes the browser prompt. */
+async function askPerm(id) {
+  const entry = findPerm(id);
+  if (!entry) return;
+  const row = el.perms.querySelector(`[data-perm="${id}"]`);
+  const button = row?.querySelector('button');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Pedindo…';
+  }
+  const { state, note } = await entry.ask();
+  const states = await inspectPerms();
+  // What the request itself reported beats the query: Firefox answers
+  // "unknown" for a camera it has just granted.
+  renderPerms({ ...states, [id]: state }, note ? { [id]: note } : {});
+}
+
+el.permsRefresh.addEventListener('click', refreshPerms);
+el.permsAll.addEventListener('click', async () => {
+  // One at a time. Browsers collapse or drop simultaneous prompts, and the
+  // user cannot answer two dialogs at once anyway.
+  for (const entry of PERMISSIONS) {
+    const states = await inspectPerms();
+    if (states[entry.id] === 'granted' || states[entry.id] === 'missing') continue;
+    await askPerm(entry.id);
+  }
+});
+
+// -- augmented reality --------------------------------------------------------
+
+/** Match the hologram canvas to the screen, in device pixels. */
+function sizeHolo() {
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  el.holo.width = Math.round(window.innerWidth * ratio);
+  el.holo.height = Math.round(window.innerHeight * ratio);
+}
+
+async function enterAR() {
+  if (reality.running) return;
+  const refusal = arWhyNot();
+  if (refusal) {
+    setCaption(refusal);
+    setStatus('erro', 'error');
+    return;
+  }
+  if (!(await arSupported())) {
+    setCaption(
+      'Este aparelho tem WebXR mas não oferece realidade aumentada. No Android ' +
+        'costuma ser os "Serviços de RA do Google" faltando ou desatualizados.'
+    );
+    setStatus('erro', 'error');
+    return;
+  }
+  // The session takes the canvas; the stage steps aside and comes back after.
+  stage.hide();
+  sizeHolo();
+  el.holo.hidden = false;
+  el.arOverlay.hidden = false;
+  // The field would go on drawing behind a transparent canvas, over the
+  // camera, for no one's benefit and at a real cost in frames.
+  field.stop();
+  const opened = await reality.start(el.arOverlay);
+  if (!opened) leaveAR();
+}
+
+function leaveAR() {
+  el.holo.hidden = true;
+  el.arOverlay.hidden = true;
+  field.start();
+  // Whatever was made in the room is still there, and now shows on the glass.
+  refreshStage();
+}
+
+el.arStop.addEventListener('click', async () => {
+  await reality.stop();
+  leaveAR();
+});
+el.arDrop.addEventListener('click', () => {
+  const item = reality.drop();
+  el.arStatus.textContent = `Soltei ${item.shape === 'esfera' ? 'uma' : 'um'} ${item.shape}.`;
+});
+el.arClear.addEventListener('click', () => {
+  const gone = scene.clear();
+  el.arStatus.textContent = gone ? `Limpei ${gone}.` : 'Nada para limpar.';
+});
+window.addEventListener('resize', () => {
+  if (reality.running) sizeHolo();
+  else if (stage.shown) stage.resize();
+});
+el.holoAr.addEventListener('click', () => enterAR());
+el.holoClear.addEventListener('click', () => {
+  const gone = scene.clear();
+  setCaption(gone ? `Limpei ${gone} ${gone === 1 ? 'objeto' : 'objetos'}.` : '');
+  refreshStage();
+});
+el.holoClose.addEventListener('click', () => {
+  // Put away, not deleted: the next thing asked for brings them all back.
+  stage.hide();
+  setCaption('Guardei os hologramas. Peça outro e eles voltam.');
+});
 
 // -- the settings sheet -----------------------------------------------------
 
@@ -1094,12 +1602,19 @@ function setProviderStatus(text, state = '') {
 /** Read the edit fields back into the selected entry. */
 function collectProvider() {
   const entry = activeProvider();
-  const updated = makeProvider({
-    id: entry.id,
-    name: el.providerName.value,
-    url: el.providerUrl.value,
-    key: el.providerKey.value,
-  });
+  // `relearn` keeps the `/v1/device` answer this entry already paid for, and
+  // drops it if the address was edited. Without it, merely opening the sheet
+  // erased what was learned and the event WebSocket went back to retrying a
+  // route that is not there.
+  const updated = relearn(
+    entry,
+    makeProvider({
+      id: entry.id,
+      name: el.providerName.value,
+      url: el.providerUrl.value,
+      key: el.providerKey.value,
+    })
+  );
   settings.providers = settings.providers.map((row) => (row.id === entry.id ? updated : row));
   return updated;
 }
@@ -1108,12 +1623,13 @@ el.provider.addEventListener('change', () => {
   collectProvider();
   settings.active = el.provider.value;
   // A model ID belongs to the provider that listed it, so changing provider
-  // cannot keep the old one: "qwen2.5:1.5b" means nothing to OpenRouter.
-  settings.model = '';
-  el.model.value = '';
-  el.modelOptions.replaceChildren();
+  // cannot keep the old one: "qwen2.5:1.5b" means nothing to OpenRouter. The
+  // new entry's own short list, if it has one, is picked up by renderModels.
+  settings.model = activeProvider().models?.[0] ?? '';
+  catalogue = { id: '', models: [] };
   resolvedModel = '';
   showProvider();
+  renderModels();
 });
 
 el.providerAdd.addEventListener('click', () => {
@@ -1150,35 +1666,203 @@ el.providerRemove.addEventListener('click', () => {
 el.providerTest.addEventListener('click', () => loadModels());
 
 /**
- * Ask the selected provider what it can run, and fill the picker.
+ * Everything the selected endpoint last said it can run.
  *
- * Typing a model ID by hand still works — the field is an input with a
- * datalist, not a select — because a brand-new model is always reachable
- * before any catalogue has heard of it.
+ * Not persisted: a catalogue of three hundred ids is not worth carrying in
+ * localStorage, and it can change between two opens of the sheet. What *is*
+ * persisted is the handful chosen out of it, on the provider.
+ *
+ * @type {{id: string, models: string[]}}
+ */
+let catalogue = { id: '', models: [] };
+
+/**
+ * Ask the selected provider what it can run, and remember the answer.
+ *
+ * Typing an id by hand still works, through the "Outro…" entry in the model
+ * picker: a brand-new model is always reachable before any catalogue has
+ * heard of it, and that was true of the datalist this replaced too.
  */
 async function loadModels() {
+  // `collectProvider()` reads the sheet's edit fields back into the settings,
+  // so the fields have to hold the current entry before it runs. Every caller
+  // used to be responsible for calling `renderProviders()` first, and the one
+  // that forgot -- the first-run path, where the sheet has never been drawn --
+  // silently replaced the provider it had just adopted with a blank one.
+  if (!el.provider.options.length) renderProviders();
   const entry = collectProvider();
   setProviderStatus('Perguntando…');
   el.providerTest.disabled = true;
   try {
     const models = await fetchModels(entry);
-    const fragment = document.createDocumentFragment();
-    for (const id of models) {
-      const option = document.createElement('option');
-      option.value = id;
-      fragment.append(option);
+    catalogue = { id: entry.id, models };
+    setProviderStatus(`${models.length} modelos disponíveis.`, 'good');
+
+    // One model and nothing chosen? Choosing for them is the obvious kindness,
+    // and it is the Ollama case: one pulled model and nothing to decide.
+    const already = activeProvider().models ?? [];
+    if (models.length === 1 && already.length === 0) {
+      keepProvider(chooseModel(activeProvider(), models[0], true));
+      settings.model = models[0];
     }
-    el.modelOptions.replaceChildren(fragment);
-    setProviderStatus(`${models.length} modelos. Escolha um, ou deixe vazio.`, 'good');
-    el.modelHint.textContent = 'Vazio usa o padrão do servidor. Qualquer ID pode ser digitado.';
-    // One model and nothing chosen? Choosing for them is the obvious kindness.
-    if (models.length === 1 && !el.model.value) el.model.value = models[0];
+    renderModels();
+    if (el.catalogue.open) renderCatalogue();
+    return models;
   } catch (error) {
     setProviderStatus(String(error.message || error), 'bad');
+    if (el.catalogue.open) {
+      el.catalogueNote.textContent = String(error.message || error);
+      el.catalogueNote.dataset.state = 'bad';
+    }
+    return [];
   } finally {
     el.providerTest.disabled = false;
   }
 }
+
+/** Write a changed provider back into the settings, and save. */
+function keepProvider(updated) {
+  settings.providers = settings.providers.map((row) => (row.id === updated.id ? updated : row));
+  saveSettings(settings);
+  return updated;
+}
+
+// -- the model picker --------------------------------------------------------
+
+/** Fill the model select from what is kept for this endpoint. */
+function renderModels() {
+  const entry = activeProvider();
+  const chosen = entry.models ?? [];
+  const options = [['', 'padrão do servidor'], ...chosen.map((id) => [id, id])];
+  // Whatever is in use stays selectable even if it was never added to the
+  // list — an id typed once, or one that has left the catalogue since.
+  if (settings.model && !chosen.includes(settings.model)) {
+    options.push([settings.model, `${settings.model} (não está na lista)`]);
+  }
+  options.push(['__outro__', 'Outro… (digitar um id)']);
+
+  el.model.replaceChildren(
+    ...options.map(([value, label]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      return option;
+    })
+  );
+  el.model.value = settings.model;
+
+  el.modelHint.textContent = chosen.length
+    ? `${chosen.length} ${chosen.length === 1 ? 'modelo escolhido' : 'modelos escolhidos'} para este endereço.`
+    : 'Nenhum escolhido ainda — vazio usa o padrão do servidor.';
+  el.modelPick.textContent = catalogue.models.length
+    ? `Escolher modelos (${catalogue.models.length} disponíveis)`
+    : 'Escolher modelos';
+}
+
+el.model.addEventListener('change', () => {
+  if (el.model.value === '__outro__') {
+    const typed = prompt('Id do modelo, como o endereço o chama:', settings.model || '');
+    // Cancelled, or emptied: put the select back where it was rather than
+    // leaving "Outro…" showing as if it were a model.
+    if (typed === null || !typed.trim()) {
+      el.model.value = settings.model;
+      return;
+    }
+    const id = typed.trim();
+    settings.model = id;
+    keepProvider(chooseModel(activeProvider(), id, true));
+    renderModels();
+  } else {
+    settings.model = el.model.value;
+  }
+  saveSettings(settings);
+  resolvedModel = '';
+});
+
+/** Draw the catalogue: the chosen first, then everything else. */
+function renderCatalogue() {
+  const entry = activeProvider();
+  const filter = el.catalogueSearch.value.trim().toLowerCase();
+  const { chosen, rest } = listModels(entry, catalogue.id === entry.id ? catalogue.models : []);
+  const matches = (id) => !filter || id.toLowerCase().includes(filter);
+
+  const row = (id, isChosen) => {
+    const label = document.createElement('label');
+    label.dataset.chosen = isChosen ? 'yes' : 'no';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = isChosen;
+    box.addEventListener('change', () => {
+      keepProvider(chooseModel(activeProvider(), id, box.checked));
+      // Unchecking the one in use would leave the select pointing at nothing.
+      if (!box.checked && settings.model === id) {
+        settings.model = activeProvider().models?.[0] ?? '';
+        saveSettings(settings);
+        resolvedModel = '';
+      }
+      renderModels();
+      renderCatalogue();
+    });
+    const text = document.createElement('span');
+    text.textContent = id;
+    label.append(box, text);
+    return label;
+  };
+
+  const group = (text) => {
+    const head = document.createElement('p');
+    head.className = 'catalogue-group';
+    head.textContent = text;
+    return head;
+  };
+
+  const pieces = [];
+  const picked = chosen.filter(matches);
+  const others = rest.filter(matches);
+  if (picked.length) {
+    pieces.push(group(`escolhidos (${picked.length})`), ...picked.map((id) => row(id, true)));
+  }
+  if (others.length) {
+    pieces.push(group(`disponíveis (${others.length})`), ...others.map((id) => row(id, false)));
+  }
+  el.catalogueList.replaceChildren(...pieces);
+
+  if (pieces.length === 0) {
+    el.catalogueNote.textContent = filter
+      ? `Nada com "${el.catalogueSearch.value.trim()}".`
+      : 'Este endereço ainda não listou nada. Toque em "Recarregar do endpoint".';
+    el.catalogueNote.dataset.state = '';
+  } else {
+    el.catalogueNote.textContent = `${chosen.length} escolhido(s) de ${catalogue.models.length || chosen.length} disponíveis.`;
+    el.catalogueNote.dataset.state = '';
+  }
+}
+
+el.modelPick.addEventListener('click', async () => {
+  const entry = collectProvider();
+  el.catalogueTitle.textContent = `Modelos — ${entry.name || 'este endereço'}`;
+  el.catalogueSearch.value = '';
+  el.catalogue.showModal();
+  // Ask on open, unless this endpoint's catalogue is already in hand. This is
+  // what "the dropdown opens with everything available" means: the list is
+  // there when the sheet is, not after a second button.
+  if (catalogue.id !== entry.id || catalogue.models.length === 0) {
+    el.catalogueNote.textContent = 'Perguntando ao endereço…';
+    renderCatalogue();
+    await loadModels();
+  }
+  renderCatalogue();
+  el.catalogueSearch.focus();
+});
+
+el.catalogueSearch.addEventListener('input', renderCatalogue);
+el.catalogueAll.addEventListener('click', async () => {
+  catalogue = { id: '', models: [] };
+  el.catalogueNote.textContent = 'Perguntando ao endereço…';
+  await loadModels();
+  renderCatalogue();
+});
+el.catalogueDone.addEventListener('click', () => el.catalogue.close());
 
 /**
  * Ask the server what the phone can do, and put it on screen.
@@ -1199,8 +1883,23 @@ async function loadDevice() {
     return;
   }
 
+  const entry = activeProvider();
+  if (!reachesDevice(entry)) {
+    // Not "the route is missing, redeploy" — which is what a 404 from here
+    // used to say. A provider has no agent behind it and never will, so
+    // asking it about a phone is a request that can only ever fail.
+    el.deviceState.textContent =
+      `${entry.name || 'Este endereço'} só responde perguntas: não há agente do outro ` +
+      'lado, então nenhuma ferramenta de aparelho existe. Para alcançar o celular, ' +
+      'aponte para um backend Jarvis.';
+    el.deviceState.dataset.tone = 'flat';
+    el.deviceRefresh.disabled = false;
+    return;
+  }
+
   try {
-    const state = await fetchDevice(base, headersFor(activeProvider()));
+    const state = await fetchDevice(base, headersFor(entry));
+    rememberAgent(entry.id, true);
     const { tone, text } = summarize(state);
     el.deviceState.textContent = text;
     el.deviceState.dataset.tone = tone;
@@ -1218,25 +1917,122 @@ async function loadDevice() {
   } catch (error) {
     el.deviceState.textContent = String(error.message || error);
     el.deviceState.dataset.tone = 'bad';
+    // A 404 here is the answer, not a failure: there is no agent at this
+    // address. Recording it stops the WebSocket retrying against it forever.
+    if (/rota do aparelho/.test(String(error.message))) rememberAgent(entry.id, false);
   } finally {
     el.deviceRefresh.disabled = false;
   }
 }
 
+/**
+ * Record what an endpoint turned out to be.
+ *
+ * Remembered on the provider rather than in a variable, so the next cold
+ * start already knows and spends nothing finding out again.
+ */
+function rememberAgent(id, agent) {
+  let changed = false;
+  settings.providers = settings.providers.map((row) => {
+    if (row.id !== id || row.agent === agent) return row;
+    changed = true;
+    return { ...row, agent };
+  });
+  if (changed) saveSettings(settings);
+}
+
 el.deviceRefresh.addEventListener('click', () => loadDevice());
 
-el.menu.addEventListener('click', () => {
+// -- memory ------------------------------------------------------------------
+
+/** How many rows the sheet shows. The export has all of them. */
+const MEMORY_SHOWN = 12;
+
+/** Redraw the memory section from the store. */
+function renderMemory(note = '') {
+  const rows = memory.all();
+  const kinds = rows.reduce((count, row) => ({ ...count, [row.kind]: (count[row.kind] ?? 0) + 1 }), {});
+  const summary = rows.length
+    ? `${rows.length} ${rows.length === 1 ? 'lembrança' : 'lembranças'}: ` +
+      Object.entries(kinds).map(([kind, n]) => `${n} ${kind}`).join(', ') + '.'
+    : 'Nada ainda. Ele guarda o que você pede e os nomes que você ensina.';
+  el.memoryState.textContent = note ? `${note} ${summary}` : summary;
+
+  const fragment = document.createDocumentFragment();
+  for (const row of rows.slice(0, MEMORY_SHOWN)) {
+    const item = document.createElement('li');
+    const text = document.createElement('span');
+    text.textContent = row.text;
+    text.title = row.text;
+    const kind = document.createElement('small');
+    kind.textContent = row.kind;
+    const forget = document.createElement('button');
+    forget.type = 'button';
+    forget.textContent = '×';
+    forget.setAttribute('aria-label', `Esquecer: ${row.text}`);
+    forget.addEventListener('click', () => {
+      memory.forget(row.id);
+      renderMemory('Esquecido.');
+    });
+    item.append(text, kind, forget);
+    fragment.append(item);
+  }
+  el.memoryList.replaceChildren(fragment);
+  el.memoryExport.disabled = rows.length === 0;
+  el.memoryForget.disabled = rows.length === 0;
+}
+
+el.memoryExport.addEventListener('click', () => {
+  const name = downloadNote(toMarkdown(memory.all()));
+  renderMemory(`Salvei ${name}. Coloque na pasta do seu vault.`);
+});
+el.memoryImport.addEventListener('click', () => el.memoryFile.click());
+el.memoryFile.addEventListener('change', async () => {
+  const files = [...el.memoryFile.files];
+  el.memoryFile.value = '';
+  let added = 0;
+  let read = 0;
+  for (const file of files) {
+    try {
+      added += memory.absorb(fromMarkdown(await file.text(), { source: file.name }));
+      read += 1;
+    } catch {
+      /* One unreadable file should not lose the others. */
+    }
+  }
+  renderMemory(
+    `${read} ${read === 1 ? 'nota lida' : 'notas lidas'}, ${added} ${added === 1 ? 'lembrança nova' : 'lembranças novas'}.`
+  );
+});
+el.memoryForget.addEventListener('click', () => {
+  // The one irreversible button here, so it asks. Everything else can be
+  // undone by saying it again.
+  if (!window.confirm('Esquecer tudo o que ele aprendeu com você? Não dá para desfazer — exporte antes se quiser guardar.')) return;
+  const gone = memory.clear();
+  renderMemory(`Esqueci ${gone}.`);
+});
+
+/** Open the sheet with everything in it already refreshed. */
+function openSettings() {
+  if (el.settings.open) return;
   renderProviders();
   loadDevice();
   // Asking on open is what "the models load by themselves" means. It is not
   // awaited: the sheet must be usable while a slow or dead endpoint times out.
   loadModels();
-  el.model.value = settings.model;
+  // Same reasoning, and this one matters more: the answer can have changed in
+  // the browser's own settings since the sheet was last open, and the page is
+  // never told when that happens.
+  refreshPerms();
+  renderMemory();
+  renderModels();
   el.speak.checked = settings.speak;
   el.wake.checked = settings.wake;
   el.voiceMode.textContent = describeVoice();
   el.settings.showModal();
-});
+}
+
+el.menu.addEventListener('click', openSettings);
 
 el.settings.addEventListener('close', () => {
   if (el.settings.returnValue === 'demo') {
@@ -1247,7 +2043,9 @@ el.settings.addEventListener('close', () => {
   collectProvider();
   settings = {
     ...settings,
-    model: el.model.value.trim(),
+    // Read from the state, not from the select: `__outro__` is a command, not
+    // a model, and the change handler has already written whatever it meant.
+    model: settings.model,
     speak: el.speak.checked,
     wake: el.wake.checked,
   };
@@ -1272,14 +2070,78 @@ async function runDemo() {
   await say(line);
 }
 
-watchAgentEvents();
+/**
+ * First run, served from this machine: find the Ollama and use it.
+ *
+ * Without this, a copy of the app served locally talks to the static server
+ * that served it -- which has no `/v1` anything -- and the first message
+ * fails with a 404 the person has no way to interpret. They then have to
+ * know to open settings, know what an endpoint is, and know Ollama's port.
+ *
+ * One request, only when nothing is configured and only from a local origin,
+ * settles all three. A remote deployment never reaches this: its own origin
+ * *is* the backend, and probing someone's loopback from a public page would
+ * be a port scan.
+ */
+async function adoptLocalOllama() {
+  // Not "the list is empty" -- it never is. `migrate` always seeds one entry
+  // pointing at this same page, which is the right default when the backend
+  // is what served the page and useless when a static file server did.
+  // "Nothing configured" means no entry has a real address.
+  if (settings.providers.some((row) => row.url)) return 'já configurado';
+  const host = location.hostname;
+  if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') return 'remoto';
 
-// First run: nothing saved and nothing to talk to, so offer the demo rather
-// than an input box that can only fail.
-if (!serverOf(settings)) {
+  const entry = termuxOllama();
+  try {
+    const response = await fetch(modelsUrl(entry), { signal: AbortSignal.timeout(2500) });
+    if (!response.ok) return 'sem ollama';
+  } catch {
+    // Not running, or not allowing this origin -- and from here those are the
+    // same failure, because a blocked preflight and a closed port are both a
+    // bare TypeError. The sheet says both possibilities.
+    return 'sem ollama';
+  }
+  // It answered, so it is there *and* it accepts this page: both halves of
+  // what "works" means locally, settled by the one request.
+  settings.providers = [{ ...entry, agent: false }];
+  settings.active = entry.id;
+  saveSettings(settings);
+  setCaption(`Achei o Ollama em ${entry.url} e já apontei para ele.`);
+  return 'adotado';
+}
+
+// Offline shell and notifications. After load, so caching the page's own
+// files never competes with loading them.
+if (document.readyState === 'complete') registerWorker();
+else window.addEventListener('load', () => registerWorker(), { once: true });
+
+// First run: nothing saved and nothing to talk to, so say so rather than
+// leaving an input box that can only fail.
+adoptLocalOllama().then((outcome) => {
+  watchAgentEvents();
+  if (outcome === 'adotado') {
+    loadModels();
+    return;
+  }
+  // A local page with nothing configured has nowhere to think. `serverOf`
+  // answers with this page's own origin, which is truthy and is a static file
+  // server -- so the old check passed and the first message died on a 404
+  // nobody could interpret.
+  const nowhere = !serverOf(settings) || outcome === 'sem ollama';
+  if (!nowhere) return;
+
+  if (outcome === 'sem ollama') {
+    setCaption(
+      `Não achei o Ollama em ${termuxOllama().url}. Ou ele não está rodando ` +
+        '(`ollama serve`), ou está recusando esta página — nesse caso suba ele com ' +
+        `OLLAMA_ORIGINS=${location.origin} ollama serve. ` +
+        'Dá também para apontar para qualquer outro endereço aqui embaixo.'
+    );
+  }
   el.voiceMode.textContent = describeVoice();
   renderProviders();
   el.settings.showModal();
-}
+});
 
 setStatus('em repouso');

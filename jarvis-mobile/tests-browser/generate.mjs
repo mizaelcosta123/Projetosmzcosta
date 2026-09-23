@@ -26,6 +26,13 @@ const JPEG = Buffer.from(
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
 const context = await browser.newContext({ viewport: { width: 412, height: 880 } });
 const page = await context.newPage();
+
+/** The camera, the create mode and the rest moved behind the "+" button;
+ *  this opens it when needed and presses the item by what it does. */
+async function more(does) {
+  if (await page.locator('#more-menu').isHidden()) await page.locator('#more').click();
+  await page.locator(`[data-does="${does}"]`).click();
+}
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e).slice(0, 160)));
 
@@ -47,10 +54,10 @@ const check = (label, ok, detail = '') =>
 // -- the mode ----------------------------------------------------------------
 
 console.log('--- o modo criar ---');
-check('começa desligado', (await page.locator('#create').getAttribute('aria-pressed')) === 'false');
-await page.locator('#create').click();
+check('começa desligado', (await page.locator('[data-does="create"]').getAttribute('aria-pressed')) === 'false');
+await more('create');
 await page.waitForTimeout(200);
-check('liga', (await page.locator('#create').getAttribute('aria-pressed')) === 'true');
+check('liga', (await page.locator('[data-does="create"]').getAttribute('aria-pressed')) === 'true');
 check(
   'e o campo diz o que espera agora',
   (await page.locator('#prompt').getAttribute('placeholder')).includes('Descreva'),
@@ -130,7 +137,7 @@ check(
 
 console.log('\n--- desligar volta a conversar ---');
 await page.locator('#close-gallery').click();
-await page.locator('#create').click();
+await more('create');
 await page.waitForTimeout(200);
 const before = asked.length;
 await page.locator('#prompt').fill('oi');
@@ -144,7 +151,7 @@ if (process.env.SHOT) {
   // gallery holding a result — the two screens this change adds.
   await page.screenshot({ path: `${process.env.SHOT}/compositor.png` });
   nextStatus = 200;
-  await page.locator('#create').click();
+  await more('create');
   await page.locator('#prompt').fill('uma raposa de origami ao entardecer');
   await page.locator('#send').click();
   await page.waitForTimeout(1500);

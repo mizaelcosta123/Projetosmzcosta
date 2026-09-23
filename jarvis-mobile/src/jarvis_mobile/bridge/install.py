@@ -23,6 +23,7 @@ import logging
 import sys
 from typing import Any
 
+from jarvis_mobile import webheaders
 from jarvis_mobile.bridge import ssh
 from jarvis_mobile.bridge.hub import TOKEN_ENV, configured_token
 from jarvis_mobile.bridge.routes import create_device_router
@@ -50,6 +51,14 @@ def install(app_module: Any = None) -> bool:
     @functools.wraps(original)
     def create_app(*args: Any, **kwargs: Any) -> Any:
         application = original(*args, **kwargs)
+
+        # Before anything else, and deliberately before the early return
+        # below: the interface needs these headers corrected whether or not a
+        # phone is linked. Putting it after the `return` would have meant the
+        # camera works only on servers that also have a device token, which is
+        # an unrelated setting and would have looked like witchcraft.
+        webheaders.install(application)
+
         token = configured_token()
         over_ssh = ssh.configured_target()
         if not token and over_ssh is None:

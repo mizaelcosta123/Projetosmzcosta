@@ -2,9 +2,29 @@
 # environment variable at run time, which is how a host without a shell does it.
 
 [intelligence]
-# The auto router picks per prompt, which is the only sensible default for a
-# catalogue of hundreds. Set OPENROUTER_API_KEY and it works as-is.
-default_model = "openrouter/auto"
+# The dedicated model, as asked for. It is a free tier, so it costs nothing to
+# leave running, and it is a fixed id rather than the auto router: the answers
+# stay consistent from one turn to the next instead of changing character when
+# the router changes its mind.
+#
+# Two ways this id can fail, and they need different fixes:
+#
+#   "model not found"  -- the id was renamed or retired; free slugs come and go.
+#   404 with "guardrail" or "data policy" in the body -- the id is real, but
+#       every provider serving it was excluded by the account's own rules.
+#       A ":free" model is usually served by a single provider, and that
+#       provider is usually one a default data policy excludes, so the two
+#       coincide often. The switch is at
+#       https://openrouter.ai/workspaces/default/guardrails -- nothing in this
+#       repository can change it. The way out needs no redeploy: pick another
+# model in Configuracoes -> Modelo in the app itself. That choice is per device,
+# it is sent with every request, and it beats whatever is written here.
+# "openrouter/auto" always works and is the fallback worth knowing.
+#
+# This file is baked into the image (see deploy/Dockerfile), so changing the
+# line below means a rebuild and a Manual Deploy. The app's own setting does
+# not.
+default_model = "qwen/qwen3.8-27b:free"
 preferred_engine = "openrouter"
 
 [engine]
@@ -27,7 +47,7 @@ max_turns = 8
 #
 # device_permissions is the one to reach for first when a device tool fails for
 # no clear reason: Android does not report a denied permission as one.
-tools = "think,calculator,web_search,device_open,device_app_launch,device_notify,device_clipboard,device_share,device_status,device_permissions,device_screen_size,device_ui_dump,device_screenshot,device_tap,device_swipe,device_type,device_key,device_photo,device_camera_info,device_write,device_list,device_packages,device_wifi,device_telephony,device_sensors,device_volume,device_contacts,device_location,device_torch_on,device_torch_off,device_shell,device_read,set_display_mode,speak"
+tools = "think,calculator,web_search,device_open,device_app_launch,device_notify,device_clipboard,device_share,device_status,device_permissions,device_screen_size,device_ui_dump,device_screenshot,device_tap,device_swipe,device_type,device_key,device_photo,device_camera_info,device_write,device_list,device_packages,device_wifi,device_telephony,device_sensors,device_volume,device_contacts,device_location,device_torch_on,device_torch_off,device_shell,device_read,set_display_mode,conjure,speak"
 context_from_memory = false
 
 [tools.storage]

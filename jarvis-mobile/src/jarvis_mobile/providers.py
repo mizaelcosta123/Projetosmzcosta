@@ -79,7 +79,7 @@ PROVIDERS: dict[str, Provider] = {
             # on for that kind of task over a trailing week. A multi-turn
             # conversation sticks to one model while it stays a leading choice,
             # so switching does not happen mid-thought.
-            suggested_models=("openrouter/auto",),
+            suggested_models=("qwen/qwen3.8-27b:free", "openrouter/auto"),
             notes=(
                 "Aggregator: one key reaches hundreds of models from many "
                 "vendors. Model ids are namespaced, e.g. 'vendor/model'. Use "

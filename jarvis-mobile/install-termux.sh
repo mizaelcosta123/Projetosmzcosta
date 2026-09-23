@@ -162,7 +162,7 @@ max_turns = 8
 # device_shell and device_read are the same tools the cloud backend uses over
 # the bridge; running here they simply execute locally, which keeps one tool
 # name meaning one thing wherever the agent happens to be.
-tools = "think,calculator,shell_exec,file_read,web_search,speak,device_open,device_notify,device_clipboard,device_share,device_status,device_app_launch,device_shell,device_read,set_display_mode"
+tools = "think,calculator,shell_exec,file_read,web_search,speak,device_open,device_notify,device_clipboard,device_share,device_status,device_app_launch,device_shell,device_read,set_display_mode,conjure"
 context_from_memory = false
 
 [tools.storage]

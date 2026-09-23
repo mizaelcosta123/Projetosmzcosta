@@ -35,7 +35,7 @@ Só duas coisas fazem o serviço funcionar. O resto é escolha.
 | variável | precisa? | para quê |
 |---|---|---|
 | `OPENJARVIS_API_KEY` | **sim** | Sem ela o servidor recusa escutar fora do loopback. O blueprint gera uma (`generateValue: true`) — você não digita, só copia o valor gerado para **Configurações → Chave de API** na interface. |
-| `OPENROUTER_API_KEY` | **sim, na prática** | É o motor. `sync: false` no blueprint, então o campo aparece em branco e fica em branco se você não preencher. A mesma chave atende o `speak` pelo `openrouter_tts`. |
+| `OPENROUTER_API_KEY` | **sim, na prática** | É o motor. `sync: false` no blueprint, então o campo aparece em branco e fica em branco se você não preencher. A mesma chave atende o `speak` pelo `openrouter_tts`. **Só aqui.** Chave nunca vai para arquivo do repositório — nem em `config.toml`, nem em `render.yaml`, nem em comentário. Uma chave que entra no histórico do git é uma chave pública, e apagar o commit depois não a apaga. |
 | `JARVIS_HOST` / `JARVIS_PORT` | já vêm prontas | `0.0.0.0` e `10000`, definidas no `render.yaml`. Não mexa. |
 
 Opcionais, todas lidas se estiverem presentes:
@@ -46,8 +46,42 @@ Opcionais, todas lidas se estiverem presentes:
 | `TAVILY_API_KEY` | O `web_search` passa a usar o Tavily, com resultados ranqueados. Sem ela a imagem cai no DuckDuckGo, que já funciona porque o `ddgs` está instalado. |
 | `YOUDOTCOM_API_KEY` | Idem, pelo You.com. Sem chave o You.com responde 403 e o fallback entra. |
 | `OPENJARVIS_WEB_SEARCH_ENGINE` | Fixa o buscador (`tavily`, `youcom`, `duckduckgo`) em vez de deixar no `auto`. |
-| `NOUS_API_KEY` · `HUGGINGFACE_API_KEY` (ou `HF_TOKEN`) · `OPENCODE_API_KEY` | Habilitam os outros presets de provedor. Só valem se você trocar o `default_model` / `preferred_engine` no `config.toml` — com o padrão em `openrouter/auto` elas ficam paradas. |
+| `NOUS_API_KEY` · `HUGGINGFACE_API_KEY` (ou `HF_TOKEN`) · `OPENCODE_API_KEY` | Habilitam os outros presets de provedor. Só valem se você trocar o `default_model` / `preferred_engine` no `config.toml` — com o padrão em `qwen/qwen3.8-27b:free` (OpenRouter) elas ficam paradas. |
 | `OPENROUTER_HOST` e afins (`<ENGINE_ID>_HOST`) | Aponta um preset para outro endereço. Serve para testar contra um servidor compatível com OpenAI local. |
+
+## Câmera, microfone e localização no servidor
+
+O OpenJarvis manda, em toda resposta:
+
+```
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval'
+```
+
+Lista vazia — `()` — **não** quer dizer "pergunte ao usuário". Quer dizer *nenhuma
+origem pode usar isto, nem esta*. Num servidor com esse cabeçalho a câmera, o
+microfone e a localização são recusados antes de qualquer prompt: o botão não faz
+nada e não há diálogo para aceitar, porque a página nunca teve direito de
+perguntar. Local funciona, porque um servidor de arquivos estático não manda
+cabeçalho nenhum — é a forma de bug que passa por todo teste e só aparece depois
+do deploy.
+
+O `default-src 'self'` quebra um segundo conjunto pelo mesmo motivo: ele governa
+toda diretiva de busca que não seja nomeada em separado, então bloqueia URLs
+`blob:` (foto da câmera, áudio gravado, imagem gerada), imagens de fora, e
+qualquer endpoint que não seja este servidor — ou seja, o painel de provedores
+inteiro.
+
+O `jarvis-mobile` corrige os dois ao construir o app (`src/jarvis_mobile/webheaders.py`),
+acrescentando um middleware **depois** do do OpenJarvis: o Starlette roda o
+último adicionado por fora, então na volta é o nosso que encosta por último na
+resposta. Nada disso enfraquece o que a política fazia de útil — `unsafe-inline`
+e `unsafe-eval` já estavam lá antes, e a prévia continua isolada pelo atributo
+`sandbox`, não por CSP.
+
+Se você servir a interface por outro caminho (nginx, Caddy, um CDN), confira os
+mesmos dois cabeçalhos. `tests-browser/headers.mjs` mostra a diferença num
+navegador de verdade.
 
 **O que NÃO colocar:** nada de `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` ou
 `GEMINI_API_KEY` a menos que você queira mesmo esses provedores — o OpenJarvis

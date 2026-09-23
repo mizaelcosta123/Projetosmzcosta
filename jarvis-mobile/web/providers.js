@@ -15,7 +15,20 @@
  * the type, and the sheet says it out loud next to every entry.
  */
 
-/** @typedef {{id: string, name: string, url: string, key: string, kind: string}} Provider */
+/**
+ * @typedef {{id: string, name: string, url: string, key: string, kind: string,
+ *            agent?: boolean, models?: string[]}} Provider
+ *
+ * `kind` is a guess made offline, from the port and the hostname. `agent` is
+ * what was actually found when something asked. Undefined means nobody has
+ * asked yet; once it is a boolean it outranks the guess, because a hostname
+ * cannot tell you what is listening on it and a request can.
+ *
+ * `models` is the short list kept for this endpoint -- the handful picked out
+ * of a catalogue that can run to three hundred. It belongs to the provider
+ * and not to the settings as a whole, because a model id means nothing
+ * anywhere else: "qwen2.5:1.5b" is not a thing OpenRouter has heard of.
+ */
 
 export const JARVIS = 'jarvis';
 export const OPENAI = 'openai';
@@ -85,7 +98,43 @@ export function detectKind(url) {
  * @param {Provider} provider
  */
 export function reachesDevice(provider) {
+  if (typeof provider?.agent === 'boolean') return provider.agent;
   return (provider?.kind ?? JARVIS) === JARVIS;
+}
+
+/**
+ * Ask an endpoint whether there is an agent behind it.
+ *
+ * This is what replaces guessing from the hostname. The list of known
+ * provider hosts can only ever be a list of the ones somebody thought of; a
+ * person pasting their own vLLM on port 8000, or LM Studio on 1234, used to
+ * be taken for a Jarvis -- which meant a WebSocket reconnecting to it every
+ * thirty seconds, all night, for a route it does not have.
+ *
+ * One request settles it, and the answer is remembered on the provider.
+ *
+ * @param {Provider} provider
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<boolean|undefined>} undefined when it could not be told.
+ */
+export async function probeAgent(provider, fetchImpl = globalThis.fetch) {
+  const base = normalizeUrl(provider?.url) || originOfPage();
+  let response;
+  try {
+    response = await fetchImpl(`${base}/v1/device`, { headers: headersFor(provider) });
+  } catch {
+    // Unreachable says nothing about what it is. Leaving this unknown keeps
+    // a Jarvis that happens to be asleep from being demoted permanently.
+    return undefined;
+  }
+  if (response.status === 404) return false;
+  // A key problem is a key problem, not an answer about what is listening.
+  if (response.status === 401 || response.status === 403) return undefined;
+  if (!response.ok) return undefined;
+  const payload = await response.json().catch(() => null);
+  // The catch-all route used to answer this with the HTML page, and a 200
+  // full of markup reads as "yes" while meaning nothing.
+  return Boolean(payload) && typeof payload === 'object' && !Array.isArray(payload);
 }
 
 /** Where to POST a chat. Ollama speaks the OpenAI shape too, so this is uniform. */
@@ -182,16 +231,90 @@ function originOfPage() {
   }
 }
 
+/**
+ * Carry what was learned about an endpoint across an edit of that entry.
+ *
+ * `makeProvider` deliberately builds from scratch, which is right when a
+ * person is typing a new address and wrong when the sheet is merely reading
+ * its own fields back -- and the sheet does that on open, on close and on
+ * every change of the picker. Without this, one visit to Configurações threw
+ * away a `/v1/device` 404 that had already been paid for, `reachesDevice`
+ * fell back to guessing from the hostname, and the event WebSocket started
+ * retrying a route that is not there all over again.
+ *
+ * The condition is the part that matters: what was learned belongs to an
+ * *address*, not to a row. Edit the URL and it stops applying -- keeping a
+ * `false` after somebody finally typed their real backend would be a worse
+ * bug than the one this fixes.
+ *
+ * @param {Provider} previous The entry as it was.
+ * @param {Provider} next The entry as just rebuilt.
+ */
+export function relearn(previous, next) {
+  const sameAddress = normalizeUrl(previous?.url ?? '') === normalizeUrl(next?.url ?? '');
+  if (!sameAddress) return next;
+  const carried = { ...next };
+  if (typeof previous?.agent === 'boolean') carried.agent = previous.agent;
+  // The chosen models travel with the address for the same reason: they were
+  // picked out of *that* endpoint's catalogue, and mean nothing at another.
+  if (previous?.models?.length) carried.models = [...previous.models];
+  return carried;
+}
+
+/**
+ * Add or remove a model from a provider's short list.
+ *
+ * Returns a new provider; the list stays sorted and free of duplicates so
+ * the panel does not reorder itself under the finger.
+ *
+ * @param {Provider} provider
+ * @param {string} model
+ * @param {boolean} [wanted] Omit to toggle.
+ */
+export function chooseModel(provider, model, wanted) {
+  const id = String(model ?? '').trim();
+  if (!id) return provider;
+  const current = provider?.models ?? [];
+  const has = current.includes(id);
+  const keep = wanted === undefined ? !has : Boolean(wanted);
+  if (keep === has) return provider;
+  const models = keep
+    ? [...current, id].sort((a, b) => a.localeCompare(b))
+    : current.filter((row) => row !== id);
+  return { ...provider, models };
+}
+
+/**
+ * The models a person would want to see listed for this provider.
+ *
+ * Their picks first, then anything else the endpoint reported. A model that
+ * was chosen and has since disappeared from the catalogue stays listed:
+ * dropping it would silently unselect what somebody is using today.
+ *
+ * @param {Provider} provider
+ * @param {string[]} [catalogue] Everything the endpoint reported.
+ */
+export function listModels(provider, catalogue = []) {
+  const chosen = provider?.models ?? [];
+  const rest = catalogue.filter((id) => !chosen.includes(id));
+  return { chosen: [...chosen], rest };
+}
+
 /** A provider with the fields filled in and an id that will not collide. */
-export function makeProvider({ name = '', url = '', key = '', id = '' } = {}) {
+export function makeProvider({ name = '', url = '', key = '', id = '', agent, models } = {}) {
   const clean = normalizeUrl(url);
-  return {
+  const entry = {
     id: id || `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     name: name.trim() || hostLabel(clean),
     url: clean,
     key: key.trim(),
     kind: detectKind(clean),
   };
+  // Only carried when it is known. An absent field and `false` mean different
+  // things here, and JSON.stringify drops undefined for us.
+  if (typeof agent === 'boolean') entry.agent = agent;
+  if (Array.isArray(models) && models.length) entry.models = [...models];
+  return entry;
 }
 
 /** A short human label for a URL, for when nobody typed a name. */
