@@ -49,6 +49,40 @@ Opcionais, todas lidas se estiverem presentes:
 | `NOUS_API_KEY` · `HUGGINGFACE_API_KEY` (ou `HF_TOKEN`) · `OPENCODE_API_KEY` | Habilitam os outros presets de provedor. Só valem se você trocar o `default_model` / `preferred_engine` no `config.toml` — com o padrão em `qwen/qwen3.8-27b:free` (OpenRouter) elas ficam paradas. |
 | `OPENROUTER_HOST` e afins (`<ENGINE_ID>_HOST`) | Aponta um preset para outro endereço. Serve para testar contra um servidor compatível com OpenAI local. |
 
+## Câmera, microfone e localização no servidor
+
+O OpenJarvis manda, em toda resposta:
+
+```
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval'
+```
+
+Lista vazia — `()` — **não** quer dizer "pergunte ao usuário". Quer dizer *nenhuma
+origem pode usar isto, nem esta*. Num servidor com esse cabeçalho a câmera, o
+microfone e a localização são recusados antes de qualquer prompt: o botão não faz
+nada e não há diálogo para aceitar, porque a página nunca teve direito de
+perguntar. Local funciona, porque um servidor de arquivos estático não manda
+cabeçalho nenhum — é a forma de bug que passa por todo teste e só aparece depois
+do deploy.
+
+O `default-src 'self'` quebra um segundo conjunto pelo mesmo motivo: ele governa
+toda diretiva de busca que não seja nomeada em separado, então bloqueia URLs
+`blob:` (foto da câmera, áudio gravado, imagem gerada), imagens de fora, e
+qualquer endpoint que não seja este servidor — ou seja, o painel de provedores
+inteiro.
+
+O `jarvis-mobile` corrige os dois ao construir o app (`src/jarvis_mobile/webheaders.py`),
+acrescentando um middleware **depois** do do OpenJarvis: o Starlette roda o
+último adicionado por fora, então na volta é o nosso que encosta por último na
+resposta. Nada disso enfraquece o que a política fazia de útil — `unsafe-inline`
+e `unsafe-eval` já estavam lá antes, e a prévia continua isolada pelo atributo
+`sandbox`, não por CSP.
+
+Se você servir a interface por outro caminho (nginx, Caddy, um CDN), confira os
+mesmos dois cabeçalhos. `tests-browser/headers.mjs` mostra a diferença num
+navegador de verdade.
+
 **O que NÃO colocar:** nada de `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` ou
 `GEMINI_API_KEY` a menos que você queira mesmo esses provedores — o OpenJarvis
 detecta essas variáveis e monta um motor de nuvem adicional, o que só embaralha

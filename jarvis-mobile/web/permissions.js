@@ -29,6 +29,31 @@ export function secure() {
   return protocol === 'https:' || hostname === 'localhost' || hostname === '127.0.0.1';
 }
 
+/**
+ * Is this page allowed to ask for this feature at all?
+ *
+ * Separate from whether the *user* has refused, and the distinction decides
+ * where somebody is sent. A `Permissions-Policy` header naming an empty
+ * allowlist -- `camera=()` -- means no origin may use the feature, this one
+ * included. The browser then rejects `getUserMedia` with `NotAllowedError`,
+ * the same name it uses when a person clicks Block, and draws no prompt at
+ * all. Reading it as a refusal sends them to the browser's site settings,
+ * where they will grant the permission, watch nothing change, and grant it
+ * again. It is the server that has to change.
+ *
+ * @param {string} feature A policy-controlled feature name.
+ * @returns {boolean} False only when the header definitely forbids it.
+ */
+export function allowedByPolicy(feature) {
+  const policy = globalThis.document?.featurePolicy ?? globalThis.document?.permissionsPolicy;
+  if (!policy?.allowsFeature) return true; // Firefox and Safari: cannot tell.
+  try {
+    return policy.allowsFeature(feature);
+  } catch {
+    return true;
+  }
+}
+
 /** The states a row can be in. `unknown` means the browser would not say. */
 export const STATE = {
   granted: 'granted',
@@ -37,6 +62,7 @@ export const STATE = {
   unknown: 'unknown',
   missing: 'missing', // the API itself is not here
   insecure: 'insecure', // http:, so nothing may be asked
+  blocked: 'blocked', // the server's Permissions-Policy forbids it
 };
 
 /** Human wording, in the user's language, for each state. */
@@ -47,6 +73,7 @@ export const SAYS = {
   unknown: 'não sei dizer',
   missing: 'não existe neste navegador',
   insecure: 'exige HTTPS',
+  blocked: 'bloqueado pelo servidor',
 };
 
 /**
@@ -55,8 +82,11 @@ export const SAYS = {
  * @param {string} name A PermissionName.
  * @returns {Promise<string>} One of STATE.
  */
-async function read(name) {
+async function read(name, feature = name) {
   if (!secure()) return STATE.insecure;
+  // Checked before the query, because this one cannot be overruled: whatever
+  // the Permissions API reports, a forbidden feature will not open.
+  if (!allowedByPolicy(feature)) return STATE.blocked;
   const permissions = globalThis.navigator?.permissions;
   if (!permissions?.query) return STATE.unknown;
   try {
@@ -70,8 +100,20 @@ async function read(name) {
 }
 
 /** Turn a real rejection into a state plus something worth reading. */
-function explain(error, what) {
+function explain(error, what, feature) {
   const name = error?.name ?? '';
+  if ((name === 'NotAllowedError' || name === 'PermissionDeniedError') && feature
+      && !allowedByPolicy(feature)) {
+    // Same error name as a refusal, entirely different cause and fix.
+    return {
+      state: STATE.blocked,
+      note:
+        `O servidor não deixa esta página pedir ${what}. Ele manda um cabeçalho ` +
+        '`Permissions-Policy` com a lista vazia, e nesse caso o navegador nem ' +
+        'chega a perguntar. Liberar nas configurações do navegador não resolve — ' +
+        'quem precisa mudar é o servidor.',
+    };
+  }
   if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
     return {
       state: STATE.denied,
@@ -103,7 +145,7 @@ function explain(error, what) {
 }
 
 /** Open a stream only to prove the permission, then give the hardware back. */
-async function proveMedia(constraints, what) {
+async function proveMedia(constraints, what, feature) {
   if (!secure()) {
     return {
       state: STATE.insecure,
@@ -118,7 +160,7 @@ async function proveMedia(constraints, what) {
   try {
     stream = await media.getUserMedia(constraints);
   } catch (error) {
-    return explain(error, what);
+    return explain(error, what, feature);
   }
   // Every track, explicitly. Dropping the reference leaves the light on.
   stream.getTracks().forEach((track) => track.stop());
@@ -137,14 +179,14 @@ export const PERMISSIONS = [
     label: 'Microfone',
     why: 'Falar com ele sem digitar, e o ditado.',
     read: () => read('microphone'),
-    ask: () => proveMedia({ audio: true }, 'o microfone'),
+    ask: () => proveMedia({ audio: true }, 'o microfone', 'microphone'),
   },
   {
     id: 'camera',
     label: 'Câmera',
     why: 'Mostrar algo a ele pela câmera.',
     read: () => read('camera'),
-    ask: () => proveMedia({ video: true }, 'a câmera'),
+    ask: () => proveMedia({ video: true }, 'a câmera', 'camera'),
   },
   {
     id: 'geolocation',
@@ -160,6 +202,10 @@ export const PERMISSIONS = [
           });
           return;
         }
+        if (!allowedByPolicy('geolocation')) {
+          resolve(explain({ name: 'NotAllowedError' }, 'a localização', 'geolocation'));
+          return;
+        }
         const geo = globalThis.navigator?.geolocation;
         if (!geo?.getCurrentPosition) {
           resolve({ state: STATE.missing, note: 'Este navegador não expõe localização.' });
@@ -170,7 +216,8 @@ export const PERMISSIONS = [
           (error) => {
             // GeolocationPositionError is its own thing: a numeric `code`,
             // and no `name`. PERMISSION_DENIED is 1.
-            if (error?.code === 1) resolve(explain({ name: 'NotAllowedError' }, 'a localização'));
+            if (error?.code === 1)
+              resolve(explain({ name: 'NotAllowedError' }, 'a localização', 'geolocation'));
             else if (error?.code === 2)
               resolve({
                 state: STATE.unknown,

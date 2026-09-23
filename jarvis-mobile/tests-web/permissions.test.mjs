@@ -15,18 +15,21 @@ import {
   PERMISSIONS,
   SAYS,
   STATE,
+  allowedByPolicy,
   find,
   inspect,
   secure,
 } from '../web/permissions.js';
 
 /** Install a fake browser for one test and take it away afterwards. */
-function browser({ https = true, permissions, mediaDevices, geolocation, Notification } = {}) {
+function browser({ https = true, permissions, mediaDevices, geolocation, Notification,
+                   allows = true } = {}) {
   const before = {
     isSecureContext: globalThis.isSecureContext,
     navigator: globalThis.navigator,
     location: globalThis.location,
     Notification: globalThis.Notification,
+    document: globalThis.document,
   };
   const set = (key, value) => Object.defineProperty(globalThis, key, {
     value, configurable: true, writable: true,
@@ -35,6 +38,9 @@ function browser({ https = true, permissions, mediaDevices, geolocation, Notific
   set('location', { protocol: https ? 'https:' : 'http:', hostname: 'exemplo.test' });
   set('navigator', { permissions, mediaDevices, geolocation });
   set('Notification', Notification);
+  // `allows: null` stands for a browser with no Permissions-Policy API at all,
+  // which is Firefox and Safari — there, not knowing must not read as blocked.
+  set('document', allows === null ? {} : { featurePolicy: { allowsFeature: () => allows } });
   return () => {
     for (const [key, value] of Object.entries(before)) set(key, value);
   };
@@ -283,4 +289,70 @@ test('dismissing the notification prompt is not a refusal', async () => {
   const { state } = await find('notifications').ask();
   assert.equal(state, STATE.prompt);
   undo();
+});
+
+
+// -- told not to ask, which is not the same as refused ----------------------
+
+test('a page the server forbids reads as blocked, not as denied', async () => {
+  /* `Permissions-Policy: camera=()` means no origin may use the camera, this
+     one included. The browser draws no prompt. Reading that as "you refused"
+     sends someone to browser settings, where they will grant the permission,
+     watch nothing change, and grant it again. */
+  const undo = browser({ allows: false, permissions: { query: async () => ({ state: 'prompt' }) } });
+  assert.equal(await find('camera').read(), STATE.blocked);
+  undo();
+});
+
+test('and the header outranks whatever the Permissions API says', async () => {
+  // Even a granted permission cannot open a feature the header forbids.
+  const undo = browser({ allows: false, permissions: { query: async () => ({ state: 'granted' }) } });
+  assert.equal(await find('microphone').read(), STATE.blocked);
+  undo();
+});
+
+test('asking anyway says it is the server, and that settings will not help', async () => {
+  /* The browser rejects with NotAllowedError — the same name it uses for a
+     refusal. Only the policy check tells the two apart. */
+  const media = fakeMedia(Object.assign(new Error('no'), { name: 'NotAllowedError' }));
+  const undo = browser({ allows: false, mediaDevices: media.devices });
+  const { state, note } = await find('camera').ask();
+  assert.equal(state, STATE.blocked);
+  assert.match(note, /servidor/i);
+  assert.match(note, /Permissions-Policy/);
+  undo();
+});
+
+test('location too, without even calling the API', async () => {
+  let called = false;
+  const undo = browser({
+    allows: false,
+    geolocation: { getCurrentPosition: () => { called = true; } },
+  });
+  assert.equal((await find('geolocation').ask()).state, STATE.blocked);
+  assert.equal(called, false, 'não adianta perguntar ao que já foi proibido');
+  undo();
+});
+
+test('a real refusal is still a real refusal', async () => {
+  // The policy allows it; the person said no. Browser settings *are* the fix.
+  const media = fakeMedia(Object.assign(new Error('no'), { name: 'NotAllowedError' }));
+  const undo = browser({ allows: true, mediaDevices: media.devices });
+  const { state, note } = await find('camera').ask();
+  assert.equal(state, STATE.denied);
+  assert.match(note, /cadeado|navegador/i);
+  undo();
+});
+
+test('a browser that cannot tell assumes it may ask', async () => {
+  /* Firefox and Safari expose no Permissions-Policy API. Guessing "blocked"
+     there would put a red dot on a camera that works. */
+  const undo = browser({ allows: null, permissions: { query: async () => ({ state: 'prompt' }) } });
+  assert.equal(allowedByPolicy('camera'), true);
+  assert.equal(await find('camera').read(), STATE.prompt);
+  undo();
+});
+
+test('every state still has wording, including the new one', () => {
+  for (const key of Object.keys(STATE)) assert.ok(SAYS[key], `falta texto para ${key}`);
 });
