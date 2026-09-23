@@ -13,6 +13,10 @@ import { details, fetchDevice, summarize } from './device.js';
 import { COOLDOWN_MS, explainFailure, imageUrl, newSeed } from './generate.js';
 import { SANDBOX, asDocument, describe as describeRun, previewable } from './preview.js';
 import { explain } from './diagnose.js';
+import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
+import { Scene } from './holo.js';
+import { conjure, learnedNames, teaching } from './conjure.js';
+import { Memory } from './memory.js';
 import { LiveSession, WakeWord } from './live.js';
 import {
   chatUrl,
@@ -64,6 +68,12 @@ const el = {
   moreMenu: document.getElementById('more-menu'),
   file: document.getElementById('file'),
   photos: document.getElementById('photos'),
+  holo: document.getElementById('holo'),
+  arOverlay: document.getElementById('ar-overlay'),
+  arStatus: document.getElementById('ar-status'),
+  arDrop: document.getElementById('ar-drop'),
+  arClear: document.getElementById('ar-clear'),
+  arStop: document.getElementById('ar-stop'),
   modelPick: document.getElementById('model-pick'),
   catalogue: document.getElementById('catalogue'),
   catalogueTitle: document.getElementById('catalogue-title'),
@@ -204,6 +214,26 @@ const serverOf = (s) => {
 // device drops frames — the anatomy degrades gracefully, it does not break.
 const field = new ParticleField(el.canvas, { count: 6500, shape: 'orb' });
 field.start();
+
+// -- what he remembers, and what is in the room -----------------------------
+
+/** Episodes, and the attention that finds them again. Opened at load so the
+ *  first message of a session already has context behind it. */
+const memory = new Memory().open();
+
+/** The holograms. One scene, whether or not a session is open: things made
+ *  by voice before entering AR are there waiting when you do. */
+const scene = new Scene();
+
+/** The AR session. Created eagerly because it owns nothing until started. */
+const reality = new Reality({
+  canvas: el.holo,
+  scene,
+  onStatus: (text) => {
+    el.arStatus.textContent = text;
+    setCaption(text);
+  },
+});
 
 // Debounced through rAF: orientation changes fire resize in bursts, and the
 // canvas reallocation is the expensive part.
@@ -566,9 +596,30 @@ async function streamReply(text, onChunk) {
   const content = buildContent(text, attached);
   const carriedImage = Array.isArray(content);
 
+  // What he already knows about you, chosen by attention over everything
+  // remembered. This is the part that gets better with use: the same question
+  // asked in month three arrives with three months of context behind it.
+  //
+  // A system message rather than folded into the user's text, so the model
+  // can tell what you said from what was recalled, and a small one -- five
+  // lines. A context window filled with old chatter is worse than an empty
+  // one, because it crowds out the thing actually being asked.
+  const recalled = text ? memory.recall(text, { count: 5 }) : [];
+  const messages = [];
+  if (recalled.length) {
+    messages.push({
+      role: 'system',
+      content:
+        'Coisas que esta pessoa já disse ou pediu antes, das mais relevantes ' +
+        'para a mensagem atual. Use se ajudar; ignore se não vier ao caso.\n' +
+        recalled.map(({ row }) => `- (${row.kind}) ${row.text}`).join('\n'),
+    });
+  }
+  messages.push({ role: 'user', content });
+
   const body = {
     model: await modelFor(base, headers),
-    messages: [{ role: 'user', content }],
+    messages,
     stream: true,
   };
 
@@ -640,11 +691,52 @@ syncReady();
  *
  * @param {string} text
  */
+/**
+ * The fast path: things he can do without asking anybody.
+ *
+ * Tried before the network, and only for the two cases where a round trip is
+ * the whole problem. Speaking "cubo" while the camera is up and waiting a
+ * second and a half for an endpoint to agree is not augmented reality, it is
+ * a form with a delay. Rules answer in a frame.
+ *
+ * Returns true when it handled the sentence. Anything it does not recognise
+ * falls through to the model untouched -- guessing here would put a cube in
+ * the room every time somebody asked the time.
+ */
+function handleHere(text) {
+  if (!text) return false;
+
+  // Being taught a name. Stored, so it survives the session.
+  const taught = teaching(text, { aliases: learnedNames(memory) });
+  if (taught) {
+    memory.learn(text, { kind: 'apelido' });
+    setCaption(`Anotado: ${taught.alias} é um ${taught.shape}.`);
+    say(`Anotado. ${taught.alias} é um ${taught.shape}.`).catch(() => {});
+    return true;
+  }
+
+  const done = conjure(scene, text, { aliases: learnedNames(memory) });
+  if (!done) return false;
+  // Worth remembering: what somebody asks for in the room is the best signal
+  // there is about what they will ask for next.
+  memory.learn(text, { kind: 'pedido' });
+  setCaption(done);
+  if (!reality.running) {
+    el.arStatus.textContent = done;
+  }
+  say(done).catch(() => {});
+  return true;
+}
+
 async function ask(text) {
   // A photo with no words is a message: "what is this?" is the question, and
   // buildContent supplies it. Only an empty field *and* an empty tray is
   // nothing to send.
   if ((!text && attached.length === 0) || busy) return;
+
+  // Only when nothing is attached: a picture is a question for the model,
+  // whatever words came with it.
+  if (attached.length === 0 && handleHere(text)) return;
 
   busy = true;
   el.send.disabled = true;
@@ -666,6 +758,10 @@ async function ask(text) {
       renderTray();
     }
     offerPreview(reply);
+    // What was asked, kept. Not the answer: answers are long, go stale, and
+    // recalling one would put yesterday's reply in today's context as if it
+    // were a fact. The question is what says who you are.
+    if (text) memory.learn(text, { kind: 'pedido' });
     await say(reply);
     if (!settings.speak) setStatus('em repouso');
   } catch (error) {
@@ -1183,6 +1279,7 @@ const MENU_DOES = {
   attach: () => el.file.click(),
   create: toggleCreate,
   dictate: toggleDictation,
+  ar: enterAR,
   permissions: () => {
     openSettings();
     // The panel is well down a scrolling sheet; landing on it is the point of
@@ -1295,6 +1392,63 @@ el.permsAll.addEventListener('click', async () => {
     if (states[entry.id] === 'granted' || states[entry.id] === 'missing') continue;
     await askPerm(entry.id);
   }
+});
+
+// -- augmented reality --------------------------------------------------------
+
+/** Match the hologram canvas to the screen, in device pixels. */
+function sizeHolo() {
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  el.holo.width = Math.round(window.innerWidth * ratio);
+  el.holo.height = Math.round(window.innerHeight * ratio);
+}
+
+async function enterAR() {
+  if (reality.running) return;
+  const refusal = arWhyNot();
+  if (refusal) {
+    setCaption(refusal);
+    setStatus('erro', 'error');
+    return;
+  }
+  if (!(await arSupported())) {
+    setCaption(
+      'Este aparelho tem WebXR mas não oferece realidade aumentada. No Android ' +
+        'costuma ser os "Serviços de RA do Google" faltando ou desatualizados.'
+    );
+    setStatus('erro', 'error');
+    return;
+  }
+  sizeHolo();
+  el.holo.hidden = false;
+  el.arOverlay.hidden = false;
+  // The field would go on drawing behind a transparent canvas, over the
+  // camera, for no one's benefit and at a real cost in frames.
+  field.stop();
+  const opened = await reality.start(el.arOverlay);
+  if (!opened) leaveAR();
+}
+
+function leaveAR() {
+  el.holo.hidden = true;
+  el.arOverlay.hidden = true;
+  field.start();
+}
+
+el.arStop.addEventListener('click', async () => {
+  await reality.stop();
+  leaveAR();
+});
+el.arDrop.addEventListener('click', () => {
+  const item = reality.drop();
+  el.arStatus.textContent = `Soltei ${item.shape === 'esfera' ? 'uma' : 'um'} ${item.shape}.`;
+});
+el.arClear.addEventListener('click', () => {
+  const gone = scene.clear();
+  el.arStatus.textContent = gone ? `Limpei ${gone}.` : 'Nada para limpar.';
+});
+window.addEventListener('resize', () => {
+  if (reality.running) sizeHolo();
 });
 
 // -- the settings sheet -----------------------------------------------------

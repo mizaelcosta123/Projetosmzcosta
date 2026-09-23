@@ -267,6 +267,52 @@ html, body {
 .more-menu button[aria-pressed="true"] { background: rgba(56, 189, 248, 0.16); }
 .more-menu button[aria-pressed="true"] small::after { content: " · ligado"; color: var(--accent); }
 
+/* -- augmented reality ---------------------------------------------------- */
+
+/* Over everything, and transparent: WebXR puts the camera behind the page,
+   so anything opaque here would be a wall in front of the room. */
+#holo {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  background: transparent;
+}
+
+/* The dom-overlay root. WebXR hands the screen to the session, and these are
+   the only controls that survive it — so they are large and few. */
+.ar-overlay {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: calc(env(safe-area-inset-bottom) + 18px);
+  z-index: 9;
+  max-width: 33rem;
+  margin: 0 auto;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(8, 12, 22, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.ar-overlay button {
+  flex: 1;
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--ink);
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.ar-overlay button.quiet { background: transparent; color: var(--dim); }
+.ar-status { margin: 0; font-size: 0.86rem; color: var(--dim); }
+
 /* -- the model catalogue -------------------------------------------------- */
 
 /* Scrolls inside itself, so the search box and the buttons stay put while

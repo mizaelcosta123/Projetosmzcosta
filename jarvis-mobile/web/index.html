@@ -13,6 +13,21 @@
 <body>
   <canvas id="field" aria-hidden="true"></canvas>
 
+  <!-- Where the holograms are drawn, over the camera, while a session runs.
+       Transparent and on top of everything, and out of the way otherwise. -->
+  <canvas id="holo" aria-hidden="true" hidden></canvas>
+
+  <!-- Handed to WebXR as the dom-overlay root, so these controls keep working
+       while the session has the screen. -->
+  <div id="ar-overlay" class="ar-overlay" hidden>
+    <p id="ar-status" class="ar-status" aria-live="polite"></p>
+    <menu class="row">
+      <button type="button" id="ar-drop">Soltar</button>
+      <button type="button" id="ar-clear" class="quiet">Limpar</button>
+      <button type="button" id="ar-stop" class="quiet">Sair</button>
+    </menu>
+  </div>
+
   <!-- The frame stays out of the way: he is the interface, not the chrome
        around him. Controls sit at the edges, dim until touched. -->
   <header class="frame">
@@ -115,6 +130,13 @@
         <path d="M4.5 9.5a5.5 5.5 0 0011 0M10 15v2.5" />
       </svg>
       <span>Ditar<small>Falar em vez de digitar</small></span>
+    </button>
+    <button type="button" role="menuitem" data-does="ar">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M10 2.5l6.5 3.6v7.8L10 17.5l-6.5-3.6V6.1z" />
+        <path d="M3.5 6.1L10 9.8l6.5-3.7M10 9.8v7.7" />
+      </svg>
+      <span>Realidade aumentada<small>Objetos 3D no seu espaço</small></span>
     </button>
     <button type="button" role="menuitem" data-does="permissions">
       <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
