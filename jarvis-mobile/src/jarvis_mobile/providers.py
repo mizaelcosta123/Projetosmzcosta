@@ -170,12 +170,57 @@ def missing_key_hint(provider: Provider) -> str:
     )
 
 
+def _engine_class(provider: Provider, base: type) -> type:
+    """The engine for one preset: the shared OpenAI-compatible one, keyed.
+
+    Two things differ from the base class, and both are about the key.
+
+    It reads every name the preset accepts -- ``HF_TOKEN`` as well as
+    ``HUGGINGFACE_API_KEY`` -- where the base class only knows
+    ``<ENGINE_ID>_API_KEY``. Without this, ``build_engine`` honoured the
+    aliases but the server, which constructs engines itself, did not.
+
+    And **without a key it does not announce itself**: ``health()`` is False
+    and ``list_models()`` is empty. OpenJarvis discovers engines by probing
+    every registered one with ``GET /v1/models``, and some catalogues answer
+    that with no key at all -- OpenCode Zen's does. So an OpenCode nobody had
+    configured came up "healthy", its models joined the server's list, and
+    picking one sent the request there keyless, where the free tier refused
+    it: "OpenCode's free tier can only be used from within OpenCode". A
+    provider you never gave a key is one you did not choose, and its models
+    have no business in your list.
+    """
+
+    def __init__(self, host=None, *, api_key=None, **kwargs):
+        base.__init__(self, host, api_key=api_key or resolve_api_key(provider), **kwargs)
+
+    def health(self) -> bool:
+        return bool(self._api_key) and base.health(self)
+
+    def list_models(self) -> list[str]:
+        return base.list_models(self) if self._api_key else []
+
+    return type(
+        f"{provider.id.title()}Engine",
+        (base,),
+        {
+            "engine_id": provider.id,
+            "_default_host": provider.base_url,
+            "_api_prefix": provider.api_prefix,
+            "__init__": __init__,
+            "health": health,
+            "list_models": list_models,
+        },
+    )
+
+
 def register_providers(registry: Any = None) -> tuple[str, ...]:
     """Register every preset as an OpenJarvis engine.
 
     Mirrors ``openjarvis.engine.openai_compat_engines``: each provider becomes a
     subclass of the shared OpenAI-compatible engine, so it inherits generate,
-    stream, list_models and health with no per-provider code.
+    stream, list_models and health with no per-provider code -- except that a
+    preset with no key stays silent (see ``_engine_class``).
 
     Returns the ids registered, and re-registering is harmless — the call is
     idempotent so importing the package twice cannot raise.
@@ -189,16 +234,7 @@ def register_providers(registry: Any = None) -> tuple[str, ...]:
         if target.contains(provider.id):
             registered.append(provider.id)
             continue
-        engine_cls = type(
-            f"{provider.id.title()}Engine",
-            (_OpenAICompatibleEngine,),
-            {
-                "engine_id": provider.id,
-                "_default_host": provider.base_url,
-                "_api_prefix": provider.api_prefix,
-            },
-        )
-        target.register(provider.id)(engine_cls)
+        target.register(provider.id)(_engine_class(provider, _OpenAICompatibleEngine))
         registered.append(provider.id)
     return tuple(registered)
 
