@@ -20,6 +20,7 @@ import {
   choose,
   expectimax,
   gammaSample,
+  localAdapter,
   memoryAdapter,
   occam,
   priors,
@@ -327,4 +328,41 @@ test('the ranking is ordered and says how much it is based on', () => {
   const ranked = decider.ranking();
   assert.equal(ranked[0].id, 'bom');
   assert.ok(ranked[0].tried >= 9, `${ranked[0].tried}`);
+});
+
+
+test('the default place to keep beliefs is the browser, not a test double', () => {
+  /* It was `memoryAdapter` — the double — so in the real app nothing was
+     written and every belief died with the tab. Every test above passes an
+     adapter explicitly, which is exactly how a wrong default survives a full
+     suite. The browser found it in one call. */
+  const store = {};
+  const before = globalThis.localStorage;
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = v; },
+    },
+    configurable: true,
+  });
+
+  const decider = new Decider().open();
+  decider.learn('rota', { ok: true, ms: 100 });
+  assert.ok(store['jarvis.beliefs.v1'], 'não gravou nada');
+  assert.ok(JSON.parse(store['jarvis.beliefs.v1']).rota.alpha > 1);
+
+  Object.defineProperty(globalThis, 'localStorage', { value: before, configurable: true });
+});
+
+test('and it still works where there is no storage at all', () => {
+  // Private mode, or a browser that throws on access. Losing the write must
+  // never throw in the middle of a decision.
+  const before = globalThis.localStorage;
+  Object.defineProperty(globalThis, 'localStorage', { value: undefined, configurable: true });
+  assert.doesNotThrow(() => {
+    const decider = new Decider().open();
+    decider.learn('rota', { ok: true });
+    decider.pick([{ id: 'rota' }]);
+  });
+  Object.defineProperty(globalThis, 'localStorage', { value: before, configurable: true });
 });

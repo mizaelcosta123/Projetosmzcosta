@@ -323,7 +323,11 @@ export function expectimax(world, depth = 2, discount = 0.9) {
  */
 export class Decider {
   constructor({ adapter, weights = WEIGHTS, random = Math.random } = {}) {
-    this.adapter = adapter ?? memoryAdapter();
+    // `localAdapter`, not `memoryAdapter`. The default was the in-memory one
+    // -- the test double -- so in the real app nothing was ever written and
+    // every belief died with the tab. No unit test caught it: they all pass
+    // an adapter explicitly, which is precisely how a wrong default survives.
+    this.adapter = adapter ?? localAdapter();
     this.weights = weights;
     this.random = random;
     /** @type {Map<string, Belief>} */

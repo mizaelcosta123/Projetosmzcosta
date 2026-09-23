@@ -17,6 +17,7 @@ import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
 import { Scene } from './holo.js';
 import { conjure, learnedNames, teaching } from './conjure.js';
 import { Memory } from './memory.js';
+import { Decider } from './decide.js';
 import { LiveSession, WakeWord } from './live.js';
 import {
   chatUrl,
@@ -220,6 +221,12 @@ field.start();
 /** Episodes, and the attention that finds them again. Opened at load so the
  *  first message of a session already has context behind it. */
 const memory = new Memory().open();
+
+/** Which model to send this through, and what it has learned about each.
+ *
+ *  Only consulted when several are chosen and none is pinned: picking for
+ *  somebody who named a model would be taking a decision they already took. */
+const decider = new Decider().open();
 
 /** The holograms. One scene, whether or not a session is open: things made
  *  by voice before entering AR are there waiting when you do. */
@@ -537,8 +544,27 @@ function setCaption(text) {
  */
 let resolvedModel = '';
 
+/** Which model this request went to, so the outcome can be filed against it. */
+let routedTo = '';
+
 async function modelFor(base, headers) {
-  if (settings.model) return settings.model;
+  if (settings.model) {
+    routedTo = '';
+    return settings.model;
+  }
+
+  // Several kept for this endpoint and none pinned: a real choice, made from
+  // what each has actually done rather than from whichever came first in the
+  // list. One kept is not a choice, and zero is the path below.
+  const kept = activeProvider().models ?? [];
+  if (kept.length > 1) {
+    const picked = decider.pick(kept.map((id) => ({ id, hops: 1 })));
+    if (picked) {
+      routedTo = picked.option.id;
+      return routedTo;
+    }
+  }
+  routedTo = '';
   if (resolvedModel) return resolvedModel;
 
   // `/v1/info` is a Jarvis route. Asking a provider for it buys a 404 before
@@ -744,6 +770,7 @@ async function ask(text) {
   offerPreview('');
   setStatus('pensando', 'thinking');
 
+  const began = performance.now();
   try {
     let shown = '';
     const sent = attached;
@@ -751,6 +778,9 @@ async function ask(text) {
       shown += chunk;
       setCaption(shown);
     });
+    // The outcome, filed against whatever was routed to. An empty reply counts
+    // as a failure: a model that answers with nothing has not answered.
+    if (routedTo) decider.learn(routedTo, { ok: reply.trim().length > 0, ms: performance.now() - began });
     // Only once it got through: a refused image should still be in the tray,
     // so fixing the setting and pressing send again is all it takes.
     if (attached === sent) {
@@ -765,6 +795,9 @@ async function ask(text) {
     await say(reply);
     if (!settings.speak) setStatus('em repouso');
   } catch (error) {
+    // A refusal is evidence about the route too, and the kind that matters
+    // most: a model that has started failing should stop being chosen.
+    if (routedTo) decider.learn(routedTo, { ok: false, ms: performance.now() - began });
     setStatus('erro', 'error');
     setCaption(explain(error, serverOf(settings)));
   } finally {
