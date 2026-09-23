@@ -322,6 +322,12 @@ const GESTURES = {
 function watchAgentEvents() {
   const base = serverOf(settings);
   if (!base) return;
+  // Nothing publishes agent events but an agent. Against Ollama this socket
+  // 404s and the close handler books another try, so it was reconnecting to
+  // a route that does not exist every thirty seconds for as long as the page
+  // stayed open -- which on a phone is all night.
+  const entry = activeProvider();
+  if (!reachesDevice(entry)) return;
 
   const url = base.replace(/^http/, 'ws') + '/v1/agents/events';
   const key = activeProvider().key;
@@ -330,6 +336,7 @@ function watchAgentEvents() {
     : [];
 
   let socket;
+  let opened = false;
   try {
     socket = protocols.length ? new WebSocket(url, protocols) : new WebSocket(url);
   } catch (error) {
@@ -375,11 +382,24 @@ function watchAgentEvents() {
   // Reconnect with a ceiling: a phone that sleeps or changes network drops the
   // socket routinely, and a tight retry loop would drain the battery.
   socket.addEventListener('close', () => {
+    // A socket that never opened at all was refused, not dropped: stop, and
+    // do not book another. That ends the loop against an address with no such
+    // route -- but it is deliberately not written down as "no agent here".
+    //
+    // A refused socket cannot tell a missing route from a backend that is
+    // asleep, and Render's free tier sleeps: recording `false` from this
+    // would tell somebody with a perfectly good backend that it only answers
+    // questions, and keep telling them. Only `/v1/device` sees a real status
+    // code, so only it is allowed to settle the question.
+    if (!opened) return;
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
     setTimeout(watchAgentEvents, reconnectDelay);
   });
   socket.addEventListener('open', () => {
+    opened = true;
     reconnectDelay = 1000;
+    // This one *is* proof: only an agent serves this route.
+    rememberAgent(entry.id, true);
   });
 }
 
@@ -481,13 +501,18 @@ async function modelFor(base, headers) {
   if (settings.model) return settings.model;
   if (resolvedModel) return resolvedModel;
 
-  const configured = await fetch(`${base}/v1/info`, { headers })
-    .then((response) => (response.ok ? response.json() : null))
-    .then((info) => info?.model)
-    .catch(() => null);
-  if (configured) {
-    resolvedModel = configured;
-    return configured;
+  // `/v1/info` is a Jarvis route. Asking a provider for it buys a 404 before
+  // every first message of every session, and the answer was never going to
+  // be there. The model list below is the path that works everywhere.
+  if (reachesDevice(activeProvider())) {
+    const configured = await fetch(`${base}/v1/info`, { headers })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((info) => info?.model)
+      .catch(() => null);
+    if (configured) {
+      resolvedModel = configured;
+      return configured;
+    }
   }
 
   const response = await fetch(`${base}/v1/models`, { headers });
@@ -1374,6 +1399,12 @@ el.providerTest.addEventListener('click', () => loadModels());
  * before any catalogue has heard of it.
  */
 async function loadModels() {
+  // `collectProvider()` reads the sheet's edit fields back into the settings,
+  // so the fields have to hold the current entry before it runs. Every caller
+  // used to be responsible for calling `renderProviders()` first, and the one
+  // that forgot -- the first-run path, where the sheet has never been drawn --
+  // silently replaced the provider it had just adopted with a blank one.
+  if (!el.provider.options.length) renderProviders();
   const entry = collectProvider();
   setProviderStatus('Perguntando…');
   el.providerTest.disabled = true;
@@ -1416,8 +1447,23 @@ async function loadDevice() {
     return;
   }
 
+  const entry = activeProvider();
+  if (!reachesDevice(entry)) {
+    // Not "the route is missing, redeploy" — which is what a 404 from here
+    // used to say. A provider has no agent behind it and never will, so
+    // asking it about a phone is a request that can only ever fail.
+    el.deviceState.textContent =
+      `${entry.name || 'Este endereço'} só responde perguntas: não há agente do outro ` +
+      'lado, então nenhuma ferramenta de aparelho existe. Para alcançar o celular, ' +
+      'aponte para um backend Jarvis.';
+    el.deviceState.dataset.tone = 'flat';
+    el.deviceRefresh.disabled = false;
+    return;
+  }
+
   try {
-    const state = await fetchDevice(base, headersFor(activeProvider()));
+    const state = await fetchDevice(base, headersFor(entry));
+    rememberAgent(entry.id, true);
     const { tone, text } = summarize(state);
     el.deviceState.textContent = text;
     el.deviceState.dataset.tone = tone;
@@ -1435,9 +1481,28 @@ async function loadDevice() {
   } catch (error) {
     el.deviceState.textContent = String(error.message || error);
     el.deviceState.dataset.tone = 'bad';
+    // A 404 here is the answer, not a failure: there is no agent at this
+    // address. Recording it stops the WebSocket retrying against it forever.
+    if (/rota do aparelho/.test(String(error.message))) rememberAgent(entry.id, false);
   } finally {
     el.deviceRefresh.disabled = false;
   }
+}
+
+/**
+ * Record what an endpoint turned out to be.
+ *
+ * Remembered on the provider rather than in a variable, so the next cold
+ * start already knows and spends nothing finding out again.
+ */
+function rememberAgent(id, agent) {
+  let changed = false;
+  settings.providers = settings.providers.map((row) => {
+    if (row.id !== id || row.agent === agent) return row;
+    changed = true;
+    return { ...row, agent };
+  });
+  if (changed) saveSettings(settings);
 }
 
 el.deviceRefresh.addEventListener('click', () => loadDevice());
@@ -1497,14 +1562,73 @@ async function runDemo() {
   await say(line);
 }
 
-watchAgentEvents();
+/**
+ * First run, served from this machine: find the Ollama and use it.
+ *
+ * Without this, a copy of the app served locally talks to the static server
+ * that served it -- which has no `/v1` anything -- and the first message
+ * fails with a 404 the person has no way to interpret. They then have to
+ * know to open settings, know what an endpoint is, and know Ollama's port.
+ *
+ * One request, only when nothing is configured and only from a local origin,
+ * settles all three. A remote deployment never reaches this: its own origin
+ * *is* the backend, and probing someone's loopback from a public page would
+ * be a port scan.
+ */
+async function adoptLocalOllama() {
+  // Not "the list is empty" -- it never is. `migrate` always seeds one entry
+  // pointing at this same page, which is the right default when the backend
+  // is what served the page and useless when a static file server did.
+  // "Nothing configured" means no entry has a real address.
+  if (settings.providers.some((row) => row.url)) return 'já configurado';
+  const host = location.hostname;
+  if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') return 'remoto';
 
-// First run: nothing saved and nothing to talk to, so offer the demo rather
-// than an input box that can only fail.
-if (!serverOf(settings)) {
+  const entry = termuxOllama();
+  try {
+    const response = await fetch(modelsUrl(entry), { signal: AbortSignal.timeout(2500) });
+    if (!response.ok) return 'sem ollama';
+  } catch {
+    // Not running, or not allowing this origin -- and from here those are the
+    // same failure, because a blocked preflight and a closed port are both a
+    // bare TypeError. The sheet says both possibilities.
+    return 'sem ollama';
+  }
+  // It answered, so it is there *and* it accepts this page: both halves of
+  // what "works" means locally, settled by the one request.
+  settings.providers = [{ ...entry, agent: false }];
+  settings.active = entry.id;
+  saveSettings(settings);
+  setCaption(`Achei o Ollama em ${entry.url} e já apontei para ele.`);
+  return 'adotado';
+}
+
+// First run: nothing saved and nothing to talk to, so say so rather than
+// leaving an input box that can only fail.
+adoptLocalOllama().then((outcome) => {
+  watchAgentEvents();
+  if (outcome === 'adotado') {
+    loadModels();
+    return;
+  }
+  // A local page with nothing configured has nowhere to think. `serverOf`
+  // answers with this page's own origin, which is truthy and is a static file
+  // server -- so the old check passed and the first message died on a 404
+  // nobody could interpret.
+  const nowhere = !serverOf(settings) || outcome === 'sem ollama';
+  if (!nowhere) return;
+
+  if (outcome === 'sem ollama') {
+    setCaption(
+      `Não achei o Ollama em ${termuxOllama().url}. Ou ele não está rodando ` +
+        '(`ollama serve`), ou está recusando esta página — nesse caso suba ele com ' +
+        `OLLAMA_ORIGINS=${location.origin} ollama serve. ` +
+        'Dá também para apontar para qualquer outro endereço aqui embaixo.'
+    );
+  }
   el.voiceMode.textContent = describeVoice();
   renderProviders();
   el.settings.showModal();
-}
+});
 
 setStatus('em repouso');

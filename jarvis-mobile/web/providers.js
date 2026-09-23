@@ -15,7 +15,15 @@
  * the type, and the sheet says it out loud next to every entry.
  */
 
-/** @typedef {{id: string, name: string, url: string, key: string, kind: string}} Provider */
+/**
+ * @typedef {{id: string, name: string, url: string, key: string, kind: string,
+ *            agent?: boolean}} Provider
+ *
+ * `kind` is a guess made offline, from the port and the hostname. `agent` is
+ * what was actually found when something asked. Undefined means nobody has
+ * asked yet; once it is a boolean it outranks the guess, because a hostname
+ * cannot tell you what is listening on it and a request can.
+ */
 
 export const JARVIS = 'jarvis';
 export const OPENAI = 'openai';
@@ -85,7 +93,43 @@ export function detectKind(url) {
  * @param {Provider} provider
  */
 export function reachesDevice(provider) {
+  if (typeof provider?.agent === 'boolean') return provider.agent;
   return (provider?.kind ?? JARVIS) === JARVIS;
+}
+
+/**
+ * Ask an endpoint whether there is an agent behind it.
+ *
+ * This is what replaces guessing from the hostname. The list of known
+ * provider hosts can only ever be a list of the ones somebody thought of; a
+ * person pasting their own vLLM on port 8000, or LM Studio on 1234, used to
+ * be taken for a Jarvis -- which meant a WebSocket reconnecting to it every
+ * thirty seconds, all night, for a route it does not have.
+ *
+ * One request settles it, and the answer is remembered on the provider.
+ *
+ * @param {Provider} provider
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<boolean|undefined>} undefined when it could not be told.
+ */
+export async function probeAgent(provider, fetchImpl = globalThis.fetch) {
+  const base = normalizeUrl(provider?.url) || originOfPage();
+  let response;
+  try {
+    response = await fetchImpl(`${base}/v1/device`, { headers: headersFor(provider) });
+  } catch {
+    // Unreachable says nothing about what it is. Leaving this unknown keeps
+    // a Jarvis that happens to be asleep from being demoted permanently.
+    return undefined;
+  }
+  if (response.status === 404) return false;
+  // A key problem is a key problem, not an answer about what is listening.
+  if (response.status === 401 || response.status === 403) return undefined;
+  if (!response.ok) return undefined;
+  const payload = await response.json().catch(() => null);
+  // The catch-all route used to answer this with the HTML page, and a 200
+  // full of markup reads as "yes" while meaning nothing.
+  return Boolean(payload) && typeof payload === 'object' && !Array.isArray(payload);
 }
 
 /** Where to POST a chat. Ollama speaks the OpenAI shape too, so this is uniform. */
@@ -183,15 +227,19 @@ function originOfPage() {
 }
 
 /** A provider with the fields filled in and an id that will not collide. */
-export function makeProvider({ name = '', url = '', key = '', id = '' } = {}) {
+export function makeProvider({ name = '', url = '', key = '', id = '', agent } = {}) {
   const clean = normalizeUrl(url);
-  return {
+  const entry = {
     id: id || `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     name: name.trim() || hostLabel(clean),
     url: clean,
     key: key.trim(),
     kind: detectKind(clean),
   };
+  // Only carried when it is known. An absent field and `false` mean different
+  // things here, and JSON.stringify drops undefined for us.
+  if (typeof agent === 'boolean') entry.agent = agent;
+  return entry;
 }
 
 /** A short human label for a URL, for when nobody typed a name. */

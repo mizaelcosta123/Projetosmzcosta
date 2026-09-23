@@ -34,6 +34,52 @@ changing anything here:
    `<ENGINE_ID>_HOST` / `<ENGINE_ID>_API_KEY` and sets the Bearer header, so a
    provider is a table row.
 
+## Running it on your own machine
+
+The interface is static files. Everything it needs from a server it asks for
+over HTTP, so "local" means two things running: a file server for the
+interface, and something that answers chat completions.
+
+```sh
+./jarvis-local.sh          # serves the interface, checks Ollama, says what is wrong
+```
+
+Then open `http://localhost:8811`. With Ollama up, the first load finds it,
+points at it and saves that — no settings, no key, no account. One request.
+
+What actually trips people up is not the ports, it is CORS. A page on
+`http://localhost:8811` is a **different origin** from `http://localhost:11434`,
+so the browser asks Ollama for permission first and Ollama refuses unless it
+was started knowing about that page:
+
+```sh
+OLLAMA_ORIGINS=http://localhost:8811 ollama serve
+ollama pull qwen2.5-coder:1.5b
+```
+
+From JavaScript a refused preflight and a closed port are the same bare
+`TypeError`, which is why `jarvis-local.sh` sends the preflight itself and
+reports the two separately, and why the interface prints the exact
+`OLLAMA_ORIGINS` line when it cannot get through.
+
+Nothing about this is Ollama-specific: **any** OpenAI-compatible endpoint works
+the same way — LM Studio, vLLM, llama.cpp, a hosted API with a key. Paste the
+address and the key in Configurações, press *Testar e carregar modelos*, and
+the model list fills from the endpoint itself.
+
+### What a local endpoint cannot do
+
+Reach your phone. `device_open`, `device_shell` and the rest are registered in
+the agent, which lives in the Jarvis backend — a bare model endpoint has no
+agent behind it, however good the model is. The app finds this out for itself
+(one request to `/v1/device`), remembers the answer, and says so in the
+Aparelho panel instead of asking you to redeploy something that was never
+there.
+
+That answer is also what stops the waste: no agent means no event WebSocket
+and no `/v1/info`, so pointing at Ollama costs **zero** requests on load and
+two for a message.
+
 ## Providers
 
 Endpoints verified against each provider's own docs (2026-09):

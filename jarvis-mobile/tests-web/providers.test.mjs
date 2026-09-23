@@ -22,8 +22,9 @@ import {
   makeProvider,
   modelsUrl,
   normalizeUrl,
-  readModels,
+  probeAgent,
   reachesDevice,
+  readModels,
   termuxOllama,
 } from '../web/providers.js';
 
@@ -185,4 +186,102 @@ test('the Termux preset points at this phone', () => {
   assert.equal(ollama.kind, OLLAMA);
   assert.equal(ollama.url, 'http://localhost:11434');
   assert.equal(reachesDevice(ollama), false, 'a bare Ollama has no agent behind it');
+});
+
+// -- learning what an endpoint is, instead of guessing from its hostname ----
+
+/** A fetch that answers one way, and records what was asked. */
+function answering(reply) {
+  const asked = [];
+  const impl = async (url, init) => {
+    asked.push(url);
+    if (reply instanceof Error) throw reply;
+    return {
+      ok: reply.status >= 200 && reply.status < 300,
+      status: reply.status,
+      json: async () => {
+        if (reply.body === undefined) throw new Error('not json');
+        return reply.body;
+      },
+    };
+  };
+  impl.asked = asked;
+  return impl;
+}
+
+test('a backend that answers about a phone is an agent', async () => {
+  const impl = answering({ status: 200, body: { linked: false, transport: 'none' } });
+  assert.equal(await probeAgent(makeProvider({ url: 'https://meu.jarvis' }), impl), true);
+  assert.deepEqual(impl.asked, ['https://meu.jarvis/v1/device']);
+});
+
+test('a 404 settles it: there is no agent here', async () => {
+  /* The whole point. An unlisted endpoint -- vLLM on 8000, LM Studio on 1234 --
+     used to be taken for a Jarvis, which meant a WebSocket retrying against a
+     route it does not have every thirty seconds for as long as the page was
+     open. */
+  const impl = answering({ status: 404 });
+  assert.equal(await probeAgent(makeProvider({ url: 'http://127.0.0.1:1234' }), impl), false);
+});
+
+test('unreachable is not an answer', async () => {
+  /* A backend that is merely asleep -- Render's free tier sleeps -- must not
+     be written down as "only answers questions" and left that way. */
+  const impl = answering(new TypeError('Failed to fetch'));
+  assert.equal(await probeAgent(makeProvider({ url: 'https://dormindo.test' }), impl), undefined);
+});
+
+test('a refused key is not an answer either', async () => {
+  for (const status of [401, 403]) {
+    const impl = answering({ status });
+    assert.equal(await probeAgent(makeProvider({ url: 'https://x.test' }), impl), undefined, String(status));
+  }
+});
+
+test('a 200 full of HTML is not an agent', async () => {
+  /* The catch-all route used to answer this with the page itself, which reads
+     as "yes" while carrying nothing. */
+  const impl = answering({ status: 200 }); // json() throws
+  assert.equal(await probeAgent(makeProvider({ url: 'https://x.test' }), impl), false);
+});
+
+test('nor is a bare array', async () => {
+  const impl = answering({ status: 200, body: [] });
+  assert.equal(await probeAgent(makeProvider({ url: 'https://x.test' }), impl), false);
+});
+
+test('the probe carries the key, like every other call', async () => {
+  const seen = [];
+  const impl = async (url, init) => {
+    seen.push(init?.headers?.Authorization);
+    return { ok: true, status: 200, json: async () => ({ linked: true }) };
+  };
+  await probeAgent(makeProvider({ url: 'https://x.test', key: 'sk-abc' }), impl);
+  assert.deepEqual(seen, ['Bearer sk-abc']);
+});
+
+test('what was learned outranks what was guessed', async () => {
+  // Guessed a Jarvis from an unknown host, then found out otherwise.
+  const guessed = makeProvider({ url: 'http://127.0.0.1:8000' });
+  assert.equal(reachesDevice(guessed), true, 'o palpite começa otimista');
+  assert.equal(reachesDevice({ ...guessed, agent: false }), false);
+
+  // And the other way: a Jarvis on Ollama's own port is unusual, not impossible.
+  const ollama = makeProvider({ url: 'http://localhost:11434' });
+  assert.equal(reachesDevice(ollama), false);
+  assert.equal(reachesDevice({ ...ollama, agent: true }), true);
+});
+
+test('a provider only carries the answer once it has one', () => {
+  /* Absent and false mean different things: absent is "nobody asked", and an
+     entry saved before this existed must not read as a settled no. */
+  assert.equal('agent' in makeProvider({ url: 'https://x.test' }), false);
+  assert.equal(makeProvider({ url: 'https://x.test', agent: false }).agent, false);
+  assert.equal(makeProvider({ url: 'https://x.test', agent: true }).agent, true);
+});
+
+test('an entry saved before any of this still reaches the device', () => {
+  // Migration in the plainest sense: old settings have no `agent` field.
+  const old = { id: 'p1', name: 'Meu Jarvis', url: 'https://meu.jarvis', key: '', kind: 'jarvis' };
+  assert.equal(reachesDevice(old), true);
 });
