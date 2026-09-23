@@ -76,7 +76,62 @@
     </menu>
   </div>
 
+  <!-- Everything that is not "say something" lives behind one button. Six
+       icons in a row on a phone is a row nobody reads: they become texture,
+       and the one you want is found by trial. A list with words is slower by
+       one tap and faster by every other measure. -->
+  <div id="more-menu" class="more-menu" role="menu" aria-labelledby="more" hidden>
+    <button type="button" role="menuitem" data-does="camera">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M2.5 6h3l1.2-1.8h6.6L14.5 6h3v9h-15z" />
+        <circle cx="10" cy="10.5" r="3" />
+      </svg>
+      <span>Câmera<small>Mostrar algo a ele agora</small></span>
+    </button>
+    <button type="button" role="menuitem" data-does="gallery">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <rect x="2.5" y="4" width="15" height="12" rx="2" />
+        <path d="M2.5 13l4-4 3.5 3.5L13 10l4.5 4.5" />
+        <circle cx="7" cy="7.5" r="1.2" />
+      </svg>
+      <span>Galeria<small>Uma foto que você já tem</small></span>
+    </button>
+    <button type="button" role="menuitem" data-does="attach">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M13.5 8.5l-5 5a2.5 2.5 0 01-3.5-3.5l6-6a4 4 0 015.5 5.5l-6 6" />
+      </svg>
+      <span>Anexar arquivo<small>Texto, código, dados</small></span>
+    </button>
+    <button type="button" role="menuitem" data-does="create" aria-pressed="false">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5 8.4 10.1 4 8.5l4.4-1.6z" />
+        <path d="M15.5 13.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+      </svg>
+      <span>Criar imagem<small>Descreva e ele desenha</small></span>
+    </button>
+    <button type="button" role="menuitem" data-does="dictate" aria-pressed="false">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <rect x="7.5" y="3" width="5" height="9" rx="2.5" />
+        <path d="M4.5 9.5a5.5 5.5 0 0011 0M10 15v2.5" />
+      </svg>
+      <span>Ditar<small>Falar em vez de digitar</small></span>
+    </button>
+    <button type="button" role="menuitem" data-does="permissions">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M10 2.5l6 2.5v5c0 3.5-2.5 6.3-6 7.5-3.5-1.2-6-4-6-7.5v-5z" />
+        <path d="M7.5 10l1.8 1.8 3.2-3.6" />
+      </svg>
+      <span>Permissões<small>Microfone, câmera, localização</small></span>
+    </button>
+  </div>
+
   <form id="composer" class="composer" autocomplete="off">
+    <button id="more" type="button" class="ghost-btn composer-btn" aria-label="Mais funções"
+            aria-haspopup="menu" aria-expanded="false" title="Mais">
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M10 4.5v11M4.5 10h11" />
+      </svg>
+    </button>
     <input id="prompt" type="text" placeholder="Fale com ele" aria-label="Mensagem" enterkeyhint="send">
     <!-- Three bars, not the header's three lines: this one opens the
          microphone, and a control that does that should never be mistaken for
@@ -93,33 +148,10 @@
          system picker, which on Android offers the camera too. Two buttons
          because "take a photo now" and "send that one from Tuesday" are
          different intentions and the picker buries the first. -->
-    <button id="camera" type="button" class="ghost-btn composer-btn" aria-label="Mostrar algo pela câmera" title="Câmera">
-      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-        <path d="M2.5 6h3l1.2-1.8h6.6L14.5 6h3v9h-15z" />
-        <circle cx="10" cy="10.5" r="3" />
-      </svg>
-    </button>
-    <button id="attach" type="button" class="ghost-btn composer-btn" aria-label="Anexar arquivo" title="Anexar">
-      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-        <path d="M13.5 8.5l-5 5a2.5 2.5 0 01-3.5-3.5l6-6a4 4 0 015.5 5.5l-6 6" />
-      </svg>
-    </button>
     <input id="file" type="file" accept="image/*,text/*,.md,.csv,.json,.log" multiple hidden>
-    <!-- Switches the field from "say something to him" to "describe a picture".
-         A mode rather than a guess: asking a model whether a sentence was a
-         request for an image gets it wrong often enough to be infuriating. -->
-    <button id="create" type="button" class="ghost-btn composer-btn" aria-label="Criar imagem" aria-pressed="false" title="Criar imagem">
-      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-        <path d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5 8.4 10.1 4 8.5l4.4-1.6z" />
-        <path d="M15.5 13.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
-      </svg>
-    </button>
-    <button id="record" type="button" class="ghost-btn composer-btn" aria-label="Segure para ditar" title="Segure para ditar">
-      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-        <rect x="7.5" y="3" width="5" height="9" rx="2.5" />
-        <path d="M4.5 9.5a5.5 5.5 0 0011 0M10 15v2.5" />
-      </svg>
-    </button>
+    <!-- Separate from the one above so "a picture" and "a file" open different
+         pickers. On Android the image one offers the gallery directly. -->
+    <input id="photos" type="file" accept="image/*" multiple hidden>
     <button id="send" type="submit" aria-label="Enviar">
       <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
         <path d="M3 10h13M11 5l5 5-5 5" />
@@ -164,6 +196,17 @@
       <input id="model" type="text" list="model-options" placeholder="padrão do servidor" autocapitalize="off" spellcheck="false">
       <datalist id="model-options"></datalist>
       <p class="hint" id="model-hint"></p>
+
+      <h2 id="perms-heading">Permissões</h2>
+      <!-- Rows are built in JS from one list, so the panel cannot drift from
+           what the code actually knows how to ask for. Each row's button is
+           what makes the browser prompt: querying never does. -->
+      <div id="perms" class="perms" aria-labelledby="perms-heading"></div>
+      <p class="hint" id="perms-note" aria-live="polite"></p>
+      <menu class="row">
+        <button type="button" id="perms-refresh" class="quiet">Conferir de novo</button>
+        <button type="button" id="perms-all" class="quiet">Pedir todas</button>
+      </menu>
 
       <h2>Aparelho</h2>
       <p class="hint" id="device-state" aria-live="polite">Conferindo…</p>

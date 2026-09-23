@@ -193,6 +193,109 @@ html, body {
 .composer button:focus-visible { opacity: 1; transform: none; outline: 1px solid var(--accent); outline-offset: 2px; }
 .composer button:disabled { opacity: 0.35; cursor: default; }
 
+/* -- the "+" and what it opens -------------------------------------------- */
+
+/* Findable on an empty composer, for the same reason the live button is: it
+   is what you reach for before there is any text. */
+.composer #more { opacity: 0.5; }
+.composer #more:hover,
+.composer #more:focus-visible { opacity: 1; }
+/* Rotates into an x while the menu is open, so the same button closes it and
+   looks like it would. */
+.composer[data-more="open"] #more { opacity: 1; color: var(--accent); }
+.composer[data-more="open"] #more svg { transform: rotate(45deg); }
+.composer #more svg { transition: transform 0.22s var(--ease); }
+
+.more-menu {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  /* Sits on the composer, which is itself above the safe area. */
+  bottom: calc(env(safe-area-inset-bottom) + 68px);
+  z-index: 6;
+  max-width: 33rem;
+  margin: 0 auto;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: rgba(8, 12, 22, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  /* The blur is what keeps the field readable behind it instead of fighting
+     it: he goes on moving under the menu rather than being covered by it. */
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  transform-origin: left bottom;
+  animation: menu-in 0.18s var(--ease);
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.more-menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 11px;
+  cursor: pointer;
+}
+.more-menu button:hover,
+.more-menu button:focus-visible { background: rgba(56, 189, 248, 0.1); outline: none; }
+.more-menu button svg {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--accent);
+}
+.more-menu button > span { display: grid; gap: 1px; }
+.more-menu small { color: var(--dimmer); font-size: 0.78rem; }
+/* A toggle that is currently on says so, since the menu closes behind you. */
+.more-menu button[aria-pressed="true"] { background: rgba(56, 189, 248, 0.16); }
+.more-menu button[aria-pressed="true"] small::after { content: " · ligado"; color: var(--accent); }
+
+/* -- permissions ---------------------------------------------------------- */
+
+.perms { display: grid; gap: 6px; }
+.perms-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.perms-row > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.perms-row strong { font-weight: 600; font-size: 0.92rem; }
+.perms-row small { color: var(--dimmer); font-size: 0.78rem; }
+/* The state, as a word rather than a colour alone: a colour-blind eye and a
+   screen reader both need this to survive without the dot. */
+.perms-state { font-size: 0.74rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.perms-row[data-state="granted"] .perms-state { color: #4ade80; }
+.perms-row[data-state="denied"] .perms-state,
+.perms-row[data-state="insecure"] .perms-state { color: #fb7185; }
+.perms-row[data-state="prompt"] .perms-state { color: var(--accent); }
+.perms-row[data-state="unknown"] .perms-state,
+.perms-row[data-state="missing"] .perms-state { color: var(--dimmer); }
+.perms-row button { flex: none; }
+/* Nothing to ask for once it is granted, and a denial cannot be undone from
+   here — the browser requires its own UI for that. */
+.perms-row[data-state="granted"] button,
+.perms-row[data-state="missing"] button { display: none; }
+
 /* -- live voice ----------------------------------------------------------- */
 
 /* Not a send affordance: this one has to be findable on an *empty* composer,

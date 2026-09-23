@@ -25,7 +25,13 @@ def test_the_orb_is_the_default_form(isolated_state):
 def test_setting_a_mode_persists_it(isolated_state):
     result = display.SetDisplayModeTool().execute(mode="face")
     assert result.success
-    assert result.metadata == {"mode": "face", "expression": "", "persisted": True}
+    assert result.metadata == {
+        "mode": "face",
+        "expression": "",
+        "gaze": "",
+        "gesture": "",
+        "persisted": True,
+    }
     assert display.current_mode() == "face"
 
 
@@ -177,4 +183,74 @@ def test_the_expressions_match_the_ones_the_browser_can_draw():
     assert drawable == set(display.EXPRESSIONS), (
         f"only in the browser: {drawable - set(display.EXPRESSIONS)}; "
         f"only in the tool: {set(display.EXPRESSIONS) - drawable}"
+    )
+
+
+# -- the eyes, and one-off movements ---------------------------------------
+
+
+def test_a_gaze_can_travel_on_its_own(isolated_state):
+    """Where he looks changes far more often than how he feels."""
+    result = display.SetDisplayModeTool().execute(gaze="pensando")
+    assert result.success
+    assert result.metadata["gaze"] == "pensando"
+    assert display.current_mode() == "orb", "olhar não é forma"
+
+
+def test_a_gesture_can_too(isolated_state):
+    result = display.SetDisplayModeTool().execute(gesture="revirar")
+    assert result.success
+    assert result.metadata["gesture"] == "revirar"
+
+
+def test_everything_can_travel_at_once(isolated_state):
+    result = display.SetDisplayModeTool().execute(
+        mode="face", expression="pensativo", gaze="pensando", gesture="acenar"
+    )
+    assert result.success
+    assert result.metadata["expression"] == "pensativo"
+    assert result.metadata["gaze"] == "pensando"
+    assert result.metadata["gesture"] == "acenar"
+
+
+def test_an_unknown_gaze_is_refused(isolated_state):
+    result = display.SetDisplayModeTool().execute(gaze="de-esguelha")
+    assert not result.success
+    assert "pensando" in result.content
+
+
+def test_an_unknown_gesture_is_refused(isolated_state):
+    result = display.SetDisplayModeTool().execute(gesture="dar-de-ombros")
+    assert not result.success
+    assert "revirar" in result.content
+
+
+def test_one_bad_field_changes_nothing_at_all(isolated_state):
+    """Half-applying a call leaves him in a state the model did not ask for."""
+    result = display.SetDisplayModeTool().execute(
+        mode="face", expression="alegre", gaze="de-esguelha"
+    )
+    assert not result.success
+    assert display.current_mode() == "orb"
+
+
+def test_the_schema_offers_exactly_the_known_gazes_and_gestures():
+    schema = display.SetDisplayModeTool().to_openai_function()
+    properties = schema["function"]["parameters"]["properties"]
+    assert sorted(properties["gaze"]["enum"]) == sorted(display.GAZES)
+    assert sorted(properties["gesture"]["enum"]) == sorted(display.GESTURES)
+
+
+def test_the_gazes_match_the_ones_the_browser_can_draw():
+    """Same drift risk as the expressions, and the same guard."""
+    import re
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[1] / "web" / "gaze.js"
+    block = re.search(r"const MOODS = \{(.*?)\n\};", source.read_text("utf-8"), re.S)
+    assert block, "MOODS não encontrado em web/gaze.js"
+    drawable = set(re.findall(r"^\s*(\w+):", block.group(1), re.M))
+    assert drawable == set(display.GAZES), (
+        f"só no navegador: {drawable - set(display.GAZES)}; "
+        f"só na ferramenta: {set(display.GAZES) - drawable}"
     )

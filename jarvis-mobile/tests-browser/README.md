@@ -37,6 +37,7 @@ tem um em outro lugar, aponte: `CHROMIUM=/caminho/para/chrome node ...`.
 | `settings.mjs` | o painel de provedores: a lista enche, os modelos carregam sozinhos, o Ollama do Termux entra num toque, trocar de provedor limpa o modelo do outro, um endereço morto diz o que fazer. É tudo fiação de DOM, que teste de unidade não alcança |
 | `look.mjs` | como ele fica parado e falando, nas duas formas, num tamanho de celular de verdade — quatro PNGs para comparar. É o que os números não dizem: se ainda parece ele, e se a expansão sai pela lateral da tela |
 | `expressions.mjs` | as nove expressões na mesma folha, e a mesma cara calada e falando. Os testes dizem que `alegre` levanta a bochecha e que 468 partículas se mexeram; não dizem se aquilo parece um sorriso, nem se duas expressões dão para distinguir de relance num celular. Só o olho resolve isso |
+| `gaze.mjs` | para onde ele olha e o que a cabeça faz a respeito: olhando para os lados, para cima, para baixo, e revirando os olhos. Os números dizem que a íris andou 0,068; não dizem se aquilo parece alguém olhando. Tem também um recorte só dos olhos, porque em tamanho de cabeça uma íris tem uma dúzia de pontos e "mexeu" vira questão de opinião |
 | `barge.mjs` | uma voz **abaixa** o volume dele e as palavras o **param**, nessa ordem; um som recorrente sem palavras abaixa e volta, repetidamente, sem nunca pará-lo |
 
 O segundo é o que vale mais: é a diferença entre "qualquer barulho interrompe"

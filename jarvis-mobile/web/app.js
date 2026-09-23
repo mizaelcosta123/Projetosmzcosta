@@ -23,6 +23,14 @@ import {
   reachesDevice,
   termuxOllama,
 } from './providers.js';
+import {
+  PERMISSIONS,
+  SAYS as PERM_SAYS,
+  STATE as PERM_STATE,
+  find as findPerm,
+  inspect as inspectPerms,
+  secure as secureOrigin,
+} from './permissions.js';
 
 const SETTINGS_KEY = 'jarvis.settings.v1';
 
@@ -49,11 +57,14 @@ const el = {
   providerAdd: document.getElementById('provider-add'),
   providerOllama: document.getElementById('provider-ollama'),
   providerStatus: document.getElementById('provider-status'),
-  camera: document.getElementById('camera'),
-  attach: document.getElementById('attach'),
+  more: document.getElementById('more'),
+  moreMenu: document.getElementById('more-menu'),
   file: document.getElementById('file'),
-  record: document.getElementById('record'),
-  create: document.getElementById('create'),
+  photos: document.getElementById('photos'),
+  perms: document.getElementById('perms'),
+  permsNote: document.getElementById('perms-note'),
+  permsRefresh: document.getElementById('perms-refresh'),
+  permsAll: document.getElementById('perms-all'),
   gallery: document.getElementById('gallery'),
   made: document.getElementById('made'),
   madeNote: document.getElementById('made-note'),
@@ -296,6 +307,18 @@ function adoptDriver(next) {
  * Browsers cannot set an Authorization header on a WebSocket, so the key rides
  * in the subprotocol list — the encoding makes it valid syntax, not secret.
  */
+/**
+ * The one-off movements, by the name the tool uses.
+ *
+ * Kept as a table rather than a switch so an unknown name is simply nothing
+ * happening -- a model will eventually ask him to shrug.
+ */
+const GESTURES = {
+  revirar: () => field.rollEyes(),
+  acenar: () => field.nod(),
+  piscar: () => field.blink(),
+};
+
 function watchAgentEvents() {
   const base = serverOf(settings);
   if (!base) return;
@@ -326,10 +349,14 @@ function watchAgentEvents() {
     if (payload.type === 'tool_call_start' && data.tool === 'set_display_mode') {
       const mode = data.arguments?.mode;
       if (mode && field.shapes[mode]) applyMode(mode);
-      // The same tool carries an optional feeling. A model that never sends
-      // one costs nothing: the status machine keeps driving the face.
+      // The same tool carries an optional feeling, an optional way of
+      // looking, and an optional one-off movement. A model that never sends
+      // any of them costs nothing: the status machine keeps driving the face.
       const feeling = data.arguments?.expression;
       if (feeling) field.setExpression(feeling);
+      const where = data.arguments?.gaze;
+      if (where) field.look(where);
+      GESTURES[data.arguments?.gesture]?.();
       return;
     }
 
@@ -399,12 +426,29 @@ const STATUS_FACE = {
   '': 'neutro',
 };
 
+/**
+ * And where his eyes go in each state.
+ *
+ * Looking away while working something out is not decoration: it is what
+ * people do, and its absence is why a face that holds your gaze through a
+ * long pause feels wrong rather than attentive.
+ */
+const STATUS_GAZE = {
+  thinking: 'pensando',
+  listening: 'atento',
+  speaking: 'falando',
+  error: 'atento',
+  '': 'parado',
+};
+
 function setStatus(text, state = '') {
   el.status.textContent = text;
   el.status.dataset.state = state;
   field.setThinking(state === 'thinking');
   const face = STATUS_FACE[state];
   if (face) field.setExpression(face);
+  const where = STATUS_GAZE[state];
+  if (where) field.look(where);
 }
 
 function setCaption(text) {
@@ -797,12 +841,12 @@ let madeUrl = '';
 /** When the free tier will accept another request. */
 let readyAt = 0;
 
-el.create.addEventListener('click', () => {
+function toggleCreate() {
   creating = !creating;
-  el.create.setAttribute('aria-pressed', String(creating));
+  menuItem('create')?.setAttribute('aria-pressed', String(creating));
   el.prompt.placeholder = creating ? 'Descreva a imagem' : 'Fale com ele';
   el.prompt.focus();
-});
+}
 
 function noteMade(text, state = '') {
   el.madeNote.textContent = text;
@@ -959,11 +1003,13 @@ async function addFile(file) {
   renderTray();
 }
 
-el.attach.addEventListener('click', () => el.file.click());
-el.file.addEventListener('change', async () => {
-  for (const file of el.file.files) await addFile(file);
-  el.file.value = ''; // so picking the same file twice still fires
-});
+// Both pickers land in the same tray; they differ only in what they offer.
+for (const input of [el.file, el.photos]) {
+  input.addEventListener('change', async () => {
+    for (const file of input.files) await addFile(file);
+    input.value = ''; // so picking the same file twice still fires
+  });
+}
 
 // -- the camera ---------------------------------------------------------------
 
@@ -987,7 +1033,7 @@ async function openCamera() {
   }
   el.preview.srcObject = stream;
   el.viewfinder.hidden = false;
-  el.camera.dataset.on = 'yes';
+  menuItem('camera')?.setAttribute('aria-pressed', 'true');
 }
 
 function closeCamera() {
@@ -996,10 +1042,9 @@ function closeCamera() {
   stream = null;
   el.preview.srcObject = null;
   el.viewfinder.hidden = true;
-  el.camera.dataset.on = '';
+  menuItem('camera')?.setAttribute('aria-pressed', 'false');
 }
 
-el.camera.addEventListener('click', () => (stream ? closeCamera() : openCamera()));
 el.closeCamera.addEventListener('click', closeCamera);
 
 el.flip.addEventListener('click', async () => {
@@ -1055,12 +1100,12 @@ function startDictation() {
   };
   dictation.onend = () => {
     dictation = null;
-    el.record.dataset.on = '';
+    menuItem('dictate')?.setAttribute('aria-pressed', 'false');
   };
 
   try {
     dictation.start();
-    el.record.dataset.on = 'yes';
+    menuItem('dictate')?.setAttribute('aria-pressed', 'true');
   } catch {
     dictation = null;
   }
@@ -1074,15 +1119,148 @@ function stopDictation() {
   }
 }
 
-// Press and hold. pointerup anywhere, not just on the button, or letting go
-// with your thumb slightly off leaves it recording.
-el.record.addEventListener('pointerdown', (event) => {
-  event.preventDefault();
-  startDictation();
-});
-for (const name of ['pointerup', 'pointercancel']) {
-  window.addEventListener(name, () => dictation && stopDictation());
+// A toggle, not a hold. Hold-to-talk was right while the microphone had its
+// own button in the bar; from inside a menu that closes on the same press it
+// is unusable, because the finger that opened the item is the finger that
+// would have to stay down.
+function toggleDictation() {
+  if (dictation) stopDictation();
+  else startDictation();
 }
+
+// -- the "+" menu -------------------------------------------------------------
+
+/** One menu row, by what it does. */
+function menuItem(does) {
+  return el.moreMenu.querySelector(`[data-does="${does}"]`);
+}
+
+function showMenu(open) {
+  el.moreMenu.hidden = !open;
+  el.more.setAttribute('aria-expanded', String(open));
+  el.composer.dataset.more = open ? 'open' : '';
+  if (open) el.moreMenu.querySelector('button')?.focus();
+}
+
+const MENU_DOES = {
+  camera: () => (stream ? closeCamera() : openCamera()),
+  gallery: () => el.photos.click(),
+  attach: () => el.file.click(),
+  create: toggleCreate,
+  dictate: toggleDictation,
+  permissions: () => {
+    openSettings();
+    // The panel is well down a scrolling sheet; landing on it is the point of
+    // the menu item, so put it in view rather than leaving them to hunt.
+    document.getElementById('perms-heading')?.scrollIntoView({ block: 'start' });
+  },
+};
+
+el.more.addEventListener('click', () => showMenu(el.moreMenu.hidden));
+
+el.moreMenu.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-does]');
+  if (!button) return;
+  showMenu(false);
+  MENU_DOES[button.dataset.does]?.();
+});
+
+// Anywhere else closes it, including the field behind. `capture` so this runs
+// before a click on the composer can act on a menu the user meant to dismiss.
+document.addEventListener(
+  'pointerdown',
+  (event) => {
+    if (el.moreMenu.hidden) return;
+    if (el.moreMenu.contains(event.target) || el.more.contains(event.target)) return;
+    showMenu(false);
+  },
+  true
+);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !el.moreMenu.hidden) {
+    showMenu(false);
+    el.more.focus();
+  }
+});
+
+// -- permissions --------------------------------------------------------------
+
+/**
+ * Draw the panel.
+ *
+ * Built from PERMISSIONS rather than written out in the HTML, so a permission
+ * the code knows how to ask for cannot be missing a row, and a row cannot
+ * exist for something the code cannot ask for.
+ */
+function renderPerms(states, notes = {}) {
+  el.perms.replaceChildren(
+    ...PERMISSIONS.map((entry) => {
+      const state = states[entry.id] ?? PERM_STATE.unknown;
+      const row = document.createElement('div');
+      row.className = 'perms-row';
+      row.dataset.state = state;
+      row.dataset.perm = entry.id;
+
+      const text = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = entry.label;
+      const why = document.createElement('small');
+      why.textContent = notes[entry.id] || entry.why;
+      const says = document.createElement('span');
+      says.className = 'perms-state';
+      says.textContent = PERM_SAYS[state] ?? state;
+      text.append(name, why, says);
+
+      const ask = document.createElement('button');
+      ask.type = 'button';
+      ask.className = 'quiet';
+      // A denial cannot be undone from script — only the browser's own UI can.
+      // Saying "Pedir" there would be a button that provably does nothing.
+      ask.textContent = state === 'denied' ? 'Tentar' : 'Pedir';
+      ask.addEventListener('click', () => askPerm(entry.id));
+
+      row.append(text, ask);
+      return row;
+    })
+  );
+}
+
+/** Refresh every row without prompting for anything. */
+async function refreshPerms() {
+  renderPerms(await inspectPerms());
+  el.permsNote.textContent = secureOrigin()
+    ? ''
+    : 'Esta página está em HTTP, e nesse caso o navegador não deixa nem perguntar. ' +
+      'Abra pelo endereço https.';
+}
+
+/** Actually ask. This is the call that makes the browser prompt. */
+async function askPerm(id) {
+  const entry = findPerm(id);
+  if (!entry) return;
+  const row = el.perms.querySelector(`[data-perm="${id}"]`);
+  const button = row?.querySelector('button');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Pedindo…';
+  }
+  const { state, note } = await entry.ask();
+  const states = await inspectPerms();
+  // What the request itself reported beats the query: Firefox answers
+  // "unknown" for a camera it has just granted.
+  renderPerms({ ...states, [id]: state }, note ? { [id]: note } : {});
+}
+
+el.permsRefresh.addEventListener('click', refreshPerms);
+el.permsAll.addEventListener('click', async () => {
+  // One at a time. Browsers collapse or drop simultaneous prompts, and the
+  // user cannot answer two dialogs at once anyway.
+  for (const entry of PERMISSIONS) {
+    const states = await inspectPerms();
+    if (states[entry.id] === 'granted' || states[entry.id] === 'missing') continue;
+    await askPerm(entry.id);
+  }
+});
 
 // -- the settings sheet -----------------------------------------------------
 
@@ -1264,18 +1442,26 @@ async function loadDevice() {
 
 el.deviceRefresh.addEventListener('click', () => loadDevice());
 
-el.menu.addEventListener('click', () => {
+/** Open the sheet with everything in it already refreshed. */
+function openSettings() {
+  if (el.settings.open) return;
   renderProviders();
   loadDevice();
   // Asking on open is what "the models load by themselves" means. It is not
   // awaited: the sheet must be usable while a slow or dead endpoint times out.
   loadModels();
+  // Same reasoning, and this one matters more: the answer can have changed in
+  // the browser's own settings since the sheet was last open, and the page is
+  // never told when that happens.
+  refreshPerms();
   el.model.value = settings.model;
   el.speak.checked = settings.speak;
   el.wake.checked = settings.wake;
   el.voiceMode.textContent = describeVoice();
   el.settings.showModal();
-});
+}
+
+el.menu.addEventListener('click', openSettings);
 
 el.settings.addEventListener('close', () => {
   if (el.settings.returnValue === 'demo') {

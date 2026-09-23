@@ -40,7 +40,11 @@ async function sheet(file, cells, columns) {
       grid.id = 'sheet';
       grid.style.cssText =
         `position:fixed;inset:0;z-index:9999;background:#05070d;display:grid;` +
-        `grid-template-columns:repeat(${cols},1fr);gap:4px;padding:8px`;
+        `grid-template-columns:repeat(${cols},1fr);gap:4px;padding:8px;` +
+        // Without this the row stretches to the viewport and the cells take
+        // their height from it, so aspect-ratio ends up setting a width wider
+        // than the column and the last one falls off the sheet.
+        `align-items:start`;
       document.body.append(grid);
 
       const missing = [];

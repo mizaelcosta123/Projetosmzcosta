@@ -17,6 +17,7 @@
 
 import { LANDMARKS, ROLE, sampleFace } from './face.js';
 import { AU, Expression } from './expression.js';
+import { Gaze } from './gaze.js';
 import { sampleOrb } from './orb.js';
 
 const TAU = Math.PI * 2;
@@ -28,6 +29,28 @@ const TAU = Math.PI * 2;
  * shell inside a phone's width (about 0.89 of these units) at full volume.
  */
 const ORB_EDGE2 = 0.43;
+
+/**
+ * How far in front the camera sits, in the same units as the cloud.
+ *
+ * This is the whole of the perspective: a point at depth `z` is drawn
+ * `CAMERA / (CAMERA - z)` further from the centre, so near points spread and
+ * far ones close up. Smaller is a wider lens and a stronger effect; below
+ * about 2.5 the far side of the sphere collapses to a dot and the shell stops
+ * reading as a shell.
+ */
+const CAMERA = 3.4;
+
+/** Nothing may come closer than this, or its scale runs away. */
+const NEAREST = CAMERA - 1.15;
+
+/**
+ * How far from an eye's centre still counts as iris, squared.
+ *
+ * A shade over the iris radius, so the limbus travels with the rest of it
+ * rather than being left behind as a ring.
+ */
+const IRIS_REACH2 = (LANDMARKS.irisR * 1.25) ** 2;
 
 export { ROLE, sampleFace, sampleOrb };
 
@@ -106,6 +129,10 @@ export class ParticleField {
 
     this.x = new Float32Array(count);
     this.y = new Float32Array(count);
+    /** Depth. Not sprung like x and y -- it is only ever driven by things
+     *  that are already smooth (the head's pose, the burst), and a third
+     *  spring is a third of the loop's arithmetic for no visible gain. */
+    this.z = new Float32Array(count);
     this.vx = new Float32Array(count);
     this.vy = new Float32Array(count);
     // Per-particle phase so the shimmer does not pulse in lockstep.
@@ -115,8 +142,17 @@ export class ParticleField {
     for (let i = 0; i < count; i += 1) this.phase[i] = random() * TAU;
 
     this.shapes = {};
+    /** Each shape's own depth centre, so switching shape does not also zoom.
+     *  The face's depth field runs 0..0.76 and the sphere's -1.1..1.0; drawn
+     *  against the same camera without this, the face would arrive nearer and
+     *  a third larger than the sphere it grew out of. */
+    this.depthMid = {};
     for (const [name, sampler] of Object.entries(SHAPES)) {
-      this.shapes[name] = sampler(count);
+      const shapeData = sampler(count);
+      this.shapes[name] = shapeData;
+      let sum = 0;
+      for (const value of shapeData.zs) sum += value;
+      this.depthMid[name] = sum / (shapeData.zs.length || 1);
     }
 
     this.currentShape = shape;
@@ -144,6 +180,18 @@ export class ParticleField {
     this.expression = new Expression({ random: makeRandom(0xb1177 ^ count) });
     /** The action unit intensities for this frame, in AUS order. */
     this.au = this.expression.frame(0);
+
+    /** Where he is looking, and how his head is carried. Seeded for the same
+     *  reason the blinks are: a glance that lands differently each run makes
+     *  a screenshot test flaky in a way nobody can reproduce. */
+    this.gaze = new Gaze({ random: makeRandom(0x9a2e ^ count) });
+    /** This frame's gaze, read once and used by every particle.
+     *
+     *  Named `looking`, not `look`: an instance property shadows a prototype
+     *  method of the same name, and `look()` next to it is the method that
+     *  changes moods. Writing both spellings silently replaced the method
+     *  with an object on the first frame. */
+    this.looking = this.gaze.frame(0);
 
     this.resize();
   }
@@ -233,6 +281,34 @@ export class ParticleField {
   }
 
   /**
+   * Change what kind of looking he is doing.
+   *
+   * @param {string} mood A key of gaze.js's MOODS.
+   */
+  look(mood) {
+    this.gaze.look(mood);
+    return this;
+  }
+
+  /** Look at a point in the -1..1 box, and hold it. */
+  lookAt(x, y) {
+    this.gaze.at(x, y);
+    return this;
+  }
+
+  /** Roll his eyes. The head deliberately does not follow. */
+  rollEyes() {
+    this.gaze.rollEyes(this.time * 1000);
+    return this;
+  }
+
+  /** One nod. For agreeing without interrupting. */
+  nod() {
+    this.gaze.nod(this.time * 1000);
+    return this;
+  }
+
+  /**
    * Advance the simulation and draw one frame.
    *
    * @param {number} dt Seconds since the previous frame.
@@ -279,9 +355,30 @@ export class ParticleField {
     const au = this.au;
     const faceness = this.targetShape === 'face' ? m : this.currentShape === 'face' ? 1 - m : 0;
 
-    const { x, y, vx, vy, phase, ctx } = this;
+    // Where he is looking this frame. Read once: every particle uses the same
+    // answer, and asking per particle would be six hundred saccades a second.
+    this.looking = this.gaze.frame(this.time * 1000, energy);
+    const look = this.looking;
+    // The head only turns as much as there is a face to turn. During a morph
+    // this fades the pose out with the face rather than snapping it straight.
+    const yaw = look.yaw * faceness;
+    const pitch = look.pitch * faceness;
+    const roll = look.roll * faceness;
+    const turning = yaw !== 0 || pitch !== 0 || roll !== 0;
+    const cosY = Math.cos(yaw);
+    const sinY = Math.sin(yaw);
+    const cosP = Math.cos(pitch);
+    const sinP = Math.sin(pitch);
+    const cosR = Math.cos(roll);
+    const sinR = Math.sin(roll);
+
+    const { x, y, z, vx, vy, phase, ctx } = this;
     const scale = this.scale;
     const spread = 1 + energy * 0.05 + breath * 0.035;
+    // Where the depth of each shape sits, blended the same way the shapes are.
+    const midFrom = this.depthMid[this.currentShape] ?? 0;
+    const midTo = this.depthMid[this.targetShape] ?? 0;
+    const depthMid = blended ? midFrom + (midTo - midFrom) * m : midTo;
 
     // How much of what is on screen is the sphere. The face expresses speech
     // through a jaw and lips; the sphere has neither, so without this it could
@@ -308,10 +405,12 @@ export class ParticleField {
     for (let i = 0; i < this.count; i += 1) {
       const tx = blended ? from.xs[i] + (to.xs[i] - from.xs[i]) * m : to.xs[i];
       const ty = blended ? from.ys[i] + (to.ys[i] - from.ys[i]) * m : to.ys[i];
+      const tz = (blended ? from.zs[i] + (to.zs[i] - from.zs[i]) * m : to.zs[i]) - depthMid;
       const role = m < 0.5 ? from.roles[i] : to.roles[i];
 
       let goalX = tx * spread;
       let goalY = ty * spread;
+      let goalZ = tz;
 
       // -- the face, apart from the mouth ---------------------------------
       //
@@ -343,6 +442,10 @@ export class ParticleField {
         if (lid > 0.001) {
           goalY -= lid * au[AU.lidRaise] * 0.035;
           goalY += lid * (au[AU.lidTighten] + au[AU.blink]) * 0.055;
+          // The upper lid rides the eye. Looking down without this is a stare
+          // with the pupils moved; it is a small number and it is most of
+          // what separates a glance from a doll's eyes sliding in their head.
+          goalY += lid * look.lid * 0.03;
         }
 
         if (cheek > 0.001) {
@@ -378,6 +481,26 @@ export class ParticleField {
         if (nose > 0.001) {
           goalY -= nose * au[AU.noseWrinkle] * 0.03;
         }
+
+        // The iris, and only the iris.
+        //
+        // ROLE.EYE covers the sclera and the lashes too, and those belong to
+        // the socket: moving them would slide the whole eye across the face.
+        // The iris is the part within its own radius of the eye's centre, and
+        // testing for that is cheaper than carrying a fifteenth column for
+        // every particle in the cloud.
+        if (role === ROLE.EYE) {
+          const dx = Math.abs(tx) - LANDMARKS.eyeX;
+          const dy = ty - LANDMARKS.eyeY;
+          if (dx * dx + dy * dy < IRIS_REACH2) {
+            // Scaled to the aperture, which is 0.235 wide and 0.07 tall:
+            // sideways the iris has room to reach the corner, vertically it
+            // runs under the lid almost at once, so the two are not the same
+            // number.
+            goalX += look.eyeX * faceness * 0.068;
+            goalY += look.eyeY * faceness * 0.04;
+          }
+        }
       }
 
       if (energy > 0) {
@@ -407,6 +530,7 @@ export class ParticleField {
           // Loose points drift further out as he speaks.
           goalX *= 1 + energy * 0.16;
           goalY *= 1 + energy * 0.16;
+          goalZ *= 1 + energy * 0.16;
         } else {
           // Louder is not just wider, it is busier: the shimmer speeds up with
           // the voice, so a raised voice reads as agitation and not only as
@@ -416,6 +540,9 @@ export class ParticleField {
           const shake = energy * (0.05 + 0.05 * energy);
           goalX += Math.sin(this.time * rate + phase[i]) * shake;
           goalY += Math.cos(this.time * (rate * 0.84) + phase[i]) * shake;
+          // The shimmer in depth too, at a third frequency so the three do
+          // not beat together into a single circular wobble.
+          goalZ += Math.sin(this.time * (rate * 0.63) + phase[i] * 1.7) * shake;
 
           if (burst > 0) {
             // Per-particle, so the sphere separates into a cloud instead of
@@ -434,16 +561,54 @@ export class ParticleField {
             // and it is also what keeps the sphere on a phone screen, which
             // is only ~0.89 of these units wide. Squared radius, so no
             // square root runs for every particle on every frame.
+            //
+            // The radius here is deliberately the flat one, depth left out.
+            // What it is protecting against is running off the side of a
+            // phone, and that is a question about the screen. Including z
+            // made every point on the shell equidistant from the centre --
+            // which on a sphere they are -- so "crowded interior" stopped
+            // existing and almost nothing got pushed at all.
             const near = goalX * goalX + goalY * goalY;
             const room = near < ORB_EDGE2 ? 1 - near / ORB_EDGE2 : 0;
             const push = 1 + burst * 1.6 * share * room;
+            // Scaling all three moves each particle along its own radius, out
+            // from the centre of the sphere. That is what makes this an
+            // explosion rather than a widening: a point on the far side
+            // travels backwards, away from the camera, because backwards is
+            // the direction *it* is pointing -- and it shrinks as it goes,
+            // through the same perspective divide that grows the near ones.
             goalX *= push;
             goalY *= push;
+            goalZ *= push;
           }
         }
       } else if (this.restDrift > 0) {
         goalX += Math.sin(this.time + phase[i]) * this.restDrift;
       }
+
+      // -- the head, as a whole ------------------------------------------
+      //
+      // Rotating the *goal* rather than the drawn position is what keeps the
+      // spring below doing its job: the face arrives at the turn with the
+      // same weight it arrives at everything else, instead of the whole cloud
+      // being teleported every frame.
+      //
+      // Yaw, then pitch, then roll, about the head's own centre. Roll last
+      // because it is a rotation of the picture plane and applying it first
+      // would tilt the axes the other two turn about.
+      if (turning) {
+        const rx = goalX * cosY + goalZ * sinY;
+        const rz = goalZ * cosY - goalX * sinY;
+        const ry = goalY * cosP - rz * sinP;
+        goalZ = rz * cosP + goalY * sinP;
+        goalX = rx * cosR - ry * sinR;
+        goalY = rx * sinR + ry * cosR;
+      }
+
+      // Depth is not sprung; it is already smooth. Clamping keeps a particle
+      // from crossing the camera, where its scale would go to infinity and
+      // then negative.
+      z[i] = goalZ < NEAREST ? goalZ : NEAREST;
 
       // Critically-damped-ish spring: reaches the target without ringing.
       vx[i] = (vx[i] + (goalX - x[i]) * 14 * step) * 0.82;
@@ -480,8 +645,13 @@ export class ParticleField {
       const level = Math.min(LEVELS - 1, Math.floor(lit * LEVELS));
       const hueBucket = (blended ? to.accent[i] : to.accent[i]) * LEVELS;
 
+      // The perspective divide, and the only place depth reaches the screen.
+      // Near points spread apart and grow; far ones draw in and shrink, which
+      // is what turns a disc of dots into a shell you can see the far side of.
+      const k = CAMERA / (CAMERA - z[i]);
+
       const list = buckets[hueBucket + level];
-      list.push(this.cx + x[i] * scale, this.cy + y[i] * scale, size);
+      list.push(this.cx + x[i] * scale * k, this.cy + y[i] * scale * k, size * k);
     }
 
     ctx.fillStyle = '#04060b';
