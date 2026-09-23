@@ -71,7 +71,7 @@ def _plugin() -> Row:
     tools = [
         k
         for k in ToolRegistry.keys()  # noqa: SIM118 - a registry, not a mapping
-        if k.startswith("device_") or k in ("speak", "set_display_mode")
+        if k.startswith("device_") or k in ("speak", "set_display_mode", "conjure")
     ]
 
     if not engines and not tools:

@@ -13,9 +13,19 @@
 <body>
   <canvas id="field" aria-hidden="true"></canvas>
 
-  <!-- Where the holograms are drawn, over the camera, while a session runs.
-       Transparent and on top of everything, and out of the way otherwise. -->
+  <!-- Where the holograms are drawn: over the camera while a session runs,
+       and over the field (the stage) when there are some and no session. -->
   <canvas id="holo" aria-hidden="true" hidden></canvas>
+
+  <!-- The holograms without AR: shown with the stage, over the field. -->
+  <div id="holo-bar" class="holo-bar" hidden>
+    <p class="hint">Toque para escolher · arraste para mover · pince para girar e escalar · toque duas vezes para apagar</p>
+    <menu class="row">
+      <button type="button" id="holo-ar" class="quiet">Ver no ambiente</button>
+      <button type="button" id="holo-clear" class="quiet">Limpar</button>
+      <button type="button" id="holo-close" class="quiet">Guardar</button>
+    </menu>
+  </div>
 
   <!-- Handed to WebXR as the dom-overlay root, so these controls keep working
        while the session has the screen. -->
@@ -254,6 +264,18 @@
       <menu class="row">
         <button type="button" id="device-refresh" class="quiet">Conferir de novo</button>
       </menu>
+
+      <h2 id="memory-heading">Memória</h2>
+      <!-- What he has learned, where you can see it and take it back. A
+           memory nobody can inspect or delete is not a feature. -->
+      <p class="hint" id="memory-state" aria-live="polite"></p>
+      <ul id="memory-list" class="memory-list" aria-labelledby="memory-heading"></ul>
+      <menu class="row wrap">
+        <button type="button" id="memory-export" class="quiet">Exportar para o Obsidian</button>
+        <button type="button" id="memory-import" class="quiet">Importar notas</button>
+        <button type="button" id="memory-forget" class="quiet danger">Esquecer tudo</button>
+      </menu>
+      <input id="memory-file" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" multiple hidden>
 
       <label class="switch">
         <input id="speak" type="checkbox" checked>

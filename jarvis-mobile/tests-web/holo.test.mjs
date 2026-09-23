@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { SOLIDS, Scene, hologram, place, project, solid } from '../web/holo.js';
-import { HUES, conjure, learnedNames, parse, teaching } from '../web/conjure.js';
+import { HUES, MOST, SIZES, conjure, learnedNames, parse, perform, teaching } from '../web/conjure.js';
 import { apply as arApply, identity, whyNot } from '../web/ar.js';
 
 // -- geometry ----------------------------------------------------------------
@@ -194,6 +194,43 @@ test('a sentence that is not about shapes is handed on, not guessed at', () => {
   assert.equal(scene.items.length, 0);
 });
 
+test('ordinary sentences that share a word with a command are not swallowed', () => {
+  /* Each of these used to be intercepted before the model saw it: "tira" and
+     "some" are verbs for removing, "muda" for changing, "faz" for making,
+     and a shape named in a question is not a request for one. With objects
+     in the room it was worse -- "tira uma dúvida" emptied it. */
+  const scene = new Scene();
+  conjure(scene, 'um cubo');
+  conjure(scene, 'uma esfera');
+  for (const sentence of [
+    'tira uma dúvida pra mim',
+    'muda de assunto',
+    'give me some ideas',
+    'o que é uma pirâmide?',
+    'faz um resumo sobre a esfera celeste',
+    'gira em torno de que o planeta?',
+  ]) {
+    assert.equal(conjure(scene, sentence), null, sentence);
+  }
+  assert.equal(scene.items.length, 2, 'nada foi apagado nem criado');
+});
+
+test('commands made only of known words still work, fillers and all', () => {
+  const scene = new Scene();
+  assert.equal(conjure(scene, 'Jarvis, cria um cubo vermelho grande aí na minha frente, por favor'), 'Um cubo.');
+  assert.equal(conjure(scene, 'agora deixa ele azul'), 'Pronto.');
+  assert.equal(scene.last().hue, HUES.azul);
+  assert.equal(conjure(scene, 'limpa tudo'), 'Limpei 1 objeto.');
+});
+
+test('colours agree with the noun, and still count as known words', () => {
+  const scene = new Scene();
+  assert.equal(conjure(scene, 'uma bola vermelha'), 'Uma esfera.');
+  assert.equal(scene.last().hue, HUES.vermelho);
+  assert.equal(conjure(scene, 'uma pirâmide amarela minúscula'), 'Uma piramide.');
+  assert.equal(scene.last().hue, HUES.amarelo);
+});
+
 test('a shape he cannot build is handed on too', () => {
   const scene = new Scene();
   assert.equal(conjure(scene, 'me faz um dodecaedro'), null);
@@ -313,4 +350,55 @@ test('and a browser that has it is not refused up front', () => {
   // Whether AR actually works is a question only the device can answer, and
   // `supported()` asks it.
   assert.equal(whyNot({ xr: {} }, true), null);
+});
+
+// -- the model's tool call ---------------------------------------------------
+
+test('a tool call makes what it names, where it says', () => {
+  const scene = new Scene();
+  const said = perform(scene, { action: 'criar', shape: 'esfera', color: 'dourado', size: 'grande', place: 'direita' });
+  assert.equal(said, 'Uma esfera.');
+  const made = scene.last();
+  assert.deepEqual([made.shape, made.hue, made.size, made.x], ['esfera', HUES.dourado, SIZES.grande, 0.6]);
+});
+
+test('several of one shape sit side by side, centred on the place', () => {
+  const scene = new Scene();
+  assert.equal(perform(scene, { shape: 'cubo', count: 3 }), '3 cubos.');
+  const xs = scene.items.map((item) => item.x);
+  assert.equal(xs.length, 3);
+  assert.ok(Math.abs(xs.reduce((a, b) => a + b, 0)) < 1e-9, 'centrados');
+  assert.ok(xs[0] < xs[1] && xs[1] < xs[2], 'em fila');
+});
+
+test('a count past the limit is held to it, not obeyed', () => {
+  const scene = new Scene();
+  perform(scene, { shape: 'cubo', count: 500 });
+  assert.equal(scene.items.length, MOST);
+});
+
+test('names the browser does not know do nothing, rather than something else', () => {
+  /* The tool refuses these server-side. One arriving here means the two
+     tables drifted apart, and a silent wrong object would hide that. */
+  const scene = new Scene();
+  assert.equal(perform(scene, { shape: 'dodecaedro' }), null);
+  assert.equal(perform(scene, { action: 'explodir', shape: 'cubo' }), null);
+  assert.equal(scene.items.length, 0);
+  perform(scene, { shape: 'cubo', color: 'toString' });
+  assert.equal(scene.last().hue, 195, '"toString" está *em* todo objeto; não é uma cor');
+});
+
+test('changing, spinning, stopping and clearing through the tool', () => {
+  const scene = new Scene();
+  perform(scene, { shape: 'cubo' });
+  perform(scene, { shape: 'toro' });
+  assert.equal(perform(scene, { action: 'mudar', shape: 'cubo', color: 'verde' }), 'Pronto.');
+  assert.equal(scene.items[0].hue, HUES.verde);
+  assert.equal(perform(scene, { action: 'mudar' }), null, 'mudar sem o quê não faz nada');
+  assert.equal(perform(scene, { action: 'parar' }), 'Parado.');
+  assert.equal(scene.last().spin, 0);
+  assert.equal(perform(scene, { action: 'girar' }), 'Girando.');
+  assert.ok(scene.last().spin > 0);
+  assert.equal(perform(scene, { action: 'limpar', shape: 'toro' }), 'Tirei o toro.');
+  assert.equal(perform(scene, { action: 'limpar' }), 'Limpei 1 objeto.');
 });

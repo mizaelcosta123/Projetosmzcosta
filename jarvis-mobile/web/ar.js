@@ -15,7 +15,8 @@
  * `hands` will simply be absent. What a phone does have is where it is
  * pointing, so the gesture that works is the one built here: aim and tap,
  * with the reticle showing what the floor hit-test found. Pretending
- * otherwise would be a button that never works.
+ * otherwise would be a button that never works. Outside a session the glass
+ * itself is the hand -- see `stage.js` and `hands.js`.
  *
  * And where WebXR is missing entirely -- every iPhone browser today, and
  * Chrome without ARCore -- this says so plainly instead of failing quietly.
@@ -190,39 +191,54 @@ export class Reality {
   draw(view) {
     const context = this.context;
     if (!context) return;
-    const { width, height } = this.canvas;
-    context.clearRect(0, 0, width, height);
-
     const inverse = view.transform?.inverse?.matrix ?? view.inverse;
     if (!inverse) return;
-    const half = Math.min(width, height) / 2;
+    paint(context, this.canvas.width, this.canvas.height, this.scene, inverse, {
+      reticle: this.reticle,
+    });
+  }
+}
 
-    for (const edge of this.scene.edges()) {
-      const a = project(apply(inverse, edge.a));
-      const b = project(apply(inverse, edge.b));
-      if (!a.visible || !b.visible) continue;
-      // Further is dimmer and thinner, which is most of what makes a
-      // wireframe sit in a room instead of floating on the glass.
-      const depth = (a.depth + b.depth) / 2;
-      const fade = Math.max(0.08, Math.min(1, 1.6 / depth));
-      context.strokeStyle = `hsla(${edge.item.hue}, 90%, ${52 + fade * 18}%, ${fade})`;
-      context.lineWidth = Math.max(0.6, fade * 2.2);
+/**
+ * Draw a scene onto a 2D context, as seen through `inverse` (the camera's
+ * view matrix, column-major).
+ *
+ * One painter for both places holograms appear -- over the camera in a
+ * session, and over the field on the stage -- so they cannot drift apart.
+ * `selected` is drawn brighter and heavier: something you are holding has
+ * to look held.
+ */
+export function paint(context, width, height, scene, inverse, { reticle = null, selected = null } = {}) {
+  context.clearRect(0, 0, width, height);
+  const half = Math.min(width, height) / 2;
+
+  for (const edge of scene.edges()) {
+    const a = project(apply(inverse, edge.a));
+    const b = project(apply(inverse, edge.b));
+    if (!a.visible || !b.visible) continue;
+    // Further is dimmer and thinner, which is most of what makes a
+    // wireframe sit in a room instead of floating on the glass.
+    const depth = (a.depth + b.depth) / 2;
+    const fade = Math.max(0.08, Math.min(1, 1.6 / depth));
+    const held = selected !== null && edge.item === selected;
+    const light = held ? 78 : 52 + fade * 18;
+    context.strokeStyle = `hsla(${edge.item.hue}, 90%, ${light}%, ${held ? 1 : fade})`;
+    context.lineWidth = Math.max(0.6, fade * 2.2) * (held ? 1.8 : 1);
+    context.beginPath();
+    context.moveTo(width / 2 + a.x * half, height / 2 - a.y * half);
+    context.lineTo(width / 2 + b.x * half, height / 2 - b.y * half);
+    context.stroke();
+  }
+
+  if (reticle) {
+    const spot = project(apply(inverse, reticle));
+    if (spot.visible) {
+      context.strokeStyle = 'rgba(125, 211, 252, 0.8)';
+      context.lineWidth = 1.5;
       context.beginPath();
-      context.moveTo(width / 2 + a.x * half, height / 2 - a.y * half);
-      context.lineTo(width / 2 + b.x * half, height / 2 - b.y * half);
+      context.arc(width / 2 + spot.x * half, height / 2 - spot.y * half,
+                  Math.max(6, 26 / spot.depth), 0, Math.PI * 2);
       context.stroke();
-    }
-
-    if (this.reticle) {
-      const spot = project(apply(inverse, this.reticle));
-      if (spot.visible) {
-        context.strokeStyle = 'rgba(125, 211, 252, 0.8)';
-        context.lineWidth = 1.5;
-        context.beginPath();
-        context.arc(width / 2 + spot.x * half, height / 2 - spot.y * half,
-                    Math.max(6, 26 / spot.depth), 0, Math.PI * 2);
-        context.stroke();
-      }
     }
   }
 }

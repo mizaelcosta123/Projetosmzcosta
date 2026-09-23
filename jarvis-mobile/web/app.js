@@ -15,8 +15,12 @@ import { SANDBOX, asDocument, describe as describeRun, previewable } from './pre
 import { explain } from './diagnose.js';
 import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
 import { Scene } from './holo.js';
-import { conjure, learnedNames, teaching } from './conjure.js';
+import { Stage } from './stage.js';
+import { conjure, learnedNames, perform, teaching } from './conjure.js';
 import { Memory } from './memory.js';
+import { contextFor as placeContext } from './place.js';
+import { notifyReply, registerWorker } from './pwa.js';
+import { download as downloadNote, fromMarkdown, toMarkdown } from './vault.js';
 import { Decider } from './decide.js';
 import { LiveSession, WakeWord } from './live.js';
 import {
@@ -75,6 +79,16 @@ const el = {
   arDrop: document.getElementById('ar-drop'),
   arClear: document.getElementById('ar-clear'),
   arStop: document.getElementById('ar-stop'),
+  memoryState: document.getElementById('memory-state'),
+  memoryList: document.getElementById('memory-list'),
+  memoryExport: document.getElementById('memory-export'),
+  memoryImport: document.getElementById('memory-import'),
+  memoryForget: document.getElementById('memory-forget'),
+  memoryFile: document.getElementById('memory-file'),
+  holoBar: document.getElementById('holo-bar'),
+  holoAr: document.getElementById('holo-ar'),
+  holoClear: document.getElementById('holo-clear'),
+  holoClose: document.getElementById('holo-close'),
   modelPick: document.getElementById('model-pick'),
   catalogue: document.getElementById('catalogue'),
   catalogueTitle: document.getElementById('catalogue-title'),
@@ -241,6 +255,24 @@ const reality = new Reality({
     setCaption(text);
   },
 });
+
+/** The same holograms without AR: over the field, handled with a finger.
+ *  Without it, "cria um cubo" on anything lacking ARCore answered with a
+ *  sentence about an object nobody could see. */
+const stage = new Stage({
+  canvas: el.holo,
+  scene,
+  bar: el.holoBar,
+  onStatus: (text) => setCaption(text),
+  busy: () => reality.running,
+});
+
+/** Show the stage when there is something to show; put it away when not. */
+function refreshStage() {
+  if (reality.running) return;
+  if (scene.items.length > 0) stage.show();
+  else stage.hide();
+}
 
 // Debounced through rAF: orientation changes fire resize in bursts, and the
 // canvas reallocation is the expensive part.
@@ -411,6 +443,18 @@ function watchAgentEvents() {
       const where = data.arguments?.gaze;
       if (where) field.look(where);
       GESTURES[data.arguments?.gesture]?.();
+      return;
+    }
+
+    // The model making holograms. On the *end* event, not the start: only a
+    // call the tool accepted is drawn, and its metadata is the arguments
+    // after checking. The start event carries whatever the model sent.
+    if (payload.type === 'tool_call_end' && data.tool === 'conjure' && data.success) {
+      const done = perform(scene, data.metadata ?? {});
+      if (done) {
+        if (reality.running) el.arStatus.textContent = done;
+        refreshStage();
+      }
       return;
     }
 
@@ -641,6 +685,11 @@ async function streamReply(text, onChunk) {
         recalled.map(({ row }) => `- (${row.kind}) ${row.text}`).join('\n'),
     });
   }
+  // Where you are and the weather there -- only for a question about either,
+  // only when location was already granted, and rounded to a kilometre. See
+  // place.js for why each of those three is there.
+  const situated = text ? await placeContext(text).catch(() => '') : '';
+  if (situated) messages.push({ role: 'system', content: situated });
   messages.push({ role: 'user', content });
 
   const body = {
@@ -750,6 +799,7 @@ function handleHere(text) {
   if (!reality.running) {
     el.arStatus.textContent = done;
   }
+  refreshStage();
   say(done).catch(() => {});
   return true;
 }
@@ -788,6 +838,9 @@ async function ask(text) {
       renderTray();
     }
     offerPreview(reply);
+    // Only does anything if you went to another app while he was thinking,
+    // and only if notifications were granted in the panel.
+    notifyReply(reply).catch(() => {});
     // What was asked, kept. Not the answer: answers are long, go stale, and
     // recalling one would put yesterday's reply in today's context as if it
     // were a fact. The question is what says who you are.
@@ -1452,6 +1505,8 @@ async function enterAR() {
     setStatus('erro', 'error');
     return;
   }
+  // The session takes the canvas; the stage steps aside and comes back after.
+  stage.hide();
   sizeHolo();
   el.holo.hidden = false;
   el.arOverlay.hidden = false;
@@ -1466,6 +1521,8 @@ function leaveAR() {
   el.holo.hidden = true;
   el.arOverlay.hidden = true;
   field.start();
+  // Whatever was made in the room is still there, and now shows on the glass.
+  refreshStage();
 }
 
 el.arStop.addEventListener('click', async () => {
@@ -1482,6 +1539,18 @@ el.arClear.addEventListener('click', () => {
 });
 window.addEventListener('resize', () => {
   if (reality.running) sizeHolo();
+  else if (stage.shown) stage.resize();
+});
+el.holoAr.addEventListener('click', () => enterAR());
+el.holoClear.addEventListener('click', () => {
+  const gone = scene.clear();
+  setCaption(gone ? `Limpei ${gone} ${gone === 1 ? 'objeto' : 'objetos'}.` : '');
+  refreshStage();
+});
+el.holoClose.addEventListener('click', () => {
+  // Put away, not deleted: the next thing asked for brings them all back.
+  stage.hide();
+  setCaption('Guardei os hologramas. Peça outro e eles voltam.');
 });
 
 // -- the settings sheet -----------------------------------------------------
@@ -1874,6 +1943,75 @@ function rememberAgent(id, agent) {
 
 el.deviceRefresh.addEventListener('click', () => loadDevice());
 
+// -- memory ------------------------------------------------------------------
+
+/** How many rows the sheet shows. The export has all of them. */
+const MEMORY_SHOWN = 12;
+
+/** Redraw the memory section from the store. */
+function renderMemory(note = '') {
+  const rows = memory.all();
+  const kinds = rows.reduce((count, row) => ({ ...count, [row.kind]: (count[row.kind] ?? 0) + 1 }), {});
+  const summary = rows.length
+    ? `${rows.length} ${rows.length === 1 ? 'lembrança' : 'lembranças'}: ` +
+      Object.entries(kinds).map(([kind, n]) => `${n} ${kind}`).join(', ') + '.'
+    : 'Nada ainda. Ele guarda o que você pede e os nomes que você ensina.';
+  el.memoryState.textContent = note ? `${note} ${summary}` : summary;
+
+  const fragment = document.createDocumentFragment();
+  for (const row of rows.slice(0, MEMORY_SHOWN)) {
+    const item = document.createElement('li');
+    const text = document.createElement('span');
+    text.textContent = row.text;
+    text.title = row.text;
+    const kind = document.createElement('small');
+    kind.textContent = row.kind;
+    const forget = document.createElement('button');
+    forget.type = 'button';
+    forget.textContent = '×';
+    forget.setAttribute('aria-label', `Esquecer: ${row.text}`);
+    forget.addEventListener('click', () => {
+      memory.forget(row.id);
+      renderMemory('Esquecido.');
+    });
+    item.append(text, kind, forget);
+    fragment.append(item);
+  }
+  el.memoryList.replaceChildren(fragment);
+  el.memoryExport.disabled = rows.length === 0;
+  el.memoryForget.disabled = rows.length === 0;
+}
+
+el.memoryExport.addEventListener('click', () => {
+  const name = downloadNote(toMarkdown(memory.all()));
+  renderMemory(`Salvei ${name}. Coloque na pasta do seu vault.`);
+});
+el.memoryImport.addEventListener('click', () => el.memoryFile.click());
+el.memoryFile.addEventListener('change', async () => {
+  const files = [...el.memoryFile.files];
+  el.memoryFile.value = '';
+  let added = 0;
+  let read = 0;
+  for (const file of files) {
+    try {
+      added += memory.absorb(fromMarkdown(await file.text(), { source: file.name }));
+      read += 1;
+    } catch {
+      /* One unreadable file should not lose the others. */
+    }
+  }
+  renderMemory(
+    `${read} ${read === 1 ? 'nota lida' : 'notas lidas'}, ${added} ${added === 1 ? 'lembrança nova' : 'lembranças novas'}.`
+  );
+});
+el.memoryForget.addEventListener('click', () => {
+  // The one irreversible button here, so it asks. Everything else can be
+  // undone by saying it again.
+  if (!window.confirm('Esquecer tudo o que ele aprendeu com você? Não dá para desfazer — exporte antes se quiser guardar.')) return;
+  const gone = memory.clear();
+  renderMemory(`Esqueci ${gone}.`);
+});
+
 /** Open the sheet with everything in it already refreshed. */
 function openSettings() {
   if (el.settings.open) return;
@@ -1886,6 +2024,7 @@ function openSettings() {
   // the browser's own settings since the sheet was last open, and the page is
   // never told when that happens.
   refreshPerms();
+  renderMemory();
   renderModels();
   el.speak.checked = settings.speak;
   el.wake.checked = settings.wake;
@@ -1971,6 +2110,11 @@ async function adoptLocalOllama() {
   setCaption(`Achei o Ollama em ${entry.url} e já apontei para ele.`);
   return 'adotado';
 }
+
+// Offline shell and notifications. After load, so caching the page's own
+// files never competes with loading them.
+if (document.readyState === 'complete') registerWorker();
+else window.addEventListener('load', () => registerWorker(), { once: true });
 
 // First run: nothing saved and nothing to talk to, so say so rather than
 // leaving an input box that can only fail.

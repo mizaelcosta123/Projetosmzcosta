@@ -245,6 +245,52 @@ export class Memory {
     return true;
   }
 
+  /** Forget everything. Asked for by a person, so it is total. */
+  clear() {
+    const gone = this.rows.length;
+    this.rows = [];
+    this.keys = [];
+    this.adapter.save(this.rows);
+    return gone;
+  }
+
+  /**
+   * Take in rows from elsewhere -- a note from a vault, an old export.
+   *
+   * A row already known (same text, same kind) is not duplicated: the
+   * larger use count and the later date win, so importing yesterday's export
+   * twice changes nothing and importing it after a week of use loses nothing.
+   *
+   * @returns {number} How many were new.
+   */
+  absorb(rows = []) {
+    let added = 0;
+    for (const incoming of rows) {
+      const text = String(incoming?.text ?? '').trim();
+      if (!text) continue;
+      const kind = incoming.kind || 'nota';
+      const known = this.rows.find((row) => fold(row.text) === fold(text) && row.kind === kind);
+      if (known) {
+        known.uses = Math.max(known.uses, Number(incoming.uses) || 0);
+        known.at = Math.max(known.at, Number(incoming.at) || 0);
+        continue;
+      }
+      const row = episode({
+        text,
+        kind,
+        at: Number(incoming.at) || this.now(),
+        uses: Number(incoming.uses) || 0,
+        source: incoming.source ?? '',
+      });
+      this.rows.push(row);
+      this.keys.push(embed(text));
+      added += 1;
+    }
+    this._forgetOldest();
+    this.adapter.save(this.rows);
+    return added;
+  }
+
   /** Everything, newest first. */
   all() {
     return [...this.rows].sort((a, b) => b.at - a.at);

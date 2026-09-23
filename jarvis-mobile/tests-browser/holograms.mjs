@@ -1,5 +1,6 @@
 /**
- * Conjuring things by speaking, and what the app does with no WebXR.
+ * Conjuring things by speaking, handling them with a finger on the stage,
+ * and what the app does with no WebXR.
  *
  * Playwright's Chromium has no WebXR and no ARCore, which is not a gap in
  * this test — it is the majority case. Every iPhone browser and every Android
@@ -60,6 +61,68 @@ check('um toro', await say('me faz uma rosquinha'), 'Um toro.');
 // further down. Reaching into the page for a private field would test the
 // wiring of the test rather than the behaviour.
 
+console.log('\no palco: os objetos aparecem sem RA');
+const stage = await page.evaluate(() => {
+  const c = document.getElementById('holo');
+  return { hidden: c.hidden, on: c.dataset.stage ?? null, bar: document.getElementById('holo-bar').hidden };
+});
+check('o canvas apareceu, no modo palco', [stage.hidden, stage.on], [false, 'on']);
+check('com os controles', stage.bar, false);
+/** Lit pixels on the hologram canvas, and where their centre is. */
+async function lit() {
+  return page.evaluate(() => {
+    const c = document.getElementById('holo');
+    const { data, width, height } = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+    let n = 0; let sx = 0; let sy = 0;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] > 40) { n += 1; const p = (i - 3) / 4; sx += p % width; sy += Math.floor(p / width); }
+    }
+    return { n, x: n ? sx / n / (width / innerWidth) : 0, y: n ? sy / n / (height / innerHeight) : 0 };
+  });
+}
+await page.waitForTimeout(200);
+const drawn = await lit();
+check('e desenhou algo de verdade', drawn.n > 200, true);
+const composerHit = await page.evaluate(() => {
+  const r = document.getElementById('prompt').getBoundingClientRect();
+  return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.id;
+});
+check('o campo de texto continua tocável por cima do palco', composerHit, 'prompt');
+
+// The cube is on the right (x 0.6, z -1). Find it by the same maths the
+// stage uses -- rebuilding the three things said so far and fitting the
+// camera to them -- and drag it up the screen.
+const at = await page.evaluate(async () => {
+  const { toScreen, fit } = await import('./hands.js');
+  const cube = { shape: 'cubo', x: 0.6, y: 0, z: -1, size: 0.45 };
+  const others = [{ x: 0, y: 0, z: -1, size: 0.25 }, { x: 0, y: 0, z: -1, size: 0.25 }];
+  const cam = fit([cube, ...others], innerWidth, innerHeight);
+  return toScreen(cube, innerWidth, innerHeight, cam);
+});
+await page.mouse.move(at.x, at.y);
+await page.mouse.down();
+await page.waitForTimeout(80);
+const held = await page.$eval('#caption', (n) => n.textContent.trim());
+check('tocar segura o objeto', /^Segurando o cubo/.test(held), true);
+for (let i = 1; i <= 8; i += 1) {
+  await page.mouse.move(at.x - (at.x - 206) * (i / 8), at.y - 200 * (i / 8));
+  await page.waitForTimeout(16);
+}
+await page.mouse.up();
+await page.waitForTimeout(150);
+const after = await lit();
+check('arrastar levou o desenho junto (subiu)', after.y < drawn.y - 40, true);
+
+// Double tap where the cube now is: it goes.
+await page.mouse.click(206, at.y - 200);
+await page.waitForTimeout(90);
+await page.mouse.click(206, at.y - 200);
+await page.waitForTimeout(150);
+check('toque duplo apaga', (await page.$eval('#caption', (n) => n.textContent.trim())).startsWith('Apaguei o cubo'), true);
+const fewer = await lit();
+check('e some da tela', fewer.n === 0 || fewer.n < after.n, true);
+check('mais um cubo, para o resto do teste', await say('cria um cubo azul grande à minha direita'), 'Um cubo.');
+
 console.log('\nensinar um nome');
 check('ele anota', await say('quando eu disser caixote é um cubo'), 'Anotado: caixote é um cubo.');
 check('e usa', await say('poe um caixote aqui'), 'Um cubo.');
@@ -74,6 +137,8 @@ check('tentou a rede, e o endereço está morto', /não|erro|alcanc/i.test(passe
 
 console.log('\nlimpar');
 check('limpa tudo', await say('limpa tudo'), 'Limpei 4 objetos.');
+check('com nada na sala o palco sai', await page.$eval('#holo', (c) => [c.hidden, c.dataset.stage ?? null]), [true, null]);
+check('e os controles dele também', await page.$eval('#holo-bar', (n) => n.hidden), true);
 
 console.log('\nsem WebXR, que é a maioria dos aparelhos');
 await page.click('#more');

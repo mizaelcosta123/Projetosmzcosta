@@ -14,6 +14,12 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 | `particles.js` | The field: slots, morphing, the spring, the renderer |
 | `voice.js` | Two ways to answer "how loud is he right now?" |
 | `app.js` | Wiring: settings, chat streaming, speech, the agent's mode switch |
+| `holo.js` / `conjure.js` | Hologram geometry, and a sentence (or the model's `conjure` call) to objects |
+| `ar.js` / `stage.js` / `hands.js` | Where holograms are drawn: in the room under WebXR, or on the screen, handled with a finger |
+| `memory.js` / `vault.js` | What he learns, recalled by attention; out to and back from an Obsidian note |
+| `decide.js` | Which of the kept models to send a message through, learned from outcomes |
+| `place.js` | Position and weather, only for a question about either |
+| `pwa.js` / `sw.js` | Offline shell and reply notifications |
 | `index.html` / `styles.css` | The frame around the canvas |
 
 ## The frame
@@ -250,3 +256,60 @@ que dá para poucos segundos. Não existe botão de vídeo aqui de propósito: e
 pareceria igual ao que funciona e custaria um minuto de espera para falhar. A
 tabela `CAPABILITIES` em `generate.js` carrega esse fato, e um teste o fixa —
 se algum dia virar gratuito de verdade, é lá que muda.
+
+
+## Hologramas sem RA, e a mão que os segura
+
+Um holograma só existia dentro de uma sessão WebXR: num celular sem ARCore —
+ou num computador — "cria um cubo" respondia "Um cubo." e não mostrava nada.
+Agora a mesma cena é desenhada sobre o campo (`stage.js`), pelo mesmo pintor da
+RA, e aparece quando há algo para mostrar.
+
+A câmera do palco fica **um pouco acima** da sala (24°): visto de nível, um toro
+deitado é uma faixa e um cubo é um quadrado — um wireframe de lado não dá
+profundidade nenhuma. E **recua até caber tudo** (`fit` em `hands.js`),
+parando de ajustar enquanto um dedo está na tela, senão o objeto fugiria do
+dedo no meio do arrasto.
+
+O vidro é a mão: tocar escolhe, arrastar move — no plano de frente para a
+câmera, então o objeto fica exatamente sob o dedo —, pinçar escala e girar os
+dois dedos gira; toque duplo apaga. O que se arrasta é o que o dedo tocou, não
+o que estava selecionado: começar no vidro vazio não carrega nada junto.
+
+### O caminho rápido não engole mais frases
+
+As regras de voz só agem quando **toda** palavra da frase é entendida (verbo,
+forma, cor, tamanho, lugar ou enchimento como "aí", "por favor") e a frase não
+é uma pergunta. Antes, "tira uma dúvida" limpava a sala, "muda de assunto"
+respondia "nada aí para mexer" e "o que é uma pirâmide?" desenhava uma — todas
+engolidas antes de chegar ao modelo. O resto vai para o modelo, que agora tem a
+ferramenta `conjure` e desenha pelo evento `tool_call_end` — o de fim, porque só
+ele traz os argumentos já conferidos.
+
+## Onde você está, e o tempo aí
+
+A permissão de localização era pedida no painel e nada a lia. Agora (`place.js`):
+só numa pergunta sobre lugar ou clima; só se já estiver liberada — a posição
+nunca é pedida no meio da conversa, porque `getCurrentPosition` sem permissão
+*abre* o prompt; e arredondada para duas casas, ~1 km, antes de sair do
+aparelho. O tempo vem do Open-Meteo, sem chave. Sem permissão, o modelo é
+avisado para não inventar uma cidade.
+
+## Offline e notificações
+
+`sw.js` é **rede primeiro**: um service worker que serve o cache primeiro é o
+jeito clássico de publicar um app que nunca atualiza. E não tem lista de
+arquivos — a página diz o que carregou, e ele guarda; o `deploy.py` registra o
+que uma lista fixa já causou aqui. Nunca guarda `/v1/`, `/api/` nem `/health`.
+
+A notificação só sai com o app em segundo plano e a permissão dada, e pelo
+service worker: no Android, `new Notification()` lança "Illegal constructor".
+
+## Memória à vista, e o Obsidian
+
+Configurações → Memória mostra o que ele aprendeu, com um × em cada linha e um
+"Esquecer tudo" que pergunta antes. "Exportar para o Obsidian" salva uma nota
+com front matter e uma seção por tipo; a contabilidade (`usos`, data) vai num
+comentário `%%…%%`, invisível na leitura. "Importar notas" aceita essa nota de
+volta — sem duplicar — e **qualquer** nota do vault: cada item, tarefa ou
+parágrafo vira uma lembrança.

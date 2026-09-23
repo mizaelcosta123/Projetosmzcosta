@@ -18,6 +18,10 @@ registries, so this package registers into them and leaves upstream untouched �
 | **Device bridge** | The same tools from a backend that is *not* on the phone: a one-file runner in Termux dials out over a WebSocket and the agent's calls travel down it. Works behind NAT, opens no port, and the phone decides what it will run |
 | **Provider presets** | OpenRouter, Nous Portal (Hermes), Hugging Face, OpenCode Zen — endpoints pre-filled, you supply only a key. Any other OpenAI-compatible URL still works |
 | **Shell** | Inside Termux, OpenJarvis's own `shell_exec` already *is* your phone's shell. From anywhere else, `device_shell` is — over the bridge |
+| **Holograms** | 3D wireframe solids made by voice ("um cubo vermelho à direita") or by the model through the `conjure` tool. They sit in your room under WebXR and, everywhere else, on the screen, where a finger moves, pinches, twists and deletes them |
+| **Memory** | What you ask and the names you teach, recalled by attention for the next question. Visible and deletable in Configurações → Memória, and exported to / imported from an **Obsidian** note |
+| **Place and weather** | When — and only when — a question is about where you are or the sky, and location was already granted: a position rounded to ~1 km, and the forecast from Open-Meteo (no key) |
+| **Installed app** | A service worker that opens the app with no signal (network first, so a deploy is never hidden) and notifies you when a reply lands while you are in another app |
 
 ## Why this shape
 
@@ -128,5 +132,26 @@ failing opaquely.
 
 ## Status
 
-Early. The device tools and provider presets are implemented and tested; the
-Termux installer and the PWA build are the next pieces.
+| Done | |
+|---|---|
+| Device tools, the bridge, provider presets | tested in Python |
+| Termux installer (`install-termux.sh`) and Render deploy (`render.yaml`) | |
+| Interface: face and orb, expressions, gaze, live voice with barge-in | |
+| Providers with a model catalogue, and routing by what each model got right | |
+| Holograms: by voice, by the model's `conjure` tool, on the screen with gestures, in the room with WebXR | |
+| Attention-based memory, visible and deletable, round-tripping through Obsidian | |
+| Location and weather, only when a question needs them | |
+| Installable PWA that opens offline and notifies | |
+
+Not done, on purpose or by limit:
+
+- **Tracking your hand through the camera.** A phone in AR uses the rear
+  camera and WebXR exposes no hands on a phone, so the gesture that works is
+  touch — and that is what exists. Front-camera tracking (MediaPipe) outside
+  AR would mean a model of several megabytes fetched from another domain: a
+  decision to make, not one to inherit.
+- **Syncing a vault folder by itself.** Chrome on Android has no directory
+  picker; what works on the phone is the `.md` file out and back. An adapter
+  that reads the vault directly from Termux is the natural next step — `Memory`
+  already accepts one.
+- **SMS and calls** — see *Security posture* above.

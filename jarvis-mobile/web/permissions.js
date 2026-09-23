@@ -191,7 +191,7 @@ export const PERMISSIONS = [
   {
     id: 'geolocation',
     label: 'Localização',
-    why: 'Responder sobre onde você está: tempo, trajeto, o que há por perto.',
+    why: 'Responder sobre o tempo e o que há por perto. Só vai junto quando a pergunta é sobre isso, e arredondada para ~1 km.',
     read: () => read('geolocation'),
     ask: () =>
       new Promise((resolve) => {
@@ -236,7 +236,7 @@ export const PERMISSIONS = [
   {
     id: 'notifications',
     label: 'Notificações',
-    why: 'Avisar quando uma tarefa longa terminar.',
+    why: 'Avisar quando a resposta chegar e você estiver em outro app.',
     read: async () => {
       const api = globalThis.Notification;
       if (!api) return STATE.missing;
