@@ -16,6 +16,9 @@ import { explain } from './diagnose.js';
 import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
 import { Scene } from './holo.js';
 import { Stage } from './stage.js';
+import { Lens } from './lens.js';
+import { Synth } from './synth.js';
+import { NODS, Rotation, THINKING, Talk, VOICE_PROMPT } from './utter.js';
 import { conjure, learnedNames, perform, teaching } from './conjure.js';
 import { Memory } from './memory.js';
 import { contextFor as placeContext } from './place.js';
@@ -85,6 +88,17 @@ const el = {
   memoryImport: document.getElementById('memory-import'),
   memoryForget: document.getElementById('memory-forget'),
   memoryFile: document.getElementById('memory-file'),
+  lens: document.getElementById('lens'),
+  lensVideo: document.getElementById('lens-video'),
+  lensHands: document.getElementById('lens-hands'),
+  lensBar: document.getElementById('lens-bar'),
+  lensStatus: document.getElementById('lens-status'),
+  lensPose: document.getElementById('lens-pose'),
+  lensFlip: document.getElementById('lens-flip'),
+  lensSynth: document.getElementById('lens-synth'),
+  lensNote: document.getElementById('lens-note'),
+  lensXr: document.getElementById('lens-xr'),
+  lensClose: document.getElementById('lens-close'),
   holoBar: document.getElementById('holo-bar'),
   holoAr: document.getElementById('holo-ar'),
   holoClear: document.getElementById('holo-clear'),
@@ -265,6 +279,33 @@ const stage = new Stage({
   bar: el.holoBar,
   onStatus: (text) => setCaption(text),
   busy: () => reality.running,
+});
+
+/** Augmented reality through the camera, with hands. Works on any phone
+ *  with a camera; WebXR is offered from inside it where the device has it. */
+/** Played with the hands in the camera mode. Created now, silent until the
+ *  button is pressed: a browser keeps audio off until a tap asks for it. */
+const synth = new Synth();
+
+const lens = new Lens({
+  root: el.lens,
+  synth,
+  onNote: (text) => {
+    el.lensNote.textContent = text;
+  },
+  video: el.lensVideo,
+  overlay: el.lensHands,
+  stage,
+  scene,
+  onStatus: (text) => {
+    el.lensStatus.textContent = text;
+  },
+  onPose: (label) => {
+    el.lensPose.textContent = label;
+    // Once a hand has been seen the legend has done its job, and it covers
+    // the top of the frame, which is where fingers are.
+    if (label) el.lensBar.dataset.seen = '';
+  },
 });
 
 /** Show the stage when there is something to show; put it away when not. */
@@ -653,7 +694,7 @@ async function modelFor(base, headers) {
  * @param {(chunk: string) => void} onChunk Called with each delta.
  * @returns {Promise<string>} The full reply.
  */
-async function streamReply(text, onChunk) {
+async function streamReply(text, onChunk, { voice: byVoice = false, signal } = {}) {
   const base = serverOf(settings);
   if (!base) throw new Error('Nenhum servidor configurado.');
 
@@ -690,6 +731,10 @@ async function streamReply(text, onChunk) {
   // place.js for why each of those three is there.
   const situated = text ? await placeContext(text).catch(() => '') : '';
   if (situated) messages.push({ role: 'system', content: situated });
+  // A spoken turn is answered out loud while it is written, so ask for what
+  // sounds like speech -- and a short first sentence, because that is how
+  // long the silence lasts before he starts.
+  if (byVoice) messages.push({ role: 'system', content: VOICE_PROMPT });
   messages.push({ role: 'user', content });
 
   const body = {
@@ -702,6 +747,7 @@ async function streamReply(text, onChunk) {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -800,11 +846,82 @@ function handleHere(text) {
     el.arStatus.textContent = done;
   }
   refreshStage();
+  // What was just asked for by voice is what a V makes next, so "esfera
+  // roxa" followed by a V makes purple spheres.
+  const last = scene.last();
+  if (last) lens.pending = { shape: last.shape, hue: last.hue, size: last.size };
   say(done).catch(() => {});
   return true;
 }
 
-async function ask(text) {
+// -- speaking while the answer arrives ----------------------------------------
+
+/** The little sounds: "aham" while you talk, "hum…" while he thinks. */
+const nodSounds = new Rotation(NODS);
+const thinkingSounds = new Rotation(THINKING);
+
+/** A spoken question with no first sentence by now gets a "Hum…" instead of
+ *  silence. Soon enough to fill the gap, late enough that a fast model's
+ *  real answer usually wins and the filler is never heard. */
+const THINK_AFTER_MS = 600;
+
+/** One piece of the answer, out loud. The browser voice only: an agent's
+ *  `speak` tool brings its own audio, and speaking the text too would say
+ *  everything twice. */
+function speakPiece(piece) {
+  if (voice instanceof SynthesisDriver) return voice.speak(piece);
+  return Promise.resolve();
+}
+
+/**
+ * The voice for one answer, fed as the stream arrives (utter.js).
+ *
+ * Cutting in stops three things at once: the voice, what was still queued,
+ * and the request -- so the model stops generating an answer nobody is
+ * listening to, and your next question is not dropped while it finishes.
+ */
+function startTalk(controller) {
+  const handle = {
+    pause: () => {
+      talk.cancel();
+      voice.stop();
+      controller.abort();
+    },
+    setVolume: (volume) => voice.setVolume(volume),
+  };
+  const talk = new Talk({
+    speak: speakPiece,
+    onStart: () => {
+      if (live?.active) live.speakingStarted(handle);
+    },
+    onEnd: () => {
+      if (live?.active) live.speakingEnded();
+    },
+  });
+  return talk;
+}
+
+/**
+ * "Aham." -- a short pause while you are still talking.
+ *
+ * Its own utterance, not the answer's voice: it must not register as him
+ * talking (that would make your next word a barge-in), and it is quieter.
+ * Remembered by the session, so if the recogniser hears it as you it is
+ * taken back out of your sentence.
+ */
+function nod() {
+  if (!settings.speak || busy || !globalThis.speechSynthesis || speechSynthesis.speaking) return;
+  const text = nodSounds.next();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'pt-BR';
+  utterance.rate = 1.1;
+  utterance.volume = 0.8;
+  if (voice instanceof SynthesisDriver && voice.voice) utterance.voice = voice.voice;
+  live?.heardOwn(text);
+  speechSynthesis.speak(utterance);
+}
+
+async function ask(text, { byVoice = false } = {}) {
   // A photo with no words is a message: "what is this?" is the question, and
   // buildContent supplies it. Only an empty field *and* an empty tray is
   // nothing to send.
@@ -821,13 +938,24 @@ async function ask(text) {
   setStatus('pensando', 'thinking');
 
   const began = performance.now();
+  const controller = new AbortController();
+  const talk = settings.speak ? startTalk(controller) : null;
+  // Only for a spoken question: typing and waiting is normal, talking into
+  // silence is not.
+  const thinking = talk && byVoice
+    ? setTimeout(() => talk.prelude(thinkingSounds.next()), THINK_AFTER_MS)
+    : null;
   try {
     let shown = '';
     const sent = attached;
     const reply = await streamReply(text, (chunk) => {
       shown += chunk;
       setCaption(shown);
-    });
+      // Out loud as it arrives, a sentence at a time -- not after the model
+      // has finished, which on a free model was seconds of silence.
+      talk?.push(chunk);
+    }, { voice: byVoice, signal: controller.signal });
+    clearTimeout(thinking);
     // The outcome, filed against whatever was routed to. An empty reply counts
     // as a failure: a model that answers with nothing has not answered.
     if (routedTo) decider.learn(routedTo, { ok: reply.trim().length > 0, ms: performance.now() - began });
@@ -845,9 +973,16 @@ async function ask(text) {
     // recalling one would put yesterday's reply in today's context as if it
     // were a fact. The question is what says who you are.
     if (text) memory.learn(text, { kind: 'pedido' });
-    await say(reply);
+    if (talk) await talk.finish();
     if (!settings.speak) setStatus('em repouso');
   } catch (error) {
+    clearTimeout(thinking);
+    talk?.cancel();
+    // Cut off by you starting to talk: not a failure, and not the model's.
+    if (error?.name === 'AbortError') {
+      setStatus(live?.active ? 'ouvindo' : 'em repouso', live?.active ? 'listening' : undefined);
+      return;
+    }
     // A refusal is evidence about the route too, and the kind that matters
     // most: a model that has started failing should stop being chosen.
     if (routedTo) decider.learn(routedTo, { ok: false, ms: performance.now() - began });
@@ -955,14 +1090,15 @@ async function toggleLive(first = '') {
   });
 
   session.addEventListener('ask', (event) => {
-    ask(event.detail.text);
+    ask(event.detail.text, { byVoice: true });
   });
+  session.addEventListener('nod', () => nod());
 
   try {
     await session.start();
     live = session;
     showLive('on');
-    if (first) ask(first);
+    if (first) ask(first, { byVoice: true });
   } catch (error) {
     // Permission refused, or a browser that cannot do it. Either way the
     // reason belongs on screen, not in the console.
@@ -1365,7 +1501,7 @@ const MENU_DOES = {
   attach: () => el.file.click(),
   create: toggleCreate,
   dictate: toggleDictation,
-  ar: enterAR,
+  ar: openLens,
   permissions: () => {
     openSettings();
     // The panel is well down a scrolling sheet; landing on it is the point of
@@ -1540,8 +1676,61 @@ el.arClear.addEventListener('click', () => {
 window.addEventListener('resize', () => {
   if (reality.running) sizeHolo();
   else if (stage.shown) stage.resize();
+  if (lens.running) lens._resize();
 });
-el.holoAr.addEventListener('click', () => enterAR());
+el.holoAr.addEventListener('click', () => openLens());
+
+async function openLens() {
+  if (lens.running) return;
+  el.lensBar.hidden = false;
+  el.holoBar.hidden = true;
+  field.stop();
+  const opened = await lens.open();
+  if (!opened) {
+    // The reason is already in the bar; say it where it stays too.
+    setCaption(el.lensStatus.textContent);
+    closeLens();
+    return;
+  }
+  // WebXR is what anchors things to the floor. Offered only where the
+  // device actually has it, so it is never a button that cannot work.
+  el.lensXr.hidden = !(await arSupported().catch(() => false));
+}
+
+async function toggleSynth() {
+  if (synth.running) {
+    await synth.stop();
+    lens.quiet();
+  } else if (!(await synth.start())) {
+    el.lensStatus.textContent = 'Este navegador não tem áudio sintetizado (Web Audio).';
+    return;
+  } else {
+    el.lensStatus.textContent =
+      'Sintetizador ligado: esquerda/direita é a nota, cima/baixo o brilho, abrir a mão o volume. ' +
+      'O holograma sob a mão escolhe o timbre; a outra mão faz eco e vibrato.';
+  }
+  el.lensSynth.setAttribute('aria-pressed', String(synth.running));
+}
+
+function closeLens() {
+  if (synth.running) synth.stop().catch(() => {});
+  lens.quiet();
+  el.lensSynth.setAttribute('aria-pressed', 'false');
+  lens.close();
+  el.lensBar.hidden = true;
+  el.lensPose.textContent = '';
+  delete el.lensBar.dataset.seen;
+  field.start();
+  refreshStage();
+}
+
+el.lensFlip.addEventListener('click', () => lens.flip());
+el.lensSynth.addEventListener('click', () => toggleSynth());
+el.lensClose.addEventListener('click', () => closeLens());
+el.lensXr.addEventListener('click', () => {
+  closeLens();
+  enterAR();
+});
 el.holoClear.addEventListener('click', () => {
   const gone = scene.clear();
   setCaption(gone ? `Limpei ${gone} ${gone === 1 ? 'objeto' : 'objetos'}.` : '');

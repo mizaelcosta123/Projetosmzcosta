@@ -76,7 +76,10 @@ const asked = [];
 await page.route('http://fake.jarvis/**', async (route) => {
   const request = route.request();
   if (request.url().endsWith('/v1/chat/completions')) {
-    asked.push(JSON.parse(request.postData() || '{}')?.messages?.[0]?.content ?? '');
+    // The user's turn, wherever it sits: system messages (memory, the voice
+    // instructions) come before it.
+    const messages = JSON.parse(request.postData() || '{}')?.messages ?? [];
+    asked.push(messages.filter((m) => m.role === 'user').at(-1)?.content ?? '');
     return route.fulfill({
       status: 200,
       contentType: 'text/event-stream',

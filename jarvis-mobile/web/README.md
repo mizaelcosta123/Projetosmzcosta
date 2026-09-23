@@ -16,6 +16,8 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 | `app.js` | Wiring: settings, chat streaming, speech, the agent's mode switch |
 | `holo.js` / `conjure.js` | Hologram geometry, and a sentence (or the model's `conjure` call) to objects |
 | `ar.js` / `stage.js` / `hands.js` | Where holograms are drawn: in the room under WebXR, or on the screen, handled with a finger |
+| `lens.js` / `vision.js` / `handpose.js` | The camera mode: the video, the hand model, and 21 points turned into gestures |
+| `synth.js` | The synthesizer the hands play |
 | `memory.js` / `vault.js` | What he learns, recalled by attention; out to and back from an Obsidian note |
 | `decide.js` | Which of the kept models to send a message through, learned from outcomes |
 | `place.js` | Position and weather, only for a question about either |
@@ -313,3 +315,121 @@ com front matter e uma seção por tipo; a contabilidade (`usos`, data) vai num
 comentário `%%…%%`, invisível na leitura. "Importar notas" aceita essa nota de
 volta — sem duplicar — e **qualquer** nota do vault: cada item, tarefa ou
 parágrafo vira uma lembrança.
+
+
+## Realidade aumentada pela câmera, com as mãos
+
+"Realidade aumentada" abria o WebXR, que precisa do ARCore — e na maioria dos
+celulares respondia com um motivo e não fazia nada. Agora abre a **câmera**
+(`lens.js`), em qualquer aparelho: o vídeo ocupa a tela, os hologramas são
+desenhados por cima pelo mesmo palco de sempre, e uma mão na frente da lente é
+lida em **21 pontos** pelo HandLandmarker do MediaPipe (Apache 2.0) — a mesma
+numeração da foto anotada que pediu isto:
+
+    polegar 1–4 · indicador 5–8 · médio 9–12 · anelar 13–16 · mínimo 17–20 · pulso 0
+
+O esqueleto é desenhado nas cores da foto: polegar magenta, indicador azul,
+médio verde, anelar amarelo, mínimo vermelho.
+
+| gesto | faz |
+|---|---|
+| pinça (polegar + indicador) | agarra o objeto sob os dedos e o move junto |
+| aproximar/afastar a mão, segurando | tamanho — trazer para perto aumenta, como aumentaria |
+| girar a mão, segurando | gira o objeto |
+| ✌️ segurado ~1 s | cria, na ponta do dedo, o último formato pedido por voz |
+| punho segurado ~0,7 s | apaga o objeto sob a mão |
+
+Os dois gestos segurados têm tempo porque uma mão que passa por um punho a
+caminho de outra coisa não pode apagar nada; um arco em volta do cursor enche
+enquanto o tempo corre, para dar para desistir. **Um punho não é pinça**,
+embora as pontas do polegar e do indicador se toquem nos dois: na pinça o
+indicador ainda se estende, no punho ele dobra até o nó do dedo (`PINCH_REACH`).
+
+O modelo (~20 MB) vem do jsDelivr e do Google na primeira vez, e o service
+worker guarda — depois disso, sem internet. O `script-src` do servidor libera
+**só** o caminho `@mediapipe/` do jsDelivr, que serve o npm inteiro. Quando o
+backend ainda manda o cabeçalho antigo, o erro do navegador é o mesmo de falta
+de rede; o app distingue pelo evento `securitypolicyviolation` e manda fazer o
+deploy em vez de conferir a conexão.
+
+O toque continua valendo o tempo todo: modelo, GPU e luz são três coisas que
+podem faltar, e um modo que só respondesse a mãos seria tela preta para quem
+não tivesse uma delas. Quem tem ARCore ganha um botão "Fixar no chão", que abre
+o WebXR — é ele que prende objetos no piso, o que um vídeo plano não faz.
+
+
+### Na palma da mão
+
+De [Hand-Detection-AR](https://github.com/ad8454/Hand-Detection-AR): lá, um cubo
+fica sobre a palma, escala pelo tamanho aparente da mão e gira na velocidade do
+número de dedos levantados. Aquele app achava a palma pela cor da pele e um
+fecho convexo; aqui ela é só o meio entre o pulso e o nó do dedo médio.
+
+**Palma aberta sobre um objeto por ~0,6 s** e ele pousa: acompanha a palma,
+aproximar a mão aumenta, e os dedos levantados (0 a 5) são a velocidade de
+giro. Enquanto algo está na mão, o punho é **zero dedos** — para o giro, não
+apaga. Pinçar tira da palma para os dedos; tirar a mão do quadro o deixa onde
+está.
+
+## Um sintetizador no ar
+
+Ligado pelo botão **Sintetizador** na câmera (o navegador só solta áudio depois
+de um toque). A ideia é a do airsynth — a mão como controlador, lida pelo
+MediaPipe —, mas com a Web Audio API do próprio navegador em vez do
+SuperCollider, então não há nada para instalar.
+
+| mão | som |
+|---|---|
+| esquerda → direita | a nota, **presa à escala** (pentatônica menor de Lá 3, duas oitavas) |
+| baixo → cima | o brilho: o filtro abre de 200 Hz a 12,8 kHz, em curva exponencial |
+| fechada → aberta | o volume (punho é silêncio) |
+| segunda mão, esquerda → direita | eco |
+| segunda mão, baixo → cima | vibrato |
+| o holograma sob a mão | o timbre: esfera senoidal, cubo quadrada, pirâmide dente de serra, toro triangular |
+
+A escala é o que torna isto tocável: um teremim contínuo é famoso por ser
+difícil de afinar, e uma mão lida por câmera treme alguns pixels mesmo parada —
+numa altura contínua isso é um vibrato desafinado permanente, numa escala não é
+nada. O teclado aparece desenhado sobre a câmera, com a nota tocada acesa.
+
+A sala responde ao som, como no AR_Audio_Visualizer: todo holograma incha com o
+nível medido na saída. E há um limitador no fim da cadeia, porque sem ele dois
+osciladores em fase num filtro ressonante chegavam ao teto — medido: RMS 0,59
+e picos no máximo, o que no alto-falante de um celular é distorção. Com ele:
+RMS 0,12, pico 0,71.
+
+
+## Conversa por voz: começar a falar logo
+
+A voz esperava a resposta **inteira**: o texto aparecia na legenda enquanto o
+modelo escrevia, e só quando ele terminava a leitura começava. Num modelo
+gratuito isso é o tempo de geração todo com o rosto calado.
+
+Agora (`utter.js`) o fluxo é cortado em frases conforme chega, e cada uma vai
+para a voz assim que fica completa — a primeira pode parar numa vírgula,
+porque o único número que alguém percebe é quanto tempo até ele começar.
+Markdown, código e links não são lidos em voz alta ("o código está na tela").
+
+Medido (`tests-browser/fluency.mjs`), contra um modelo que manda a primeira
+palavra em 1,2 s e o resto a 120 ms por palavra:
+
+| | antes | agora |
+|---|---|---|
+| silêncio até a primeira palavra | 3,45 s | **0,65 s** ("Hum…") |
+| até a primeira frase da resposta | 3,45 s | **1,39 s** |
+
+Os turnos, como numa conversa:
+
+- **2 s de silêncio encerram a sua vez** (era 0,9 s): dá para respirar e
+  procurar uma palavra no meio do raciocínio sem ser respondido.
+- **"Aham", "entendi", "sei"** numa pausa curta *dentro* da sua vez — depois
+  de ~2,5 s falando, nunca dois seguidos, nunca o mesmo repetido. Numa voz
+  própria e mais baixa, que não conta como ele falando; e se o reconhecedor
+  ouvir o "entendi" dele como seu, ele é tirado da sua frase.
+- **"Hum…" / "Deixa eu ver."** quando você termina e a primeira frase do modelo
+  ainda não chegou em 0,6 s. Um modelo rápido responde antes e ele nunca é dito.
+- **Resposta falada**: numa pergunta por voz o modelo é instruído a responder
+  como se fala — começando curto, sem markdown.
+- **Interromper para tudo**: a voz, o que estava na fila e o pedido ao modelo —
+  que para de gerar uma resposta que ninguém está ouvindo, e a sua próxima
+  pergunta não é descartada enquanto ele termina.

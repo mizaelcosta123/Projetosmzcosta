@@ -13,6 +13,14 @@
 <body>
   <canvas id="field" aria-hidden="true"></canvas>
 
+  <!-- Augmented reality through the camera: the video, and the hand drawn
+       over it. Before the hologram canvas in the document, so the holograms
+       are drawn on top of the room. -->
+  <div id="lens" class="lens" hidden>
+    <video id="lens-video" playsinline muted autoplay></video>
+    <canvas id="lens-hands" aria-hidden="true"></canvas>
+  </div>
+
   <!-- Where the holograms are drawn: over the camera while a session runs,
        and over the field (the stage) when there are some and no session. -->
   <canvas id="holo" aria-hidden="true" hidden></canvas>
@@ -24,6 +32,21 @@
       <button type="button" id="holo-ar" class="quiet">Ver no ambiente</button>
       <button type="button" id="holo-clear" class="quiet">Limpar</button>
       <button type="button" id="holo-close" class="quiet">Guardar</button>
+    </menu>
+  </div>
+
+  <!-- The camera mode's controls. After the hologram canvas, or it would
+       take their taps. -->
+  <div id="lens-bar" class="lens-bar" hidden>
+    <p id="lens-status" class="lens-status" aria-live="polite"></p>
+    <p class="hint">Pinça: agarrar e mover · aproxime ou afaste a mão: tamanho · gire a mão: girar · ✌️ segurado: criar · punho segurado: apagar · palma aberta sobre um objeto: ele pousa na mão, e os dedos levantados giram</p>
+    <p class="lens-readout"><span id="lens-pose" class="lens-pose" aria-live="off"></span><span id="lens-note" class="lens-note" aria-live="off"></span></p>
+    <menu class="row">
+      <button type="button" id="lens-synth" class="quiet" aria-pressed="false"
+              title="Tocar com as mãos: esquerda/direita é a nota, cima/baixo o brilho, abrir a mão o volume">Sintetizador</button>
+      <button type="button" id="lens-flip" class="quiet">Virar câmera</button>
+      <button type="button" id="lens-xr" class="quiet" hidden>Fixar no chão</button>
+      <button type="button" id="lens-close" class="quiet">Sair</button>
     </menu>
   </div>
 
@@ -146,7 +169,7 @@
         <path d="M10 2.5l6.5 3.6v7.8L10 17.5l-6.5-3.6V6.1z" />
         <path d="M3.5 6.1L10 9.8l6.5-3.7M10 9.8v7.7" />
       </svg>
-      <span>Realidade aumentada<small>Objetos 3D no seu espaço</small></span>
+      <span>Realidade aumentada<small>Câmera e mãos: objetos 3D que você segura</small></span>
     </button>
     <button type="button" role="menuitem" data-does="permissions">
       <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">

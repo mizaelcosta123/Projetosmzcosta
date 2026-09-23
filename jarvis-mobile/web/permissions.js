@@ -100,7 +100,7 @@ async function read(name, feature = name) {
 }
 
 /** Turn a real rejection into a state plus something worth reading. */
-function explain(error, what, feature) {
+export function explain(error, what, feature) {
   const name = error?.name ?? '';
   if ((name === 'NotAllowedError' || name === 'PermissionDeniedError') && feature
       && !allowedByPolicy(feature)) {

@@ -25,6 +25,22 @@
 
 const CACHE = 'jarvis-shell';
 
+/**
+ * The hand model and its library: ~20 MB, versioned URLs that never change.
+ * Cache *first* for these and only these -- network-first would download 20
+ * MB every time the camera opens, and a versioned URL has nothing newer to
+ * find. Kept in step with `IMMUTABLE` in vision.js by a test.
+ */
+const FOREVER = 'jarvis-vision';
+const KEEP_FOREVER = [
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/',
+  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/',
+];
+
+function forever(request) {
+  return request.method === 'GET' && KEEP_FOREVER.some((prefix) => request.url.startsWith(prefix));
+}
+
 /** Requests this worker has any business answering. */
 function ours(request) {
   if (request.method !== 'GET') return false;
@@ -69,6 +85,18 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  if (forever(request)) {
+    event.respondWith(
+      caches.open(FOREVER).then(async (cache) => {
+        const hit = await cache.match(request);
+        if (hit) return hit;
+        const response = await fetch(request);
+        if (response.ok) cache.put(request, response.clone()).catch(() => {});
+        return response;
+      })
+    );
+    return;
+  }
   if (!ours(request)) return;
   event.respondWith(
     fetch(request)

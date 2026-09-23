@@ -156,9 +156,11 @@ export function hologram({
 export function place(point, item) {
   const c = Math.cos(item.angle);
   const s = Math.sin(item.angle);
-  const x = point.x * item.size;
-  const y = point.y * item.size;
-  const z = point.z * item.size;
+  // `pulse` swells it with the synthesizer's level (lens.js); zero otherwise.
+  const size = item.size * (1 + (item.pulse || 0));
+  const x = point.x * size;
+  const y = point.y * size;
+  const z = point.z * size;
   return {
     x: item.x + x * c + z * s,
     y: item.y + y,

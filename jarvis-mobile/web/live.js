@@ -22,7 +22,10 @@
  * volume for a moment and then he carries on.
  */
 
-export { BargeIn, Envelope, LiveSession, VoiceGate, WakeWord, normalizeSpeech, wakeMatch };
+export {
+  BargeIn, Backchannel, Envelope, LiveSession, VoiceGate, WakeWord, normalizeSpeech, stripOwn, wakeMatch,
+  END_OF_TURN_MS,
+};
 
 /** Chrome ends recognition on its own; this is how long to wait before restarting. */
 const RESTART_MS = 250;
@@ -366,19 +369,125 @@ class BargeIn {
 const DUCKED_VOLUME = 0.15;
 
 /**
+ * How long a silence ends your turn in a live conversation.
+ *
+ * Two seconds, as asked for: long enough to take a breath or look for a
+ * word mid-thought without being answered, and not a moment longer -- the
+ * short pauses in between are where he says "aham" instead (`Backchannel`).
+ * The level meter's own default (900 ms) stays for everything else.
+ */
+const END_OF_TURN_MS = 2000;
+
+/**
+ * "Aham", "entendi": the small sounds a listener makes.
+ *
+ * Said in a short pause inside your turn -- not the pause that ends it --
+ * and only after you have been talking for a while, and not again right
+ * after the last one. That is what keeps them feeling like attention rather
+ * than a tic: a nod after three words is an interruption, and three nods in
+ * a row is a parrot.
+ */
+const NOD_DEFAULTS = {
+  //: How far into a pause before nodding.
+  afterMs: 700,
+  //: Speech since the last nod before another is due.
+  minTalkMs: 2500,
+  //: Words since the last nod, the same way.
+  minWords: 4,
+  //: Never two nods closer than this.
+  gapMs: 4000,
+};
+
+class Backchannel {
+  constructor(options = {}) {
+    Object.assign(this, { ...NOD_DEFAULTS, ...options });
+    this.reset();
+  }
+
+  reset() {
+    this.talked = 0;
+    this._talkSince = null;
+    this._last = -Infinity;
+    this._noddedThisPause = false;
+    this._wordsAtNod = 0;
+  }
+
+  /** Speech (re)started. */
+  began(now) {
+    if (this._talkSince === null) this._talkSince = now;
+    this._noddedThisPause = false;
+  }
+
+  /** Speech paused -- maybe for good, maybe for breath. */
+  paused(now) {
+    if (this._talkSince !== null) this.talked += now - this._talkSince;
+    this._talkSince = null;
+  }
+
+  /**
+   * Time passing inside a pause.
+   *
+   * @param {number} now
+   * @param {{pausedFor: number, words: number, endAfter: number}} at
+   * @returns {boolean} Nod now.
+   */
+  tick(now, { pausedFor, words, endAfter }) {
+    if (this._noddedThisPause || this._talkSince !== null) return false;
+    if (pausedFor < this.afterMs || pausedFor > endAfter - 400) return false;
+    if (this.talked < this.minTalkMs) return false;
+    if (words - this._wordsAtNod < this.minWords) return false;
+    if (now - this._last < this.gapMs) return false;
+    this._noddedThisPause = true;
+    this._last = now;
+    this.talked = 0;
+    this._wordsAtNod = words;
+    return true;
+  }
+}
+
+/**
+ * Take his own "aham" back out of what you said.
+ *
+ * Echo cancellation keeps most of it off the microphone, but the recogniser
+ * has its own capture, and on some phones "entendi" comes back as your
+ * word. Each phrase he said recently is removed once, as a whole run of
+ * words -- never a single word out of your sentence that happens to match.
+ */
+function stripOwn(text, phrases) {
+  let words = String(text ?? '').split(/\s+/).filter(Boolean);
+  for (const phrase of phrases) {
+    const target = normalizeSpeech(phrase).split(' ').filter(Boolean);
+    if (!target.length) continue;
+    const plain = words.map((w) => normalizeSpeech(w));
+    for (let i = 0; i + target.length <= plain.length; i += 1) {
+      if (target.every((t, j) => plain[i + j] === t)) {
+        words = [...words.slice(0, i), ...words.slice(i + target.length)];
+        break;
+      }
+    }
+  }
+  return words.join(' ');
+}
+
+/**
  * A live conversation: microphone open, transcript in, answer out.
  *
- * Emits `state` (with `detail.state` and `detail.text`) and `ask` (with
- * `detail.text`). The page owns what asking means; this owns the listening.
+ * Emits `state` (with `detail.state` and `detail.text`), `ask` (with
+ * `detail.text`) when a turn ends -- two seconds of silence -- and `nod` in
+ * a short pause inside one, for the page to say "aham". The page owns what asking means; this owns the listening.
  */
 class LiveSession extends EventTarget {
   /**
    * @param {{lang?: string, gate?: object}} [options]
    */
-  constructor({ lang = 'pt-BR', gate = {} } = {}) {
+  constructor({ lang = 'pt-BR', gate = {}, nods = {} } = {}) {
     super();
     this.lang = lang;
-    this.gate = new VoiceGate(gate);
+    this.gate = new VoiceGate({ hangoverMs: END_OF_TURN_MS, ...gate });
+    this.nods = new Backchannel(nods);
+    /** What he said while listening, with when -- to take back out. */
+    this._own = [];
+    this._gateWas = 'silent';
     this.envelope = new Envelope();
     this.barge = new BargeIn();
     this.active = false;
@@ -432,6 +541,9 @@ class LiveSession extends EventTarget {
     this.gate.reset();
     this.envelope.reset();
     this.barge.reset();
+    this.nods.reset();
+    this._own = [];
+    this._gateWas = 'silent';
     this._final = '';
     this._interim = '';
 
@@ -473,6 +585,20 @@ class LiveSession extends EventTarget {
     this._emit('answering');
   }
 
+  /**
+   * He said something small while listening ("aham"). Remembered for a few
+   * seconds, so it can be taken back out if the recogniser hears it as you.
+   */
+  heardOwn(text, now = performance.now()) {
+    this._own.push({ text, at: now });
+  }
+
+  /** Your words, minus his recent nods. */
+  _clean(text, now = performance.now()) {
+    this._own = this._own.filter((entry) => now - entry.at < 8000);
+    return this._own.length ? stripOwn(text, this._own.map((entry) => entry.text)) : text;
+  }
+
   /** He finished, or was stopped. */
   speakingEnded() {
     this._speaking = null;
@@ -497,7 +623,12 @@ class LiveSession extends EventTarget {
   _meter() {
     if (!this.active) return;
     const now = performance.now();
-    const level = this.envelope.push(this._level(), now);
+    this._step(this.envelope.push(this._level(), now), now);
+    this._frame = requestAnimationFrame(() => this._meter());
+  }
+
+  /** One reading of the meter. Separate from the loop so a test can drive it. */
+  _step(level, now) {
     const change = this.gate.push(level, now);
 
     if (this._speaking) {
@@ -510,20 +641,44 @@ class LiveSession extends EventTarget {
         this._speaking.setVolume(1);
         this._emit('answering');
       }
-    } else if (change === 'began') {
-      this._emit('hearing');
     } else if (change === 'ended') {
       this._commit();
+    } else {
+      if (change === 'began') this._emit('hearing');
+      // Every frame of a turn, the start included: the nod counter has to
+      // see speech begin, or it never counts any.
+      this._maybeNod(now);
     }
+    this._gateWas = this.gate.state;
+  }
 
-    this._frame = requestAnimationFrame(() => this._meter());
+  /**
+   * Follow the pauses inside a turn, and nod in the right one.
+   *
+   * The gate only reports a turn's start and end; the breaths in between are
+   * its state moving between speaking and falling, read here.
+   */
+  _maybeNod(now) {
+    const was = this._gateWas;
+    const is = this.gate.state;
+    if (is === 'speaking' && was !== 'speaking') this.nods.began(now);
+    if (is === 'falling' && was === 'speaking') this.nods.paused(now);
+    if (is !== 'falling') return;
+    const words = (this._final + ' ' + this._interim).trim().split(/\s+/).filter(Boolean).length;
+    const nod = this.nods.tick(now, {
+      pausedFor: now - this.gate._since,
+      words,
+      endAfter: this.gate.hangoverMs,
+    });
+    if (nod) this.dispatchEvent(new CustomEvent('nod'));
   }
 
   /** Hand over whatever was heard, if it amounts to anything. */
   _commit() {
-    const text = (this._final || this._interim).trim();
+    const text = this._clean((this._final || this._interim).trim()).trim();
     this._final = '';
     this._interim = '';
+    this.nods.reset();
     if (!text) {
       this._emit('listening');
       return;
@@ -575,7 +730,7 @@ class LiveSession extends EventTarget {
     }
     this._interim = interim;
 
-    const heard = (this._final + interim).trim();
+    const heard = this._clean((this._final + interim).trim()).trim();
     if (!heard) return;
 
     if (this._speaking && this.barge.heardWords() === 'stop') {
