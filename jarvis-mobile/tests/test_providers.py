@@ -113,3 +113,88 @@ def test_the_openrouter_note_explains_what_auto_costs():
     note = providers.get_provider("openrouter").notes
     assert "openrouter/auto" in note
     assert "cost_tier" in note
+
+
+# -- a provider nobody configured stays out of the list ---------------------
+#
+# OpenJarvis finds engines by probing each registered one with GET /v1/models.
+# OpenCode Zen answers that without a key, so an unconfigured OpenCode came up
+# healthy, its free models joined the server's list, and choosing one failed
+# with "OpenCode's free tier can only be used from within OpenCode".
+
+
+class _Answer:
+    status_code = 200
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"data": [{"id": "big-pickle"}, {"id": "grok-code"}]}
+
+
+class _PublicCatalogue:
+    """A /v1/models that answers anybody, as OpenCode Zen's does."""
+
+    def get(self, *args, **kwargs):
+        return _Answer()
+
+
+def _engine(provider_id, monkeypatch, **env):
+    from openjarvis.core.registry import EngineRegistry
+
+    for provider in providers.PROVIDERS.values():
+        for name in provider.key_env:
+            monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    providers.register_providers()
+    engine = EngineRegistry.get(provider_id)()
+    engine._client = _PublicCatalogue()
+    return engine
+
+
+def test_without_a_key_a_provider_is_not_healthy_even_if_its_catalogue_is_public(monkeypatch):
+    engine = _engine("opencode", monkeypatch)
+    assert engine.health() is False
+    assert engine.list_models() == []
+
+
+def test_with_a_key_the_same_provider_comes_up(monkeypatch):
+    engine = _engine("opencode", monkeypatch, OPENCODE_API_KEY="k")
+    assert engine.health() is True
+    assert engine.list_models() == ["big-pickle", "grok-code"]
+
+
+def test_the_server_honours_the_conventional_key_names_too(monkeypatch):
+    """HF_TOKEN, not only HUGGINGFACE_API_KEY: the server builds engines itself,
+    without going through build_engine."""
+    engine = _engine("huggingface", monkeypatch, HF_TOKEN="hf_x")
+    assert engine._headers == {"Authorization": "Bearer hf_x"}
+    assert engine.health() is True
+
+
+def test_discovery_leaves_out_every_preset_without_a_key(monkeypatch):
+    """The whole chain, through OpenJarvis's own discovery: only the provider
+    with a key is found, whatever the others' catalogues would answer."""
+    from openjarvis.core.config import JarvisConfig
+    from openjarvis.core.registry import EngineRegistry
+    from openjarvis.engine import _discovery
+
+    for provider in providers.PROVIDERS.values():
+        for name in provider.key_env:
+            monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    providers.register_providers()
+    presets = set(providers.PROVIDERS)
+    monkeypatch.setattr(EngineRegistry, "keys", classmethod(lambda cls: sorted(presets)))
+    original = _discovery._make_engine
+
+    def make(key, config):
+        engine = original(key, config)
+        engine._client = _PublicCatalogue()
+        return engine
+
+    monkeypatch.setattr(_discovery, "_make_engine", make)
+    found = [key for key, _ in _discovery.discover_engines(JarvisConfig())]
+    assert found == ["openrouter"]
