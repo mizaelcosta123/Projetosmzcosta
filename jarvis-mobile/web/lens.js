@@ -15,7 +15,8 @@
  */
 
 import { explain } from './permissions.js';
-import { BONES, HOLD_CREATE, HOLD_REMOVE, HandControl, smooth, toGlass } from './handpose.js';
+import { BONES, HOLD_CREATE, HOLD_REMOVE, HandControl, read, smooth, toGlass } from './handpose.js';
+import { controls, keyboard, noteName } from './synth.js';
 import { moveBy, toScreen } from './hands.js';
 import { LIBRARY, explainLoadFailure, loadHands } from './vision.js';
 
@@ -53,11 +54,14 @@ export class Lens {
    */
   constructor({
     root, video, overlay, stage, scene,
-    onStatus = () => {}, onPose = () => {},
-    onCreate = null, onRemove = null,
+    onStatus = () => {}, onPose = () => {}, onNote = () => {},
+    onCreate = null, onRemove = null, synth = null,
     load = loadHands, nav = globalThis.navigator, win = globalThis,
   }) {
-    Object.assign(this, { root, video, overlay, stage, scene, onStatus, onPose, load, nav, win });
+    Object.assign(this, { root, video, overlay, stage, scene, onStatus, onPose, onNote, synth, load, nav, win });
+    /** The notes across the screen, when the synthesizer is on. */
+    this.notes = keyboard();
+    this.playing = null;
     this.stream = null;
     this.facing = 'environment';
     this.detector = null;
@@ -81,6 +85,12 @@ export class Lens {
       onRemove: (item) => {
         scene.remove(item.id);
         onStatus(onRemove ? onRemove(item) : `Apaguei ${item.shape === 'esfera' || item.shape === 'piramide' ? 'a' : 'o'} ${item.shape}.`);
+      },
+      onRest: (item) => {
+        onStatus(
+          `${item.shape === 'esfera' || item.shape === 'piramide' ? 'A' : 'O'} ${item.shape} pousou na sua mão. ` +
+            'Levante dedos para girar mais rápido; pince para tirar.'
+        );
       },
     });
   }
@@ -228,10 +238,37 @@ export class Lens {
     this.smoothed.length = hands.length;
 
     const reading = this.control.update(hands, time);
-    this.stage.holding = Boolean(this.control.held);
-    this.stage.hands.selected = this.control.held ?? this.control.hover ?? null;
-    this.onPose(reading ? POSE_LABELS[reading.pose] ?? '' : '');
+    this.stage.holding = Boolean(this.control.held || this.control.resting);
+    this.stage.hands.selected = this.control.held ?? this.control.resting ?? this.control.hover ?? null;
+    this.onPose(reading ? (this.control.resting ? 'na palma' : POSE_LABELS[reading.pose] ?? '') : '');
+    this.play(reading, hands, screen);
     this.draw(hands, reading, time);
+  }
+
+  /**
+   * The synthesizer's turn: what the hands mean as sound, and the room
+   * answering it -- every hologram swells with the level.
+   */
+  play(reading, hands, screen) {
+    if (!this.synth?.running) {
+      this.playing = null;
+      return;
+    }
+    const second = hands[1] ? read(hands[1]) : null;
+    const shape = (this.control.held ?? this.control.resting ?? this.control.hover)?.shape ?? null;
+    const sound = controls(reading, screen, { second, shape, notes: this.notes });
+    this.synth.set(sound);
+    this.playing = sound.gain > 0 ? sound.midi : null;
+    this.onNote(this.playing === null ? '' : `♪ ${sound.note}`);
+    const level = this.synth.level();
+    for (const item of this.scene.items) item.pulse = level * 0.5;
+  }
+
+  /** Stop the swelling once the sound is off, so nothing stays inflated. */
+  quiet() {
+    this.playing = null;
+    for (const item of this.scene.items) item.pulse = 0;
+    this.onNote('');
   }
 
   /** The hand, as the annotated photo drew it: one colour per finger. */
@@ -241,6 +278,7 @@ export class Lens {
     const ratio = this.overlay.width / (this.win.innerWidth || 1);
     context.clearRect(0, 0, this.overlay.width, this.overlay.height);
     context.lineCap = 'round';
+    if (this.synth?.running) this._keys(context, ratio);
     for (const points of hands) {
       context.lineWidth = 3 * ratio;
       for (const bone of BONES) {
@@ -276,12 +314,46 @@ export class Lens {
     }
     context.stroke();
     const hold = reading.pose === 'punho' ? HOLD_REMOVE : reading.pose === 'v' ? HOLD_CREATE : 0;
-    if (hold && !this.control.pose.fired) {
+    if (hold && !this.control.pose.fired && !this.control.resting) {
       const done = Math.min(1, (time - this.control.pose.since) / hold);
       context.lineWidth = 5 * ratio;
       context.beginPath();
       context.arc(x * ratio, y * ratio, radius + 7 * ratio, -Math.PI / 2, -Math.PI / 2 + done * Math.PI * 2);
       context.stroke();
     }
+  }
+
+  /**
+   * The keyboard, drawn on the room: a faint line between notes and each
+   * note's name along the bottom, the one being played lit. A theremin
+   * without markings is nearly impossible to play; this is the markings.
+   */
+  _keys(context, ratio) {
+    const width = this.win.innerWidth || 1;
+    const height = this.win.innerHeight || 1;
+    const key = width / this.notes.length;
+    const baseline = (height - 150) * ratio;
+    context.save();
+    context.font = `${11 * ratio}px system-ui, sans-serif`;
+    context.textAlign = 'center';
+    for (const [i, midi] of this.notes.entries()) {
+      const left = i * key;
+      const on = midi === this.playing;
+      if (on) {
+        context.fillStyle = 'rgba(125, 211, 252, 0.16)';
+        context.fillRect(left * ratio, 0, key * ratio, height * ratio);
+      }
+      if (i > 0) {
+        context.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        context.lineWidth = 1 * ratio;
+        context.beginPath();
+        context.moveTo(left * ratio, 0);
+        context.lineTo(left * ratio, height * ratio);
+        context.stroke();
+      }
+      context.fillStyle = on ? '#7dd3fc' : 'rgba(255, 255, 255, 0.55)';
+      context.fillText(noteName(midi).split(' ')[0], (left + key / 2) * ratio, baseline);
+    }
+    context.restore();
   }
 }

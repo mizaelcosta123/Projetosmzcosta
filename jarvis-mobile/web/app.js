@@ -17,6 +17,7 @@ import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
 import { Scene } from './holo.js';
 import { Stage } from './stage.js';
 import { Lens } from './lens.js';
+import { Synth } from './synth.js';
 import { conjure, learnedNames, perform, teaching } from './conjure.js';
 import { Memory } from './memory.js';
 import { contextFor as placeContext } from './place.js';
@@ -93,6 +94,8 @@ const el = {
   lensStatus: document.getElementById('lens-status'),
   lensPose: document.getElementById('lens-pose'),
   lensFlip: document.getElementById('lens-flip'),
+  lensSynth: document.getElementById('lens-synth'),
+  lensNote: document.getElementById('lens-note'),
   lensXr: document.getElementById('lens-xr'),
   lensClose: document.getElementById('lens-close'),
   holoBar: document.getElementById('holo-bar'),
@@ -279,8 +282,16 @@ const stage = new Stage({
 
 /** Augmented reality through the camera, with hands. Works on any phone
  *  with a camera; WebXR is offered from inside it where the device has it. */
+/** Played with the hands in the camera mode. Created now, silent until the
+ *  button is pressed: a browser keeps audio off until a tap asks for it. */
+const synth = new Synth();
+
 const lens = new Lens({
   root: el.lens,
+  synth,
+  onNote: (text) => {
+    el.lensNote.textContent = text;
+  },
   video: el.lensVideo,
   overlay: el.lensHands,
   stage,
@@ -1594,7 +1605,25 @@ async function openLens() {
   el.lensXr.hidden = !(await arSupported().catch(() => false));
 }
 
+async function toggleSynth() {
+  if (synth.running) {
+    await synth.stop();
+    lens.quiet();
+  } else if (!(await synth.start())) {
+    el.lensStatus.textContent = 'Este navegador não tem áudio sintetizado (Web Audio).';
+    return;
+  } else {
+    el.lensStatus.textContent =
+      'Sintetizador ligado: esquerda/direita é a nota, cima/baixo o brilho, abrir a mão o volume. ' +
+      'O holograma sob a mão escolhe o timbre; a outra mão faz eco e vibrato.';
+  }
+  el.lensSynth.setAttribute('aria-pressed', String(synth.running));
+}
+
 function closeLens() {
+  if (synth.running) synth.stop().catch(() => {});
+  lens.quiet();
+  el.lensSynth.setAttribute('aria-pressed', 'false');
   lens.close();
   el.lensBar.hidden = true;
   el.lensPose.textContent = '';
@@ -1604,6 +1633,7 @@ function closeLens() {
 }
 
 el.lensFlip.addEventListener('click', () => lens.flip());
+el.lensSynth.addEventListener('click', () => toggleSynth());
 el.lensClose.addEventListener('click', () => closeLens());
 el.lensXr.addEventListener('click', () => {
   closeLens();

@@ -27,6 +27,13 @@
  *   girar a mão                   girar, enquanto agarrado
  *   ✌️ segurado                    criar um objeto na ponta do dedo
  *   punho segurado                apagar o objeto sob a mão
+ *   palma aberta sobre um objeto  ele pousa na mão e a acompanha; os dedos
+ *                                 levantados (0 a 5) são a velocidade de giro
+ *
+ * The last one is Hand-Detection-AR's (ad8454): a cube sitting on the palm,
+ * scaled by how big the hand looks, spinning as fast as the number of fingers
+ * held up. That app found the palm by skin colour and a convex hull; here it
+ * is simply the middle of the wrist and the middle knuckle.
  *
  * A pinch is the one gesture every hand-tracking system settles on, because
  * it is deliberate -- fingers do not touch by accident -- and it has an
@@ -36,7 +43,7 @@
  * somewhere else must not delete anything.
  */
 
-import { clampSize, moveBy, pick } from './hands.js';
+import { clampSize, moveBy, pick, toScreen } from './hands.js';
 
 /** The finger chains, by name, in the colours of the annotated photo. */
 export const FINGERS = {
@@ -144,7 +151,8 @@ export function read(points, previous = {}) {
   else if (pose === 'v' || pose === 'apontando') at = { ...points[INDEX_TIP] };
   else at = mid(points[WRIST], points[MIDDLE_BASE]);
 
-  return { pose, pinched, at, size, angle: handAngle(points), gap, up };
+  const palm = mid(points[WRIST], points[MIDDLE_BASE]);
+  return { pose, pinched, at, palm, size, angle: handAngle(points), gap, up };
 }
 
 /**
@@ -169,6 +177,10 @@ export function toGlass(landmark, frame, screen, mirrored = false) {
 /** How long a held pose must last before it acts, in ms. */
 export const HOLD_CREATE = 800;
 export const HOLD_REMOVE = 700;
+/** How long an open palm must rest over an object to pick it up. */
+export const HOLD_REST = 600;
+/** Spin per finger held up while an object rests on the palm, rad/s. */
+export const SPIN_PER_FINGER = 0.7;
 /** A hand missing for longer than this has let go. */
 export const LOST_AFTER = 350;
 
@@ -194,8 +206,12 @@ export class HandControl {
     onRemove = () => {},
     onGrab = () => {},
     onRelease = () => {},
+    onRest = () => {},
   } = {}) {
-    Object.assign(this, { items, size, view, onCreate, onRemove, onGrab, onRelease });
+    Object.assign(this, { items, size, view, onCreate, onRemove, onGrab, onRelease, onRest });
+    /** What sits on the palm, and the palm's size when it got there. */
+    this.resting = null;
+    this.rest = null;
     this.reading = null;
     this.previous = {};
     this.held = null;
@@ -220,7 +236,13 @@ export class HandControl {
    */
   update(hands, time) {
     if (!hands?.length) {
-      if (time - this.lastSeen > LOST_AFTER) this._let();
+      if (time - this.lastSeen > LOST_AFTER) {
+        this._let();
+        // Taking the hand away sets the object down where it is, still
+        // spinning at whatever the fingers last said.
+        this.resting = null;
+        this.rest = null;
+      }
       this.reading = null;
       this.hover = null;
       return null;
@@ -231,11 +253,28 @@ export class HandControl {
     this.previous = reading;
     this.reading = reading;
     const [width, height, cam] = this._viewArgs();
-    this.hover = this.held ?? pick(this.items(), reading.at.x, reading.at.y, width, height, cam);
+    this.hover = this.held ?? this.resting ?? pick(this.items(), reading.at.x, reading.at.y, width, height, cam);
 
     // The pose clock: how long the hand has been doing this.
     if (reading.pose !== this.pose.name) this.pose = { name: reading.pose, since: time, fired: false };
     const heldFor = time - this.pose.since;
+
+    // Something on the palm: it goes where the palm goes, and the other
+    // gestures are off -- counting down to zero fingers to stop the spin is
+    // a fist, and must not delete the thing in your hand. A pinch takes it
+    // off the palm and into the fingers.
+    if (this.resting && !this.items().includes(this.resting)) {
+      this.resting = null;
+      this.rest = null;
+    }
+    if (this.resting) {
+      if (!reading.pinched) {
+        this._carry(reading);
+        return reading;
+      }
+      this.resting = null;
+      this.rest = null;
+    }
 
     if (reading.pinched) {
       if (!this.held) this._take(reading);
@@ -244,6 +283,14 @@ export class HandControl {
     }
     this._let();
 
+    if (reading.pose === 'aberta' && heldFor >= HOLD_REST && !this.pose.fired && this.hover) {
+      this.pose.fired = true;
+      this.resting = this.hover;
+      this.rest = { size: this.hover.size, hand: reading.size };
+      this._carry(reading);
+      this.onRest(this.resting);
+      return reading;
+    }
     if (reading.pose === 'v' && heldFor >= HOLD_CREATE && !this.pose.fired) {
       this.pose.fired = true;
       this.onCreate(reading.at);
@@ -253,6 +300,17 @@ export class HandControl {
       if (this.hover) this.onRemove(this.hover);
     }
     return reading;
+  }
+
+  /** Keep the resting object on the palm: under it, sized by how near the
+   *  hand is, spinning by how many fingers are up. */
+  _carry(reading) {
+    const item = this.resting;
+    const [width, height, cam] = this._viewArgs();
+    const now = toScreen(item, width, height, cam);
+    Object.assign(item, moveBy(item, reading.palm.x - now.x, reading.palm.y - now.y, width, height, cam));
+    item.size = clampSize(this.rest.size * (reading.size / this.rest.hand));
+    item.spin = Object.values(reading.up).filter(Boolean).length * SPIN_PER_FINGER;
   }
 
   _take(reading) {

@@ -39,9 +39,11 @@
        take their taps. -->
   <div id="lens-bar" class="lens-bar" hidden>
     <p id="lens-status" class="lens-status" aria-live="polite"></p>
-    <p class="hint">Pinça: agarrar e mover · aproxime ou afaste a mão: tamanho · gire a mão: girar · ✌️ segurado: criar · punho segurado: apagar</p>
-    <p id="lens-pose" class="lens-pose" aria-live="off"></p>
+    <p class="hint">Pinça: agarrar e mover · aproxime ou afaste a mão: tamanho · gire a mão: girar · ✌️ segurado: criar · punho segurado: apagar · palma aberta sobre um objeto: ele pousa na mão, e os dedos levantados giram</p>
+    <p class="lens-readout"><span id="lens-pose" class="lens-pose" aria-live="off"></span><span id="lens-note" class="lens-note" aria-live="off"></span></p>
     <menu class="row">
+      <button type="button" id="lens-synth" class="quiet" aria-pressed="false"
+              title="Tocar com as mãos: esquerda/direita é a nota, cima/baixo o brilho, abrir a mão o volume">Sintetizador</button>
       <button type="button" id="lens-flip" class="quiet">Virar câmera</button>
       <button type="button" id="lens-xr" class="quiet" hidden>Fixar no chão</button>
       <button type="button" id="lens-close" class="quiet">Sair</button>

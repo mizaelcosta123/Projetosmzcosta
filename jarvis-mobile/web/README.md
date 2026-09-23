@@ -17,6 +17,7 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 | `holo.js` / `conjure.js` | Hologram geometry, and a sentence (or the model's `conjure` call) to objects |
 | `ar.js` / `stage.js` / `hands.js` | Where holograms are drawn: in the room under WebXR, or on the screen, handled with a finger |
 | `lens.js` / `vision.js` / `handpose.js` | The camera mode: the video, the hand model, and 21 points turned into gestures |
+| `synth.js` | The synthesizer the hands play |
 | `memory.js` / `vault.js` | What he learns, recalled by attention; out to and back from an Obsidian note |
 | `decide.js` | Which of the kept models to send a message through, learned from outcomes |
 | `place.js` | Position and weather, only for a question about either |
@@ -355,3 +356,44 @@ O toque continua valendo o tempo todo: modelo, GPU e luz são três coisas que
 podem faltar, e um modo que só respondesse a mãos seria tela preta para quem
 não tivesse uma delas. Quem tem ARCore ganha um botão "Fixar no chão", que abre
 o WebXR — é ele que prende objetos no piso, o que um vídeo plano não faz.
+
+
+### Na palma da mão
+
+De [Hand-Detection-AR](https://github.com/ad8454/Hand-Detection-AR): lá, um cubo
+fica sobre a palma, escala pelo tamanho aparente da mão e gira na velocidade do
+número de dedos levantados. Aquele app achava a palma pela cor da pele e um
+fecho convexo; aqui ela é só o meio entre o pulso e o nó do dedo médio.
+
+**Palma aberta sobre um objeto por ~0,6 s** e ele pousa: acompanha a palma,
+aproximar a mão aumenta, e os dedos levantados (0 a 5) são a velocidade de
+giro. Enquanto algo está na mão, o punho é **zero dedos** — para o giro, não
+apaga. Pinçar tira da palma para os dedos; tirar a mão do quadro o deixa onde
+está.
+
+## Um sintetizador no ar
+
+Ligado pelo botão **Sintetizador** na câmera (o navegador só solta áudio depois
+de um toque). A ideia é a do airsynth — a mão como controlador, lida pelo
+MediaPipe —, mas com a Web Audio API do próprio navegador em vez do
+SuperCollider, então não há nada para instalar.
+
+| mão | som |
+|---|---|
+| esquerda → direita | a nota, **presa à escala** (pentatônica menor de Lá 3, duas oitavas) |
+| baixo → cima | o brilho: o filtro abre de 200 Hz a 12,8 kHz, em curva exponencial |
+| fechada → aberta | o volume (punho é silêncio) |
+| segunda mão, esquerda → direita | eco |
+| segunda mão, baixo → cima | vibrato |
+| o holograma sob a mão | o timbre: esfera senoidal, cubo quadrada, pirâmide dente de serra, toro triangular |
+
+A escala é o que torna isto tocável: um teremim contínuo é famoso por ser
+difícil de afinar, e uma mão lida por câmera treme alguns pixels mesmo parada —
+numa altura contínua isso é um vibrato desafinado permanente, numa escala não é
+nada. O teclado aparece desenhado sobre a câmera, com a nota tocada acesa.
+
+A sala responde ao som, como no AR_Audio_Visualizer: todo holograma incha com o
+nível medido na saída. E há um limitador no fim da cadeia, porque sem ele dois
+osciladores em fase num filtro ressonante chegavam ao teto — medido: RMS 0,59
+e picos no máximo, o que no alto-falante de um celular é distorção. Com ele:
+RMS 0,12, pico 0,71.

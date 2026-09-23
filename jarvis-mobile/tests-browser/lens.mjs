@@ -77,6 +77,32 @@ async function session({ library = true } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 412, height: 880 }, serviceWorkers: 'block' });
   await ctx.grantPermissions(['camera'], { origin: UI });
   const page = await ctx.newPage();
+  // Listen to what the synthesizer actually outputs: every analyser the page
+  // makes is kept where the test can read it. The app has no hook for this;
+  // the test wraps the browser's own API before the page loads.
+  await page.addInitScript(() => {
+    const make = AudioContext.prototype.createAnalyser;
+    window.__analysers = [];
+    AudioContext.prototype.createAnalyser = function wrapped() {
+      const node = make.call(this);
+      window.__analysers.push(node);
+      return node;
+    };
+    window.__peak = () => {
+      const a = window.__analysers.at(-1);
+      if (!a || a.context.state === 'closed') return 0;
+      const buf = new Float32Array(a.fftSize);
+      a.getFloatTimeDomainData(buf);
+      return buf.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+    };
+    window.__rms = () => {
+      const a = window.__analysers.at(-1);
+      if (!a || a.context.state === 'closed') return 0;
+      const buf = new Float32Array(a.fftSize);
+      a.getFloatTimeDomainData(buf);
+      return Math.sqrt(buf.reduce((s, v) => s + v * v, 0) / buf.length);
+    };
+  });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
   const blocked = [];
@@ -175,6 +201,73 @@ console.log('\na realidade aumentada abre a câmera');
     return n;
   });
   check('a esfera aparece sobre a câmera', lit > 200, true);
+
+  console.log('\no sintetizador, tocado pela mão da foto');
+  await page.click('#lens-synth');
+  let rms = 0;
+  for (let i = 0; i < 20 && rms < 0.01; i += 1) {
+    await page.waitForTimeout(150);
+    rms = await page.evaluate(() => window.__rms());
+  }
+  const note = await page.$eval('#lens-note', (n) => n.textContent);
+  console.log(`    ${note}  ·  RMS ${rms.toFixed(3)}`);
+  check('ligado', await page.$eval('#lens-synth', (b) => b.getAttribute('aria-pressed')), 'true');
+  check('uma nota da escala na tela', /^♪ (Dó|Ré|Mi|Fá|Sol|Lá|Si)♯? \d$/.test(note), true);
+  check('e som saindo de verdade (medido na saída)', rms > 0.01, true);
+  let peak = 0;
+  for (let i = 0; i < 12; i += 1) {
+    peak = Math.max(peak, await page.evaluate(() => window.__peak()));
+    await page.waitForTimeout(60);
+  }
+  console.log(`    pico ${peak.toFixed(3)}`);
+  check('sem distorcer: o pico nunca chega ao teto', peak < 0.95, true);
+  if (process.env.SHOT) {
+    await page.screenshot({ path: process.env.SHOT.replace(/\.png$/, '-synth.png') });
+  }
+  await page.click('#lens-synth');
+  await page.waitForTimeout(400);
+  check('desligado: silêncio, e a nota some',
+    [await page.evaluate(() => window.__rms()), await page.$eval('#lens-note', (n) => n.textContent)], [0, '']);
+
+  console.log('\npousar na palma (a ideia da Hand-Detection-AR)');
+  // The open hand in the photo stays put; drag the sphere onto its palm with
+  // a finger on the glass, and hold still.
+  const palm = await page.evaluate(() => {
+    const c = document.getElementById('lens-hands');
+    const { data, width } = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+    // The cursor ring is drawn in #7dd3fc around the palm; find its centre.
+    let n = 0; let sx = 0; let sy = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (Math.abs(data[i] - 125) < 12 && Math.abs(data[i + 1] - 211) < 12 && Math.abs(data[i + 2] - 252) < 12 && data[i + 3] > 200) {
+        n += 1; sx += (i / 4) % width; sy += Math.floor(i / 4 / width);
+      }
+    }
+    const ratio = c.width / innerWidth;
+    return n ? { x: sx / n / ratio, y: sy / n / ratio } : null;
+  });
+  const sphere = await page.evaluate(async () => {
+    const { toScreen, fit } = await import('./hands.js');
+    const item = { x: 0, y: 0, z: -1, size: 0.25 };
+    return toScreen(item, innerWidth, innerHeight, fit([item], innerWidth, innerHeight));
+  });
+  check('achei a palma pelo cursor', Boolean(palm), true);
+  if (palm) {
+    await page.mouse.move(sphere.x, sphere.y);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i += 1) {
+      await page.mouse.move(sphere.x + (palm.x - sphere.x) * i / 10, sphere.y + (palm.y - sphere.y) * i / 10);
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+    let rested = '';
+    for (let i = 0; i < 20 && !/pousou/.test(rested); i += 1) {
+      await page.waitForTimeout(150);
+      rested = await status(page);
+    }
+    console.log('   ', rested);
+    check('a esfera pousou na mão', /esfera pousou na sua mão/.test(rested), true);
+    check('e o rótulo diz "na palma"', await page.$eval('#lens-pose', (n) => n.textContent), 'na palma');
+  }
 
   console.log('\nsair');
   await page.click('#lens-close');

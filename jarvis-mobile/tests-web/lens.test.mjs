@@ -39,12 +39,16 @@ function vShape() {
   return out;
 }
 
-function rig(frames) {
+function rig(frames, synth = null) {
   const scene = new Scene();
   const stage = { cam: camera(), hands: { selected: null }, holding: false, pin() {} };
-  const context = { clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, arc() {}, fill() {} };
+  const context = {
+    clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, arc() {}, fill() {},
+    save() {}, restore() {}, fillRect() {}, fillText() {},
+  };
   const said = [];
   const poses = [];
+  const notes = [];
   const lens = new Lens({
     root: { hidden: true },
     video: { readyState: 4, videoWidth: FRAME.width, videoHeight: FRAME.height, currentTime: 0 },
@@ -53,6 +57,8 @@ function rig(frames) {
     scene,
     onStatus: (text) => said.push(text),
     onPose: (label) => poses.push(label),
+    onNote: (text) => notes.push(text),
+    synth,
     win: { innerWidth: W, innerHeight: H, devicePixelRatio: 1 },
   });
   let i = 0;
@@ -61,7 +67,7 @@ function rig(frames) {
     lens.video.currentTime += 1 / 30;
     lens._frame(time);
   };
-  return { lens, scene, stage, said, poses, step };
+  return { lens, scene, stage, said, poses, notes, step };
 }
 
 test('the model\'s open hand reaches the screen as "mão aberta"', () => {
@@ -135,4 +141,29 @@ test('flipping the camera keeps one frame loop, not two', async () => {
   lens.close();
   assert.equal(pending.size, 0);
   assert.deepEqual(stopped, ['environment', 'user', 'environment']);
+});
+
+test('with the synthesizer on, the hand plays a note and the holograms swell with it', () => {
+  const sent = [];
+  const synth = { running: true, set: (c) => sent.push(c), level: () => 0.4 };
+  const { step, scene, notes, lens } = rig(() => [OPEN], synth);
+  scene.add({ shape: 'esfera', x: 0.9, y: 0.9, z: -1 });
+  step(0);
+  const played = sent.at(-1);
+  assert.ok(played.gain > 0, 'mão aberta soa');
+  assert.match(notes.at(-1), /^♪ (Dó|Ré|Mi|Fá|Sol|Lá|Si)/);
+  assert.equal(scene.items[0].pulse, 0.2, 'nível 0,4 → incha 20%');
+  lens.quiet();
+  assert.equal(scene.items[0].pulse, 0);
+  assert.equal(notes.at(-1), '');
+});
+
+test('with the synthesizer off, nothing is sent and nothing swells', () => {
+  const sent = [];
+  const synth = { running: false, set: (c) => sent.push(c), level: () => 1 };
+  const { step, scene } = rig(() => [OPEN], synth);
+  scene.add({ shape: 'cubo' });
+  step(0);
+  assert.equal(sent.length, 0);
+  assert.equal(scene.items[0].pulse ?? 0, 0);
 });

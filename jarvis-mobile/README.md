@@ -19,6 +19,7 @@ registries, so this package registers into them and leaves upstream untouched �
 | **Provider presets** | OpenRouter, Nous Portal (Hermes), Hugging Face, OpenCode Zen — endpoints pre-filled, you supply only a key. Any other OpenAI-compatible URL still works |
 | **Shell** | Inside Termux, OpenJarvis's own `shell_exec` already *is* your phone's shell. From anywhere else, `device_shell` is — over the bridge |
 | **Holograms** | 3D wireframe solids made by voice ("um cubo vermelho à direita") or by the model through the `conjure` tool. On the screen a finger moves, pinches, twists and deletes them |
+| **A synthesizer in the air** | In the camera mode the hand plays a Web Audio synth, airsynth-style: left–right is the note (snapped to a scale), up–down the filter, opening the hand the volume; the second hand is echo and vibrato. The hologram under the hand picks the waveform, and every hologram swells with the sound |
 | **Hands, through the camera** | "Realidade aumentada" opens the camera on any phone and reads your hand at 21 points (MediaPipe): pinch to grab and move, bring the hand closer to grow the held object, turn it to turn it, hold ✌️ to create, hold a fist to delete. WebXR is offered from there on phones with ARCore, to anchor things to the floor |
 | **Memory** | What you ask and the names you teach, recalled by attention for the next question. Visible and deletable in Configurações → Memória, and exported to / imported from an **Obsidian** note |
 | **Place and weather** | When — and only when — a question is about where you are or the sky, and location was already granted: a position rounded to ~1 km, and the forecast from Open-Meteo (no key) |
@@ -141,6 +142,7 @@ failing opaquely.
 | Providers with a model catalogue, and routing by what each model got right | |
 | Holograms: by voice, by the model's `conjure` tool, on the screen with gestures, in the room with WebXR | |
 | Hand tracking through the camera, with gestures that create, move, scale, turn and delete | |
+| Objects resting on the palm (after Hand-Detection-AR) and a hand-played synthesizer | |
 | Attention-based memory, visible and deletable, round-tripping through Obsidian | |
 | Location and weather, only when a question needs them | |
 | Installable PWA that opens offline and notifies | |

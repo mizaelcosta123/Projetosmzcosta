@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { Scene } from '../web/holo.js';
 import { camera, moveBy, toScreen } from '../web/hands.js';
 import {
-  BONES, FINGERS, HOLD_CREATE, HOLD_REMOVE, HandControl, LOST_AFTER, extended, read, smooth, toGlass,
+  BONES, FINGERS, HOLD_CREATE, HOLD_REMOVE, HOLD_REST, HandControl, LOST_AFTER, SPIN_PER_FINGER,
+  extended, read, smooth, toGlass,
 } from '../web/handpose.js';
 
 const OPEN = [
@@ -188,6 +189,7 @@ function control(scene, cam, extra = {}) {
     onRemove: (item) => { said.removed.push(item.shape); scene.remove(item.id); },
     onGrab: () => { said.grabbed += 1; },
     onRelease: () => { said.released += 1; },
+    onRest: (item) => { said.rested = item; },
     ...extra,
   });
   return { hand, said };
@@ -299,4 +301,71 @@ test('an object removed by something else while held is let go of', () => {
   scene.remove(item.id);
   hand.update([transform(start, { dx: 20 })], 33);
   assert.equal(hand.held, null);
+});
+
+// -- resting on the palm (Hand-Detection-AR's idea) ---------------------------
+
+test('an open palm held over an object picks it up onto the palm', () => {
+  const { scene, item, cam } = under(read(OPEN).palm);
+  const { hand, said } = control(scene, cam);
+  hand.update([OPEN], 0);
+  assert.equal(hand.resting, null, 'ainda não');
+  hand.update([OPEN], HOLD_REST + 10);
+  assert.equal(hand.resting, item);
+  assert.equal(said.rested, item);
+});
+
+test('on the palm it follows the palm, and nearer means bigger', () => {
+  const { scene, item, cam } = under(read(OPEN).palm);
+  const { hand } = control(scene, cam);
+  hand.update([OPEN], 0);
+  hand.update([OPEN], HOLD_REST + 10);
+  const size = item.size;
+  const moved = transform(OPEN, { dx: -80, dy: 50, scale: 1.3 });
+  hand.update([moved], HOLD_REST + 50);
+  const at = toScreen(item, W, H, cam);
+  const palm = read(moved).palm;
+  assert.ok(Math.hypot(at.x - palm.x, at.y - palm.y) < 1e-6, 'sobre a palma');
+  assert.ok(Math.abs(item.size - size * 1.3) < 1e-9, `tamanho ${item.size}`);
+});
+
+test('the fingers held up set the spin: five fast, a fist still -- and the fist does not delete', () => {
+  const { scene, item, cam } = under(read(OPEN).palm);
+  const { hand, said } = control(scene, cam);
+  hand.update([OPEN], 0);
+  hand.update([OPEN], HOLD_REST + 10);
+  assert.equal(item.spin, 5 * SPIN_PER_FINGER);
+  hand.update([POINTING], HOLD_REST + 50);
+  assert.equal(item.spin, 1 * SPIN_PER_FINGER, 'um dedo');
+  hand.update([FIST], HOLD_REST + 100);
+  hand.update([FIST], HOLD_REST + HOLD_REMOVE * 3);
+  assert.equal(item.spin, 0, 'punho para');
+  assert.deepEqual(said.removed, [], 'e não apaga o que está na mão');
+  assert.equal(scene.items.length, 1);
+});
+
+test('a pinch takes it off the palm into the fingers; a hand that leaves sets it down', () => {
+  const { scene, item, cam } = under(read(OPEN).palm);
+  const { hand } = control(scene, cam);
+  hand.update([OPEN], 0);
+  hand.update([OPEN], HOLD_REST + 10);
+  // Pinch right over it.
+  const p = pinch(OPEN, toScreen(item, W, H, cam));
+  hand.update([p], HOLD_REST + 50);
+  assert.equal(hand.resting, null);
+  assert.equal(hand.held, item, 'agora na pinça');
+  hand.update([OPEN], HOLD_REST + 80);
+  hand.update([OPEN], HOLD_REST * 3);
+  assert.equal(hand.resting, item, 'pousou de novo');
+  hand.update([], HOLD_REST * 3 + LOST_AFTER + 50);
+  assert.equal(hand.resting, null, 'mão fora do quadro: fica onde está');
+  assert.ok(scene.items.includes(item));
+});
+
+test('an open palm over nothing picks up nothing', () => {
+  const { scene, cam } = under({ x: 20, y: 20 });
+  const { hand } = control(scene, cam);
+  hand.update([OPEN], 0);
+  hand.update([OPEN], HOLD_REST * 2);
+  assert.equal(hand.resting, null);
 });

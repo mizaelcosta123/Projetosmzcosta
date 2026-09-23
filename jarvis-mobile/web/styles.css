@@ -355,7 +355,10 @@ html, body {
 .lens-status { margin: 0; font-size: 0.86rem; color: var(--ink); }
 .lens-bar .hint { margin: 0; font-size: 0.74rem; color: var(--dim); }
 .lens-bar[data-seen] .hint { display: none; }
-.lens-pose { margin: 0; min-height: 1.2em; font-size: 0.8rem; color: var(--accent); }
+.lens-readout { margin: 0; min-height: 1.2em; display: flex; gap: 12px; justify-content: center; }
+.lens-pose { font-size: 0.8rem; color: var(--accent); }
+.lens-note { font-size: 0.8rem; color: #f0abfc; font-variant-numeric: tabular-nums; }
+.lens-bar button[aria-pressed="true"] { color: var(--ink); border-color: rgba(240, 171, 252, 0.6); background: rgba(240, 171, 252, 0.16); }
 .lens-bar menu { display: flex; gap: 8px; justify-content: center; margin: 0; padding: 0; flex-wrap: wrap; }
 .lens-bar button {
   padding: 8px 14px;
