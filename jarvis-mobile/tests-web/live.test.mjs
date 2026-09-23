@@ -358,3 +358,74 @@ test('the ordinary errors are not announced at all', async () => {
     assert.equal(armed, true, code);
   }
 });
+
+// -- turns, nods, and his own nods coming back ----------------------------------
+
+import { Backchannel, END_OF_TURN_MS, LiveSession as Session, stripOwn } from '../web/live.js';
+
+test('a live turn ends after two seconds of silence, not before', () => {
+  const session = new Session();
+  session.active = true;
+  const asked = [];
+  session.addEventListener('ask', (e) => asked.push([e.detail.text, e.timeStamp]));
+  let t = 0;
+  for (; t < 1500; t += 16) session._step(0.2, t);
+  session._final = 'qual a previsão para amanhã';
+  const quietFrom = t;
+  let endedAt = null;
+  session.addEventListener('ask', () => { endedAt = t; });
+  for (; t < quietFrom + 3000 && endedAt === null; t += 16) session._step(0, t);
+  assert.ok(endedAt !== null, 'terminou');
+  assert.ok(endedAt - quietFrom >= END_OF_TURN_MS, `cedo: ${endedAt - quietFrom} ms`);
+  assert.ok(endedAt - quietFrom < END_OF_TURN_MS + 100, `tarde: ${endedAt - quietFrom} ms`);
+  assert.equal(asked[0][0], 'qual a previsão para amanhã');
+});
+
+test('a breath after a few seconds of talking gets a nod; the end of the turn does not', () => {
+  const session = new Session();
+  session.active = true;
+  let nods = 0;
+  session.addEventListener('nod', () => { nods += 1; });
+  let t = 0;
+  const talk = (ms) => { const end = t + ms; for (; t < end; t += 16) session._step(0.2, t); };
+  const quiet = (ms) => { const end = t + ms; for (; t < end; t += 16) session._step(0, t); };
+  session._interim = 'então eu estava pensando em trocar';
+  talk(3000);
+  quiet(1000); // a breath: past the nod point, short of the end
+  assert.equal(nods, 1, 'um "aham" na pausa');
+  session._interim += ' de celular mas não sei qual';
+  talk(800);
+  quiet(1000);
+  assert.equal(nods, 1, 'falou pouco desde o último: sem outro');
+  talk(3500);
+  session._interim += ' e o preço também importa muito';
+  quiet(2500); // this one ends the turn
+  assert.equal(nods, 2, 'mais um depois de falar bastante, antes de terminar');
+});
+
+test('short utterances never get a nod', () => {
+  const b = new Backchannel();
+  b.began(0);
+  b.paused(1200);
+  assert.equal(b.tick(2000, { pausedFor: 800, words: 3, endAfter: 2000 }), false);
+});
+
+test('his own "aham" is taken back out of your words -- only as a whole phrase', () => {
+  assert.equal(stripOwn('eu acho que aham vou sim', ['Aham.']), 'eu acho que vou sim');
+  assert.equal(stripOwn('ah sim eu quero', ['Ah, sim.']), 'eu quero');
+  assert.equal(stripOwn('eu entendi tudo', ['Certo.']), 'eu entendi tudo', 'nada dele: nada sai');
+  assert.equal(stripOwn('sim sim', ['Ah, sim.']), 'sim sim', 'palavra solta não é a frase');
+});
+
+test('a nod heard back is dropped from the turn that is sent', () => {
+  const session = new Session();
+  session.active = true;
+  const asked = [];
+  session.addEventListener('ask', (e) => asked.push(e.detail.text));
+  let t = 0;
+  for (; t < 1000; t += 16) session._step(0.2, t);
+  session.heardOwn('Entendi.', t);
+  session._final = 'eu queria entendi saber das horas';
+  for (; t < 4000; t += 16) session._step(0, t);
+  assert.deepEqual(asked, ['eu queria saber das horas']);
+});

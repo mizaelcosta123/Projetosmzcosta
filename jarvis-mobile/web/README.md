@@ -397,3 +397,39 @@ nível medido na saída. E há um limitador no fim da cadeia, porque sem ele doi
 osciladores em fase num filtro ressonante chegavam ao teto — medido: RMS 0,59
 e picos no máximo, o que no alto-falante de um celular é distorção. Com ele:
 RMS 0,12, pico 0,71.
+
+
+## Conversa por voz: começar a falar logo
+
+A voz esperava a resposta **inteira**: o texto aparecia na legenda enquanto o
+modelo escrevia, e só quando ele terminava a leitura começava. Num modelo
+gratuito isso é o tempo de geração todo com o rosto calado.
+
+Agora (`utter.js`) o fluxo é cortado em frases conforme chega, e cada uma vai
+para a voz assim que fica completa — a primeira pode parar numa vírgula,
+porque o único número que alguém percebe é quanto tempo até ele começar.
+Markdown, código e links não são lidos em voz alta ("o código está na tela").
+
+Medido (`tests-browser/fluency.mjs`), contra um modelo que manda a primeira
+palavra em 1,2 s e o resto a 120 ms por palavra:
+
+| | antes | agora |
+|---|---|---|
+| silêncio até a primeira palavra | 3,45 s | **0,65 s** ("Hum…") |
+| até a primeira frase da resposta | 3,45 s | **1,39 s** |
+
+Os turnos, como numa conversa:
+
+- **2 s de silêncio encerram a sua vez** (era 0,9 s): dá para respirar e
+  procurar uma palavra no meio do raciocínio sem ser respondido.
+- **"Aham", "entendi", "sei"** numa pausa curta *dentro* da sua vez — depois
+  de ~2,5 s falando, nunca dois seguidos, nunca o mesmo repetido. Numa voz
+  própria e mais baixa, que não conta como ele falando; e se o reconhecedor
+  ouvir o "entendi" dele como seu, ele é tirado da sua frase.
+- **"Hum…" / "Deixa eu ver."** quando você termina e a primeira frase do modelo
+  ainda não chegou em 0,6 s. Um modelo rápido responde antes e ele nunca é dito.
+- **Resposta falada**: numa pergunta por voz o modelo é instruído a responder
+  como se fala — começando curto, sem markdown.
+- **Interromper para tudo**: a voz, o que estava na fila e o pedido ao modelo —
+  que para de gerar uma resposta que ninguém está ouvindo, e a sua próxima
+  pergunta não é descartada enquanto ele termina.
