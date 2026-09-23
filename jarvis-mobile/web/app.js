@@ -16,6 +16,7 @@ import { explain } from './diagnose.js';
 import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
 import { Scene } from './holo.js';
 import { Stage } from './stage.js';
+import { Lens } from './lens.js';
 import { conjure, learnedNames, perform, teaching } from './conjure.js';
 import { Memory } from './memory.js';
 import { contextFor as placeContext } from './place.js';
@@ -85,6 +86,15 @@ const el = {
   memoryImport: document.getElementById('memory-import'),
   memoryForget: document.getElementById('memory-forget'),
   memoryFile: document.getElementById('memory-file'),
+  lens: document.getElementById('lens'),
+  lensVideo: document.getElementById('lens-video'),
+  lensHands: document.getElementById('lens-hands'),
+  lensBar: document.getElementById('lens-bar'),
+  lensStatus: document.getElementById('lens-status'),
+  lensPose: document.getElementById('lens-pose'),
+  lensFlip: document.getElementById('lens-flip'),
+  lensXr: document.getElementById('lens-xr'),
+  lensClose: document.getElementById('lens-close'),
   holoBar: document.getElementById('holo-bar'),
   holoAr: document.getElementById('holo-ar'),
   holoClear: document.getElementById('holo-clear'),
@@ -265,6 +275,25 @@ const stage = new Stage({
   bar: el.holoBar,
   onStatus: (text) => setCaption(text),
   busy: () => reality.running,
+});
+
+/** Augmented reality through the camera, with hands. Works on any phone
+ *  with a camera; WebXR is offered from inside it where the device has it. */
+const lens = new Lens({
+  root: el.lens,
+  video: el.lensVideo,
+  overlay: el.lensHands,
+  stage,
+  scene,
+  onStatus: (text) => {
+    el.lensStatus.textContent = text;
+  },
+  onPose: (label) => {
+    el.lensPose.textContent = label;
+    // Once a hand has been seen the legend has done its job, and it covers
+    // the top of the frame, which is where fingers are.
+    if (label) el.lensBar.dataset.seen = '';
+  },
 });
 
 /** Show the stage when there is something to show; put it away when not. */
@@ -800,6 +829,10 @@ function handleHere(text) {
     el.arStatus.textContent = done;
   }
   refreshStage();
+  // What was just asked for by voice is what a V makes next, so "esfera
+  // roxa" followed by a V makes purple spheres.
+  const last = scene.last();
+  if (last) lens.pending = { shape: last.shape, hue: last.hue, size: last.size };
   say(done).catch(() => {});
   return true;
 }
@@ -1365,7 +1398,7 @@ const MENU_DOES = {
   attach: () => el.file.click(),
   create: toggleCreate,
   dictate: toggleDictation,
-  ar: enterAR,
+  ar: openLens,
   permissions: () => {
     openSettings();
     // The panel is well down a scrolling sheet; landing on it is the point of
@@ -1540,8 +1573,42 @@ el.arClear.addEventListener('click', () => {
 window.addEventListener('resize', () => {
   if (reality.running) sizeHolo();
   else if (stage.shown) stage.resize();
+  if (lens.running) lens._resize();
 });
-el.holoAr.addEventListener('click', () => enterAR());
+el.holoAr.addEventListener('click', () => openLens());
+
+async function openLens() {
+  if (lens.running) return;
+  el.lensBar.hidden = false;
+  el.holoBar.hidden = true;
+  field.stop();
+  const opened = await lens.open();
+  if (!opened) {
+    // The reason is already in the bar; say it where it stays too.
+    setCaption(el.lensStatus.textContent);
+    closeLens();
+    return;
+  }
+  // WebXR is what anchors things to the floor. Offered only where the
+  // device actually has it, so it is never a button that cannot work.
+  el.lensXr.hidden = !(await arSupported().catch(() => false));
+}
+
+function closeLens() {
+  lens.close();
+  el.lensBar.hidden = true;
+  el.lensPose.textContent = '';
+  delete el.lensBar.dataset.seen;
+  field.start();
+  refreshStage();
+}
+
+el.lensFlip.addEventListener('click', () => lens.flip());
+el.lensClose.addEventListener('click', () => closeLens());
+el.lensXr.addEventListener('click', () => {
+  closeLens();
+  enterAR();
+});
 el.holoClear.addEventListener('click', () => {
   const gone = scene.clear();
   setCaption(gone ? `Limpei ${gone} ${gone === 1 ? 'objeto' : 'objetos'}.` : '');

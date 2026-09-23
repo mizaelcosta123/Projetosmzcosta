@@ -1,6 +1,6 @@
 /**
  * Conjuring things by speaking, handling them with a finger on the stage,
- * and what the app does with no WebXR.
+ * and what the augmented-reality menu does on a browser with no camera.
  *
  * Playwright's Chromium has no WebXR and no ARCore, which is not a gap in
  * this test — it is the majority case. Every iPhone browser and every Android
@@ -140,16 +140,19 @@ check('limpa tudo', await say('limpa tudo'), 'Limpei 4 objetos.');
 check('com nada na sala o palco sai', await page.$eval('#holo', (c) => [c.hidden, c.dataset.stage ?? null]), [true, null]);
 check('e os controles dele também', await page.$eval('#holo-bar', (n) => n.hidden), true);
 
-console.log('\nsem WebXR, que é a maioria dos aparelhos');
+console.log('\nrealidade aumentada num navegador sem câmera nenhuma');
+// The menu now opens the camera mode (tests-browser/lens.mjs covers it with
+// a camera). With none at all, what matters is the same as before: a reason,
+// and nothing left covering the screen.
 await page.click('#more');
 await page.click('[data-does="ar"]');
 await page.waitForTimeout(600);
 const excuse = await page.$eval('#caption', (n) => n.textContent.trim());
 console.log('   ', excuse);
-check('diz o motivo em vez de não fazer nada', excuse.length > 30, true);
-check('e diz qual dos dois motivos é', /WebXR|HTTPS|Serviços de RA/i.test(excuse), true);
-check('não deixou a tela da RA aberta por cima',
-  await page.$eval('#holo', (c) => c.hidden), true);
+check('diz o motivo, e o motivo é a câmera', /câmera/i.test(excuse), true);
+check('não deixou a câmera nem o painel dela por cima',
+  await page.evaluate(() => [document.getElementById('lens').hidden, document.getElementById('lens-bar').hidden]), [true, true]);
+check('nem o palco vazio', await page.$eval('#holo', (c) => c.hidden), true);
 check('o campo de partículas continua vivo',
   await page.evaluate(() => Boolean(window.__field?._raf ?? true)), true);
 

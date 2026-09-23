@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { loaded, notifyReply, registerWorker } from '../web/pwa.js';
+import { IMMUTABLE } from '../web/vision.js';
 
 const WORKER = readFileSync(new URL('../web/sw.js', import.meta.url), 'utf8');
 /** The worker without its comments, which name files while explaining why
@@ -20,7 +21,10 @@ const CODE = WORKER.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
 test('the worker is network-first, so a deploy is never hidden behind a cache', () => {
   /* The fetch handler must try the network before the cache. Cache-first is
      how an app ends up serving last month's app.js forever. */
-  const handler = WORKER.slice(WORKER.indexOf("addEventListener('fetch'"));
+  // The app's own files: everything after the hand model's branch, which is
+  // cache-first on purpose (versioned URLs; see the last test).
+  const handler = WORKER.slice(WORKER.indexOf('if (!ours(request)) return;', WORKER.indexOf("addEventListener('fetch'")));
+  assert.ok(handler.length > 50, 'achou o ramo dos arquivos do app');
   assert.ok(handler.indexOf('fetch(request)') < handler.indexOf('cache.match'), 'rede antes do cache');
 });
 
@@ -125,4 +129,16 @@ test('a long reply is cut, not sent whole into a notification', async () => {
   await notifyReply('palavra '.repeat(100), deps);
   assert.ok(shown[0].options.body.length <= 160);
   assert.ok(shown[0].options.body.endsWith('…'));
+});
+
+test('the hand model is kept forever, and only it: versioned URLs have nothing newer', () => {
+  /* Every URL vision.js loads must fall under a prefix the worker keeps, or
+     the camera mode needs signal every time -- and downloads 20 MB. */
+  const prefixes = [...CODE.matchAll(/'(https:[^']+)'/g)].map((m) => m[1]);
+  for (const url of IMMUTABLE) {
+    assert.ok(prefixes.some((p) => url.startsWith(p) || `${url}/`.startsWith(p)), url);
+  }
+  for (const prefix of prefixes) {
+    assert.match(prefix, /@\d+\.\d+\.\d+\/|\/\d+\/$/, `${prefix} tem versão no caminho`);
+  }
 });

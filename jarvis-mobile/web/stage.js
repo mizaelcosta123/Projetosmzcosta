@@ -35,6 +35,13 @@ export class Stage {
     this.busy = busy;
     this.win = win;
     this.shown = false;
+    /** Held up by the camera mode: shown even when empty, so the first
+     *  object made by hand has somewhere to appear, and without the stage's
+     *  own buttons, which the camera mode replaces. */
+    this.pinned = false;
+    /** Set by whoever else is moving things (a hand on the camera), to stop
+     *  the view refitting under them the way a finger on the glass does. */
+    this.holding = false;
     this.frameId = 0;
     this.lastTime = 0;
     /** The camera, refitted as the room changes: see `hands.fit`. */
@@ -84,7 +91,7 @@ export class Stage {
    * refits around the drag.
    */
   refit(snap = false) {
-    if (this.hands.fingers.size > 0) return;
+    if (this.hands.fingers.size > 0 || this.holding) return;
     const { width, height } = this._size();
     const target = fit(this.scene.items, width, height).back;
     const back = snap ? target : this.cam.back + (target - this.cam.back) * 0.12;
@@ -98,16 +105,29 @@ export class Stage {
     this.canvas.height = Math.round((this.win.innerHeight || 1) * ratio);
   }
 
+  /** Hold the stage up (or let it go), whatever is in the room. */
+  pin(on) {
+    this.pinned = on;
+    if (on) {
+      this.show();
+      if (this.bar) this.bar.hidden = true;
+    } else if (this.scene.items.length === 0) {
+      this.hide();
+    } else if (this.bar && this.shown) {
+      this.bar.hidden = false;
+    }
+  }
+
   /** Bring it up, if there is anything to show and nobody else has the canvas. */
   show() {
-    if (this.busy() || this.scene.items.length === 0) return false;
+    if (this.busy() || (this.scene.items.length === 0 && !this.pinned)) return false;
     if (!this.shown) {
       this.shown = true;
       this.resize();
       this.refit(true);
       this.canvas.hidden = false;
       this.canvas.dataset.stage = 'on';
-      if (this.bar) this.bar.hidden = false;
+      if (this.bar) this.bar.hidden = this.pinned;
       this.lastTime = 0;
       this.frameId = this.win.requestAnimationFrame?.((time) => this._frame(time)) ?? 0;
     }
@@ -116,7 +136,7 @@ export class Stage {
 
   /** Put it away. The objects stay in the scene for next time. */
   hide() {
-    if (!this.shown) return;
+    if (!this.shown || this.pinned) return;
     this.shown = false;
     this.win.cancelAnimationFrame?.(this.frameId);
     delete this.canvas.dataset.stage;

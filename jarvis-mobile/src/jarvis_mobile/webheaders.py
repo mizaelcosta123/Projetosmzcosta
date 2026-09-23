@@ -68,10 +68,16 @@ PERMISSIONS_POLICY = "camera=(self), microphone=(self), geolocation=(self)"
 CONTENT_SECURITY_POLICY = "; ".join(
     (
         "default-src 'self'",
-        # Unchanged from what OpenJarvis already sent. The preview runs
-        # model-written HTML in a sandboxed iframe, whose srcdoc inherits this
-        # policy, so inline script has to be allowed for it to run at all.
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        # 'self' and the inline/eval pair are what OpenJarvis already sent:
+        # the preview runs model-written HTML in a sandboxed iframe, whose
+        # srcdoc inherits this policy, so inline script has to be allowed for
+        # it to run at all.
+        #
+        # The jsDelivr path is the hand-tracking model's library (MediaPipe,
+        # web/vision.js), loaded only when the camera mode opens. Scoped to
+        # the @mediapipe packages rather than the whole CDN: jsDelivr serves
+        # every package on npm, and allowing all of it would allow anyone's.
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net/npm/@mediapipe/",
         "style-src 'self' 'unsafe-inline'",
         # data: an attached picture, shown before it is sent. blob: a camera
         # still. https: an image the model generated somewhere else.

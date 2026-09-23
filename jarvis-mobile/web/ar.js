@@ -15,8 +15,9 @@
  * `hands` will simply be absent. What a phone does have is where it is
  * pointing, so the gesture that works is the one built here: aim and tap,
  * with the reticle showing what the floor hit-test found. Pretending
- * otherwise would be a button that never works. Outside a session the glass
- * itself is the hand -- see `stage.js` and `hands.js`.
+ * otherwise would be a button that never works. Outside a session the hand
+ * is read through the camera instead -- see `lens.js` -- and the glass is a
+ * hand too (`stage.js`, `hands.js`).
  *
  * And where WebXR is missing entirely -- every iPhone browser today, and
  * Chrome without ARCore -- this says so plainly instead of failing quietly.

@@ -113,6 +113,34 @@ def test_the_preview_can_still_run_what_the_model_wrote(served):
     assert "'unsafe-inline'" in policy(served["Content-Security-Policy"])["script-src"]
 
 
+def test_the_hand_model_library_may_load_and_nothing_else_from_its_cdn(served):
+    """The camera mode imports MediaPipe from jsDelivr. Only that package's
+    path is allowed: jsDelivr serves all of npm."""
+    sources = policy(served["Content-Security-Policy"])["script-src"].split()
+    assert "https://cdn.jsdelivr.net/npm/@mediapipe/" in sources
+    assert "https://cdn.jsdelivr.net" not in sources
+    assert not any(source in ("https:", "*") for source in sources)
+
+
+def test_the_policy_names_the_library_the_page_actually_loads():
+    """Two files, one URL: if web/vision.js moves to another host or
+    package, the policy has to move with it, or the import is refused."""
+    import re
+    from pathlib import Path
+
+    from jarvis_mobile.webheaders import CONTENT_SECURITY_POLICY
+
+    source = (Path(__file__).resolve().parents[1] / "web" / "vision.js").read_text("utf-8")
+    library = re.search(r"export const LIBRARY = `([^`$]+)", source)
+    assert library, "LIBRARY não encontrado em web/vision.js"
+    allowed = next(s for s in CONTENT_SECURITY_POLICY.split("; ") if s.startswith("script-src"))
+    assert any(
+        library.group(1).startswith(src)
+        for src in allowed.split()[1:]
+        if src.startswith("https://")
+    )
+
+
 def test_the_page_cannot_be_reframed_or_have_its_base_moved(served):
     """Relaxing what was breaking things must not relax what was not."""
     csp = policy(served["Content-Security-Policy"])

@@ -16,6 +16,7 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 | `app.js` | Wiring: settings, chat streaming, speech, the agent's mode switch |
 | `holo.js` / `conjure.js` | Hologram geometry, and a sentence (or the model's `conjure` call) to objects |
 | `ar.js` / `stage.js` / `hands.js` | Where holograms are drawn: in the room under WebXR, or on the screen, handled with a finger |
+| `lens.js` / `vision.js` / `handpose.js` | The camera mode: the video, the hand model, and 21 points turned into gestures |
 | `memory.js` / `vault.js` | What he learns, recalled by attention; out to and back from an Obsidian note |
 | `decide.js` | Which of the kept models to send a message through, learned from outcomes |
 | `place.js` | Position and weather, only for a question about either |
@@ -313,3 +314,44 @@ com front matter e uma seção por tipo; a contabilidade (`usos`, data) vai num
 comentário `%%…%%`, invisível na leitura. "Importar notas" aceita essa nota de
 volta — sem duplicar — e **qualquer** nota do vault: cada item, tarefa ou
 parágrafo vira uma lembrança.
+
+
+## Realidade aumentada pela câmera, com as mãos
+
+"Realidade aumentada" abria o WebXR, que precisa do ARCore — e na maioria dos
+celulares respondia com um motivo e não fazia nada. Agora abre a **câmera**
+(`lens.js`), em qualquer aparelho: o vídeo ocupa a tela, os hologramas são
+desenhados por cima pelo mesmo palco de sempre, e uma mão na frente da lente é
+lida em **21 pontos** pelo HandLandmarker do MediaPipe (Apache 2.0) — a mesma
+numeração da foto anotada que pediu isto:
+
+    polegar 1–4 · indicador 5–8 · médio 9–12 · anelar 13–16 · mínimo 17–20 · pulso 0
+
+O esqueleto é desenhado nas cores da foto: polegar magenta, indicador azul,
+médio verde, anelar amarelo, mínimo vermelho.
+
+| gesto | faz |
+|---|---|
+| pinça (polegar + indicador) | agarra o objeto sob os dedos e o move junto |
+| aproximar/afastar a mão, segurando | tamanho — trazer para perto aumenta, como aumentaria |
+| girar a mão, segurando | gira o objeto |
+| ✌️ segurado ~1 s | cria, na ponta do dedo, o último formato pedido por voz |
+| punho segurado ~0,7 s | apaga o objeto sob a mão |
+
+Os dois gestos segurados têm tempo porque uma mão que passa por um punho a
+caminho de outra coisa não pode apagar nada; um arco em volta do cursor enche
+enquanto o tempo corre, para dar para desistir. **Um punho não é pinça**,
+embora as pontas do polegar e do indicador se toquem nos dois: na pinça o
+indicador ainda se estende, no punho ele dobra até o nó do dedo (`PINCH_REACH`).
+
+O modelo (~20 MB) vem do jsDelivr e do Google na primeira vez, e o service
+worker guarda — depois disso, sem internet. O `script-src` do servidor libera
+**só** o caminho `@mediapipe/` do jsDelivr, que serve o npm inteiro. Quando o
+backend ainda manda o cabeçalho antigo, o erro do navegador é o mesmo de falta
+de rede; o app distingue pelo evento `securitypolicyviolation` e manda fazer o
+deploy em vez de conferir a conexão.
+
+O toque continua valendo o tempo todo: modelo, GPU e luz são três coisas que
+podem faltar, e um modo que só respondesse a mãos seria tela preta para quem
+não tivesse uma delas. Quem tem ARCore ganha um botão "Fixar no chão", que abre
+o WebXR — é ele que prende objetos no piso, o que um vídeo plano não faz.
