@@ -39,6 +39,13 @@ await context.addInitScript(() => {
 });
 
 const page = await context.newPage();
+
+/** The camera, the create mode and the rest moved behind the "+" button;
+ *  this opens it when needed and presses the item by what it does. */
+async function more(does) {
+  if (await page.locator('#more-menu').isHidden()) await page.locator('#more').click();
+  await page.locator(`[data-does="${does}"]`).click();
+}
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
 
@@ -69,7 +76,7 @@ const trayCount = () => page.locator('#tray figure').count();
 // -- the camera --------------------------------------------------------------
 
 console.log('--- a câmera ---');
-await page.locator('#camera').click();
+await more('camera');
 await page.waitForTimeout(1200);
 check('o visor abriu', !(await page.locator('#viewfinder').isHidden()));
 check(
