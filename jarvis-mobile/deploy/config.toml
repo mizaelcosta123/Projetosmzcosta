@@ -7,8 +7,16 @@
 # stay consistent from one turn to the next instead of changing character when
 # the router changes its mind.
 #
-# If OpenRouter rejects this id ("model not found"), the id has been renamed or
-# retired -- free slugs come and go. The way out needs no redeploy: pick another
+# Two ways this id can fail, and they need different fixes:
+#
+#   "model not found"  -- the id was renamed or retired; free slugs come and go.
+#   404 with "guardrail" or "data policy" in the body -- the id is real, but
+#       every provider serving it was excluded by the account's own rules.
+#       A ":free" model is usually served by a single provider, and that
+#       provider is usually one a default data policy excludes, so the two
+#       coincide often. The switch is at
+#       https://openrouter.ai/workspaces/default/guardrails -- nothing in this
+#       repository can change it. The way out needs no redeploy: pick another
 # model in Configuracoes -> Modelo in the app itself. That choice is per device,
 # it is sent with every request, and it beats whatever is written here.
 # "openrouter/auto" always works and is the fallback worth knowing.
