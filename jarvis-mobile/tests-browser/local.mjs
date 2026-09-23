@@ -8,6 +8,7 @@
  * and none of them fail anything. They just cost a phone its battery.
  *
  *   node tests-browser/fake-ollama.mjs &          # or a real one
+ *   PORT=8000 node tests-browser/fake-ollama.mjs &  # an "unlisted" endpoint
  *   cd web && python3 -m http.server 8811 &
  *   node tests-browser/local.mjs
  */
@@ -98,6 +99,46 @@ console.log('\nprimeiro acesso, servido daqui');
   await page.waitForTimeout(2500);
   const answer = await page.$eval('#caption', (e) => e.textContent.trim());
   check('conversa sem ninguém configurar nada', !/não consegui/i.test(answer), true);
+  check('sem erros', errors, []);
+  await ctx.close();
+}
+
+// -- 3. what was learned survives a visit to the settings sheet -------------
+console.log('\no que foi aprendido sobrevive a abrir as configurações');
+{
+  // Deliberately an entry whose *guess* is wrong: `kind: 'jarvis'` is what
+  // `detectKind` returns for any host nobody put on a list -- a vLLM on 8000,
+  // an LM Studio on 1234. Only the learned `agent: false` knows better, so
+  // this is the case where losing it actually costs requests. Against port
+  // 11434 the guess is already right and the loss would be invisible.
+  // Port 8000, not 11434, and that is the whole point: on Ollama's own port
+  // `detectKind` gets the right answer anyway, so losing what was learned
+  // costs nothing and the check would be vacuous.
+  const own = process.argv[4] ?? 'http://127.0.0.1:8000';
+  const unlisted = {
+    providers: [{ id: 'p1', name: 'Endpoint próprio', url: own, key: '', kind: 'jarvis', agent: false }],
+    active: 'p1', model: '', speak: false, wake: false,
+  };
+  const { page, ctx, calls, errors } = await open({ settings: unlisted });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => document.getElementById('settings')?.close());
+
+  // Open and close it twice: `collectProvider` runs on open, on close, and on
+  // every change of the picker, and it used to rebuild the entry from the
+  // inputs -- throwing away the `/v1/device` answer already paid for.
+  for (let i = 0; i < 2; i += 1) {
+    await page.click('#menu');
+    await page.waitForTimeout(700);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
+  const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), KEY);
+  check('continua sabendo que não é um agente', saved?.providers?.[0]?.agent, false);
+
+  calls.length = 0;
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  check('e por isso não volta a bater em rotas que não existem', calls, []);
   check('sem erros', errors, []);
   await ctx.close();
 }

@@ -25,6 +25,7 @@ import {
   probeAgent,
   reachesDevice,
   readModels,
+  relearn,
   termuxOllama,
 } from '../web/providers.js';
 
@@ -284,4 +285,57 @@ test('an entry saved before any of this still reaches the device', () => {
   // Migration in the plainest sense: old settings have no `agent` field.
   const old = { id: 'p1', name: 'Meu Jarvis', url: 'https://meu.jarvis', key: '', kind: 'jarvis' };
   assert.equal(reachesDevice(old), true);
+});
+
+// -- keeping what was learned, across an edit that changed nothing ----------
+
+test('what was learned survives the sheet reading its own fields back', () => {
+  /* `collectProvider` runs on open, on close and on every change of the
+     picker, and it rebuilds the entry from the inputs. Rebuilding dropped the
+     `/v1/device` answer that had already been paid for, so one visit to
+     Configurações sent the event WebSocket back to retrying a route that is
+     not there. */
+  const learned = { ...makeProvider({ url: 'http://127.0.0.1:1234' }), agent: false };
+  const rebuilt = makeProvider({ id: learned.id, url: 'http://127.0.0.1:1234' });
+  assert.equal(rebuilt.agent, undefined, 'reconstruir sozinho perde a resposta');
+  assert.equal(relearn(learned, rebuilt).agent, false);
+  assert.equal(reachesDevice(relearn(learned, rebuilt)), false);
+});
+
+test('and is dropped when the address is edited', () => {
+  /* What was learned belongs to an address, not to a row. Keeping a `false`
+     after somebody finally typed their real backend would be worse than the
+     bug this fixes. */
+  const learned = { ...makeProvider({ url: 'http://127.0.0.1:1234' }), agent: false };
+  const moved = makeProvider({ id: learned.id, url: 'https://meu.jarvis' });
+  assert.equal('agent' in relearn(learned, moved), false);
+  assert.equal(reachesDevice(relearn(learned, moved)), true, 'volta a valer o palpite');
+});
+
+test('a trailing slash or a pasted /v1 is the same address', () => {
+  // normalizeUrl already handles both; the comparison has to go through it.
+  const learned = { ...makeProvider({ url: 'https://meu.jarvis' }), agent: true };
+  for (const typed of ['https://meu.jarvis/', 'https://meu.jarvis/v1']) {
+    assert.equal(relearn(learned, makeProvider({ url: typed })).agent, true, typed);
+  }
+});
+
+test('editing only the name or the key keeps it', () => {
+  const learned = { ...makeProvider({ url: 'https://meu.jarvis', key: 'a' }), agent: true };
+  const renamed = makeProvider({ id: learned.id, name: 'Outro nome', url: 'https://meu.jarvis', key: 'b' });
+  assert.equal(relearn(learned, renamed).agent, true);
+});
+
+test('an entry that never learned anything stays that way', () => {
+  const fresh = makeProvider({ url: 'https://meu.jarvis' });
+  const rebuilt = makeProvider({ id: fresh.id, url: 'https://meu.jarvis' });
+  assert.equal('agent' in relearn(fresh, rebuilt), false);
+});
+
+test('relearn never mutates what it was given', () => {
+  const learned = { ...makeProvider({ url: 'https://x.test' }), agent: false };
+  const rebuilt = makeProvider({ id: learned.id, url: 'https://x.test' });
+  const out = relearn(learned, rebuilt);
+  assert.equal('agent' in rebuilt, false, 'o novo não foi alterado no lugar');
+  assert.notEqual(out, rebuilt);
 });

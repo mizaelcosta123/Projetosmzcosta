@@ -21,6 +21,7 @@ import {
   makeProvider,
   modelsUrl,
   reachesDevice,
+  relearn,
   termuxOllama,
 } from './providers.js';
 import {
@@ -1336,12 +1337,19 @@ function setProviderStatus(text, state = '') {
 /** Read the edit fields back into the selected entry. */
 function collectProvider() {
   const entry = activeProvider();
-  const updated = makeProvider({
-    id: entry.id,
-    name: el.providerName.value,
-    url: el.providerUrl.value,
-    key: el.providerKey.value,
-  });
+  // `relearn` keeps the `/v1/device` answer this entry already paid for, and
+  // drops it if the address was edited. Without it, merely opening the sheet
+  // erased what was learned and the event WebSocket went back to retrying a
+  // route that is not there.
+  const updated = relearn(
+    entry,
+    makeProvider({
+      id: entry.id,
+      name: el.providerName.value,
+      url: el.providerUrl.value,
+      key: el.providerKey.value,
+    })
+  );
   settings.providers = settings.providers.map((row) => (row.id === entry.id ? updated : row));
   return updated;
 }

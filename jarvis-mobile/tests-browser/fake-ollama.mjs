@@ -3,6 +3,7 @@
 // OLLAMA_ORIGINS allows the caller.
 import http from 'node:http';
 
+const PORT = Number(process.env.PORT ?? 11434);
 const ORIGINS = process.env.ALLOW ?? '*';
 const MODELS = ['qwen2.5-coder:1.5b', 'llama3.2:3b', 'nomic-embed-text:latest'];
 
@@ -33,4 +34,4 @@ http.createServer((req, res) => {
     return;
   }
   res.writeHead(404, {'Content-Type':'application/json'}).end('{"error":"not found"}');
-}).listen(11434, '127.0.0.1', () => console.log('ollama falso em 11434'));
+}).listen(PORT, '127.0.0.1', () => console.log('ollama falso em ' + PORT));

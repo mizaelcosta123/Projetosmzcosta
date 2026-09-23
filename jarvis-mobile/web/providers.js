@@ -226,6 +226,31 @@ function originOfPage() {
   }
 }
 
+/**
+ * Carry what was learned about an endpoint across an edit of that entry.
+ *
+ * `makeProvider` deliberately builds from scratch, which is right when a
+ * person is typing a new address and wrong when the sheet is merely reading
+ * its own fields back -- and the sheet does that on open, on close and on
+ * every change of the picker. Without this, one visit to Configurações threw
+ * away a `/v1/device` 404 that had already been paid for, `reachesDevice`
+ * fell back to guessing from the hostname, and the event WebSocket started
+ * retrying a route that is not there all over again.
+ *
+ * The condition is the part that matters: what was learned belongs to an
+ * *address*, not to a row. Edit the URL and it stops applying -- keeping a
+ * `false` after somebody finally typed their real backend would be a worse
+ * bug than the one this fixes.
+ *
+ * @param {Provider} previous The entry as it was.
+ * @param {Provider} next The entry as just rebuilt.
+ */
+export function relearn(previous, next) {
+  if (typeof previous?.agent !== 'boolean') return next;
+  if (normalizeUrl(previous.url) !== normalizeUrl(next?.url)) return next;
+  return { ...next, agent: previous.agent };
+}
+
 /** A provider with the fields filled in and an id that will not collide. */
 export function makeProvider({ name = '', url = '', key = '', id = '', agent } = {}) {
   const clean = normalizeUrl(url);
