@@ -15,10 +15,12 @@ import {
   OLLAMA,
   OPENAI,
   chatUrl,
+  chooseModel,
   detectKind,
   explainUnreachable,
   fetchModels,
   headersFor,
+  listModels,
   makeProvider,
   modelsUrl,
   normalizeUrl,
@@ -338,4 +340,97 @@ test('relearn never mutates what it was given', () => {
   const out = relearn(learned, rebuilt);
   assert.equal('agent' in rebuilt, false, 'o novo não foi alterado no lugar');
   assert.notEqual(out, rebuilt);
+});
+
+// -- keeping a short list of models per endpoint ---------------------------
+
+test('a model is added and removed by the same call', () => {
+  let entry = makeProvider({ url: 'https://x.test' });
+  entry = chooseModel(entry, 'a/one');
+  assert.deepEqual(entry.models, ['a/one']);
+  entry = chooseModel(entry, 'a/one');
+  assert.deepEqual(entry.models, []);
+});
+
+test('or explicitly, which is what a checkbox needs', () => {
+  /* A checkbox reports the state it is now in, not "flip it" — toggling on a
+     stale read is how a fast double-tap ends up inverted. */
+  let entry = makeProvider({ url: 'https://x.test' });
+  entry = chooseModel(entry, 'a/one', true);
+  entry = chooseModel(entry, 'a/one', true);
+  assert.deepEqual(entry.models, ['a/one'], 'pedir de novo não duplica');
+  entry = chooseModel(entry, 'a/one', false);
+  assert.deepEqual(entry.models, []);
+  entry = chooseModel(entry, 'a/one', false);
+  assert.deepEqual(entry.models, [], 'remover o que não está lá não quebra');
+});
+
+test('the list stays sorted, so it does not reorder under the finger', () => {
+  let entry = makeProvider({ url: 'https://x.test' });
+  for (const id of ['z/last', 'a/first', 'm/middle']) entry = chooseModel(entry, id, true);
+  assert.deepEqual(entry.models, ['a/first', 'm/middle', 'z/last']);
+});
+
+test('choosing never mutates the provider it was given', () => {
+  const before = makeProvider({ url: 'https://x.test', models: ['a/one'] });
+  const after = chooseModel(before, 'b/two', true);
+  assert.deepEqual(before.models, ['a/one']);
+  assert.notEqual(after, before);
+});
+
+test('an empty id is not a model', () => {
+  const entry = makeProvider({ url: 'https://x.test' });
+  assert.equal(chooseModel(entry, '   ', true), entry);
+  assert.equal(chooseModel(entry, null, true), entry);
+});
+
+test('the chosen come first, and the rest are what is left', () => {
+  const entry = makeProvider({ url: 'https://x.test', models: ['b/two'] });
+  const { chosen, rest } = listModels(entry, ['a/one', 'b/two', 'c/three']);
+  assert.deepEqual(chosen, ['b/two']);
+  assert.deepEqual(rest, ['a/one', 'c/three']);
+});
+
+test('a chosen model that left the catalogue is still listed', () => {
+  /* Dropping it would silently unselect what somebody is using today, and the
+     catalogue is a snapshot of one request — a slow endpoint that answers
+     short must not edit anyone's list. */
+  const entry = makeProvider({ url: 'https://x.test', models: ['aposentado/v1'] });
+  const { chosen } = listModels(entry, ['a/one']);
+  assert.deepEqual(chosen, ['aposentado/v1']);
+});
+
+test('with nothing loaded there is still the list that was kept', () => {
+  const entry = makeProvider({ url: 'https://x.test', models: ['a/one'] });
+  assert.deepEqual(listModels(entry), { chosen: ['a/one'], rest: [] });
+});
+
+test('the short list survives the sheet reading its fields back', () => {
+  /* Same trap as the learned `agent` flag: `collectProvider` rebuilds the
+     entry on open, on close and on every change of the picker. */
+  const kept = makeProvider({ url: 'https://x.test', models: ['a/one', 'b/two'] });
+  const rebuilt = makeProvider({ id: kept.id, url: 'https://x.test' });
+  assert.equal(rebuilt.models, undefined, 'reconstruir sozinho perde a lista');
+  assert.deepEqual(relearn(kept, rebuilt).models, ['a/one', 'b/two']);
+});
+
+test('and is dropped when the address changes', () => {
+  // The ids came out of *that* endpoint's catalogue and mean nothing at another.
+  const kept = makeProvider({ url: 'https://x.test', models: ['a/one'] });
+  const moved = makeProvider({ id: kept.id, url: 'https://outro.test' });
+  assert.equal('models' in relearn(kept, moved), false);
+});
+
+test('relearn carries the flag and the list together', () => {
+  const kept = { ...makeProvider({ url: 'https://x.test', models: ['a/one'] }), agent: false };
+  const rebuilt = makeProvider({ id: kept.id, url: 'https://x.test' });
+  const out = relearn(kept, rebuilt);
+  assert.equal(out.agent, false);
+  assert.deepEqual(out.models, ['a/one']);
+});
+
+test('an empty list is not carried as an empty list', () => {
+  // Absent is the shape everything else checks for; `[]` would read as "asked
+  // and got nothing" rather than "never asked".
+  assert.equal('models' in makeProvider({ url: 'https://x.test', models: [] }), false);
 });

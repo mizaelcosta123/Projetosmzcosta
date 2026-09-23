@@ -17,12 +17,17 @@
 
 /**
  * @typedef {{id: string, name: string, url: string, key: string, kind: string,
- *            agent?: boolean}} Provider
+ *            agent?: boolean, models?: string[]}} Provider
  *
  * `kind` is a guess made offline, from the port and the hostname. `agent` is
  * what was actually found when something asked. Undefined means nobody has
  * asked yet; once it is a boolean it outranks the guess, because a hostname
  * cannot tell you what is listening on it and a request can.
+ *
+ * `models` is the short list kept for this endpoint -- the handful picked out
+ * of a catalogue that can run to three hundred. It belongs to the provider
+ * and not to the settings as a whole, because a model id means nothing
+ * anywhere else: "qwen2.5:1.5b" is not a thing OpenRouter has heard of.
  */
 
 export const JARVIS = 'jarvis';
@@ -246,13 +251,57 @@ function originOfPage() {
  * @param {Provider} next The entry as just rebuilt.
  */
 export function relearn(previous, next) {
-  if (typeof previous?.agent !== 'boolean') return next;
-  if (normalizeUrl(previous.url) !== normalizeUrl(next?.url)) return next;
-  return { ...next, agent: previous.agent };
+  const sameAddress = normalizeUrl(previous?.url ?? '') === normalizeUrl(next?.url ?? '');
+  if (!sameAddress) return next;
+  const carried = { ...next };
+  if (typeof previous?.agent === 'boolean') carried.agent = previous.agent;
+  // The chosen models travel with the address for the same reason: they were
+  // picked out of *that* endpoint's catalogue, and mean nothing at another.
+  if (previous?.models?.length) carried.models = [...previous.models];
+  return carried;
+}
+
+/**
+ * Add or remove a model from a provider's short list.
+ *
+ * Returns a new provider; the list stays sorted and free of duplicates so
+ * the panel does not reorder itself under the finger.
+ *
+ * @param {Provider} provider
+ * @param {string} model
+ * @param {boolean} [wanted] Omit to toggle.
+ */
+export function chooseModel(provider, model, wanted) {
+  const id = String(model ?? '').trim();
+  if (!id) return provider;
+  const current = provider?.models ?? [];
+  const has = current.includes(id);
+  const keep = wanted === undefined ? !has : Boolean(wanted);
+  if (keep === has) return provider;
+  const models = keep
+    ? [...current, id].sort((a, b) => a.localeCompare(b))
+    : current.filter((row) => row !== id);
+  return { ...provider, models };
+}
+
+/**
+ * The models a person would want to see listed for this provider.
+ *
+ * Their picks first, then anything else the endpoint reported. A model that
+ * was chosen and has since disappeared from the catalogue stays listed:
+ * dropping it would silently unselect what somebody is using today.
+ *
+ * @param {Provider} provider
+ * @param {string[]} [catalogue] Everything the endpoint reported.
+ */
+export function listModels(provider, catalogue = []) {
+  const chosen = provider?.models ?? [];
+  const rest = catalogue.filter((id) => !chosen.includes(id));
+  return { chosen: [...chosen], rest };
 }
 
 /** A provider with the fields filled in and an id that will not collide. */
-export function makeProvider({ name = '', url = '', key = '', id = '', agent } = {}) {
+export function makeProvider({ name = '', url = '', key = '', id = '', agent, models } = {}) {
   const clean = normalizeUrl(url);
   const entry = {
     id: id || `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
@@ -264,6 +313,7 @@ export function makeProvider({ name = '', url = '', key = '', id = '', agent } =
   // Only carried when it is known. An absent field and `false` mean different
   // things here, and JSON.stringify drops undefined for us.
   if (typeof agent === 'boolean') entry.agent = agent;
+  if (Array.isArray(models) && models.length) entry.models = [...models];
   return entry;
 }
 

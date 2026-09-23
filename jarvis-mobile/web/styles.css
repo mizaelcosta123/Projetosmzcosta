@@ -267,6 +267,75 @@ html, body {
 .more-menu button[aria-pressed="true"] { background: rgba(56, 189, 248, 0.16); }
 .more-menu button[aria-pressed="true"] small::after { content: " · ligado"; color: var(--accent); }
 
+/* -- the model catalogue -------------------------------------------------- */
+
+/* Scrolls inside itself, so the search box and the buttons stay put while
+   three hundred rows go past. */
+.catalogue {
+  max-height: 46vh;
+  overflow-y: auto;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.catalogue:empty { display: none; }
+
+/* Scoped under `.sheet` on purpose, and not just for tidiness.
+   `.sheet label` and `.catalogue label` have the same specificity, and
+   `.sheet label` is further down this file — so it won, and every id came out
+   as `LLAMA3.2:3B`. That is not the name of anything: model ids are
+   case-sensitive and get pasted straight into a request. */
+.sheet .catalogue label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+  padding: 10px 12px;
+  font-size: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+  cursor: pointer;
+  /* A hairline between rows, and none under the last. */
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.sheet .catalogue label:last-child { box-shadow: none; }
+.sheet .catalogue label:hover { background: rgba(56, 189, 248, 0.08); }
+.catalogue input[type='checkbox'] { flex: none; width: 17px; height: 17px; accent-color: var(--accent); }
+/* The id is the thing being chosen, so it gets the readable treatment: a
+   monospace face, and it wraps rather than being cut off — "vendor/model:tag"
+   is long and the tail is where the difference usually is. */
+.sheet .catalogue label span {
+  flex: 1;
+  min-width: 0;
+  font: 0.85rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.sheet .catalogue label[data-chosen='yes'] span { color: var(--accent); }
+
+/* The chosen ones float to the top under a heading of their own. */
+.sheet .catalogue .catalogue-group {
+  padding: 7px 12px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+#catalogue-search {
+  width: 100%;
+  padding: 11px 12px;
+  font: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+#catalogue-search:focus { outline: none; border-color: rgba(56, 189, 248, 0.55); }
+
 /* -- permissions ---------------------------------------------------------- */
 
 .perms { display: grid; gap: 6px; }

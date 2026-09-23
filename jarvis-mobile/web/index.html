@@ -159,6 +159,21 @@
     </button>
   </form>
 
+  <!-- The catalogue. Its own dialog so it can sit over the settings sheet
+       without either scrolling the other, and so Escape closes the one on
+       top. Built in JS from whatever the endpoint reported. -->
+  <dialog id="catalogue" class="sheet" aria-label="Modelos disponíveis">
+    <h2 id="catalogue-title">Modelos</h2>
+    <p class="hint" id="catalogue-note" aria-live="polite"></p>
+    <input id="catalogue-search" type="search" placeholder="filtrar" aria-label="Filtrar modelos"
+           autocapitalize="off" spellcheck="false" autocomplete="off">
+    <div id="catalogue-list" class="catalogue"></div>
+    <menu class="row">
+      <button type="button" id="catalogue-all" class="quiet">Recarregar do endpoint</button>
+      <button type="button" id="catalogue-done">Pronto</button>
+    </menu>
+  </dialog>
+
   <dialog id="settings" class="sheet" aria-label="Configurações">
     <form method="dialog">
       <h2>Conexão</h2>
@@ -191,10 +206,13 @@
       </menu>
 
       <label for="model">Modelo</label>
-      <!-- A datalist, not a select: the catalogue is a convenience, and any
-           model ID must stay typeable whether or not it came back in the list. -->
-      <input id="model" type="text" list="model-options" placeholder="padrão do servidor" autocapitalize="off" spellcheck="false">
-      <datalist id="model-options"></datalist>
+      <!-- A select of the ones kept for this endpoint, not of the catalogue:
+           a catalogue can run to three hundred and nobody scrolls that on a
+           phone. The catalogue is behind the button below, with a search. -->
+      <select id="model"></select>
+      <menu class="row">
+        <button type="button" id="model-pick" class="quiet">Escolher modelos</button>
+      </menu>
       <p class="hint" id="model-hint"></p>
 
       <h2 id="perms-heading">Permissões</h2>

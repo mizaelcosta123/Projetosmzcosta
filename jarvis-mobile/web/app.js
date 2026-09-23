@@ -21,6 +21,8 @@ import {
   makeProvider,
   modelsUrl,
   reachesDevice,
+  chooseModel,
+  listModels,
   relearn,
   termuxOllama,
 } from './providers.js';
@@ -62,6 +64,14 @@ const el = {
   moreMenu: document.getElementById('more-menu'),
   file: document.getElementById('file'),
   photos: document.getElementById('photos'),
+  modelPick: document.getElementById('model-pick'),
+  catalogue: document.getElementById('catalogue'),
+  catalogueTitle: document.getElementById('catalogue-title'),
+  catalogueNote: document.getElementById('catalogue-note'),
+  catalogueSearch: document.getElementById('catalogue-search'),
+  catalogueList: document.getElementById('catalogue-list'),
+  catalogueAll: document.getElementById('catalogue-all'),
+  catalogueDone: document.getElementById('catalogue-done'),
   perms: document.getElementById('perms'),
   permsNote: document.getElementById('perms-note'),
   permsRefresh: document.getElementById('perms-refresh'),
@@ -88,7 +98,6 @@ const el = {
   model: document.getElementById('model'),
   speak: document.getElementById('speak'),
   voiceMode: document.getElementById('voice-mode'),
-  modelOptions: document.getElementById('model-options'),
   modelHint: document.getElementById('model-hint'),
   demoBtn: document.getElementById('demo-btn'),
 };
@@ -1358,12 +1367,13 @@ el.provider.addEventListener('change', () => {
   collectProvider();
   settings.active = el.provider.value;
   // A model ID belongs to the provider that listed it, so changing provider
-  // cannot keep the old one: "qwen2.5:1.5b" means nothing to OpenRouter.
-  settings.model = '';
-  el.model.value = '';
-  el.modelOptions.replaceChildren();
+  // cannot keep the old one: "qwen2.5:1.5b" means nothing to OpenRouter. The
+  // new entry's own short list, if it has one, is picked up by renderModels.
+  settings.model = activeProvider().models?.[0] ?? '';
+  catalogue = { id: '', models: [] };
   resolvedModel = '';
   showProvider();
+  renderModels();
 });
 
 el.providerAdd.addEventListener('click', () => {
@@ -1400,11 +1410,22 @@ el.providerRemove.addEventListener('click', () => {
 el.providerTest.addEventListener('click', () => loadModels());
 
 /**
- * Ask the selected provider what it can run, and fill the picker.
+ * Everything the selected endpoint last said it can run.
  *
- * Typing a model ID by hand still works — the field is an input with a
- * datalist, not a select — because a brand-new model is always reachable
- * before any catalogue has heard of it.
+ * Not persisted: a catalogue of three hundred ids is not worth carrying in
+ * localStorage, and it can change between two opens of the sheet. What *is*
+ * persisted is the handful chosen out of it, on the provider.
+ *
+ * @type {{id: string, models: string[]}}
+ */
+let catalogue = { id: '', models: [] };
+
+/**
+ * Ask the selected provider what it can run, and remember the answer.
+ *
+ * Typing an id by hand still works, through the "Outro…" entry in the model
+ * picker: a brand-new model is always reachable before any catalogue has
+ * heard of it, and that was true of the datalist this replaced too.
  */
 async function loadModels() {
   // `collectProvider()` reads the sheet's edit fields back into the settings,
@@ -1418,23 +1439,174 @@ async function loadModels() {
   el.providerTest.disabled = true;
   try {
     const models = await fetchModels(entry);
-    const fragment = document.createDocumentFragment();
-    for (const id of models) {
-      const option = document.createElement('option');
-      option.value = id;
-      fragment.append(option);
+    catalogue = { id: entry.id, models };
+    setProviderStatus(`${models.length} modelos disponíveis.`, 'good');
+
+    // One model and nothing chosen? Choosing for them is the obvious kindness,
+    // and it is the Ollama case: one pulled model and nothing to decide.
+    const already = activeProvider().models ?? [];
+    if (models.length === 1 && already.length === 0) {
+      keepProvider(chooseModel(activeProvider(), models[0], true));
+      settings.model = models[0];
     }
-    el.modelOptions.replaceChildren(fragment);
-    setProviderStatus(`${models.length} modelos. Escolha um, ou deixe vazio.`, 'good');
-    el.modelHint.textContent = 'Vazio usa o padrão do servidor. Qualquer ID pode ser digitado.';
-    // One model and nothing chosen? Choosing for them is the obvious kindness.
-    if (models.length === 1 && !el.model.value) el.model.value = models[0];
+    renderModels();
+    if (el.catalogue.open) renderCatalogue();
+    return models;
   } catch (error) {
     setProviderStatus(String(error.message || error), 'bad');
+    if (el.catalogue.open) {
+      el.catalogueNote.textContent = String(error.message || error);
+      el.catalogueNote.dataset.state = 'bad';
+    }
+    return [];
   } finally {
     el.providerTest.disabled = false;
   }
 }
+
+/** Write a changed provider back into the settings, and save. */
+function keepProvider(updated) {
+  settings.providers = settings.providers.map((row) => (row.id === updated.id ? updated : row));
+  saveSettings(settings);
+  return updated;
+}
+
+// -- the model picker --------------------------------------------------------
+
+/** Fill the model select from what is kept for this endpoint. */
+function renderModels() {
+  const entry = activeProvider();
+  const chosen = entry.models ?? [];
+  const options = [['', 'padrão do servidor'], ...chosen.map((id) => [id, id])];
+  // Whatever is in use stays selectable even if it was never added to the
+  // list — an id typed once, or one that has left the catalogue since.
+  if (settings.model && !chosen.includes(settings.model)) {
+    options.push([settings.model, `${settings.model} (não está na lista)`]);
+  }
+  options.push(['__outro__', 'Outro… (digitar um id)']);
+
+  el.model.replaceChildren(
+    ...options.map(([value, label]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      return option;
+    })
+  );
+  el.model.value = settings.model;
+
+  el.modelHint.textContent = chosen.length
+    ? `${chosen.length} ${chosen.length === 1 ? 'modelo escolhido' : 'modelos escolhidos'} para este endereço.`
+    : 'Nenhum escolhido ainda — vazio usa o padrão do servidor.';
+  el.modelPick.textContent = catalogue.models.length
+    ? `Escolher modelos (${catalogue.models.length} disponíveis)`
+    : 'Escolher modelos';
+}
+
+el.model.addEventListener('change', () => {
+  if (el.model.value === '__outro__') {
+    const typed = prompt('Id do modelo, como o endereço o chama:', settings.model || '');
+    // Cancelled, or emptied: put the select back where it was rather than
+    // leaving "Outro…" showing as if it were a model.
+    if (typed === null || !typed.trim()) {
+      el.model.value = settings.model;
+      return;
+    }
+    const id = typed.trim();
+    settings.model = id;
+    keepProvider(chooseModel(activeProvider(), id, true));
+    renderModels();
+  } else {
+    settings.model = el.model.value;
+  }
+  saveSettings(settings);
+  resolvedModel = '';
+});
+
+/** Draw the catalogue: the chosen first, then everything else. */
+function renderCatalogue() {
+  const entry = activeProvider();
+  const filter = el.catalogueSearch.value.trim().toLowerCase();
+  const { chosen, rest } = listModels(entry, catalogue.id === entry.id ? catalogue.models : []);
+  const matches = (id) => !filter || id.toLowerCase().includes(filter);
+
+  const row = (id, isChosen) => {
+    const label = document.createElement('label');
+    label.dataset.chosen = isChosen ? 'yes' : 'no';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = isChosen;
+    box.addEventListener('change', () => {
+      keepProvider(chooseModel(activeProvider(), id, box.checked));
+      // Unchecking the one in use would leave the select pointing at nothing.
+      if (!box.checked && settings.model === id) {
+        settings.model = activeProvider().models?.[0] ?? '';
+        saveSettings(settings);
+        resolvedModel = '';
+      }
+      renderModels();
+      renderCatalogue();
+    });
+    const text = document.createElement('span');
+    text.textContent = id;
+    label.append(box, text);
+    return label;
+  };
+
+  const group = (text) => {
+    const head = document.createElement('p');
+    head.className = 'catalogue-group';
+    head.textContent = text;
+    return head;
+  };
+
+  const pieces = [];
+  const picked = chosen.filter(matches);
+  const others = rest.filter(matches);
+  if (picked.length) {
+    pieces.push(group(`escolhidos (${picked.length})`), ...picked.map((id) => row(id, true)));
+  }
+  if (others.length) {
+    pieces.push(group(`disponíveis (${others.length})`), ...others.map((id) => row(id, false)));
+  }
+  el.catalogueList.replaceChildren(...pieces);
+
+  if (pieces.length === 0) {
+    el.catalogueNote.textContent = filter
+      ? `Nada com "${el.catalogueSearch.value.trim()}".`
+      : 'Este endereço ainda não listou nada. Toque em "Recarregar do endpoint".';
+    el.catalogueNote.dataset.state = '';
+  } else {
+    el.catalogueNote.textContent = `${chosen.length} escolhido(s) de ${catalogue.models.length || chosen.length} disponíveis.`;
+    el.catalogueNote.dataset.state = '';
+  }
+}
+
+el.modelPick.addEventListener('click', async () => {
+  const entry = collectProvider();
+  el.catalogueTitle.textContent = `Modelos — ${entry.name || 'este endereço'}`;
+  el.catalogueSearch.value = '';
+  el.catalogue.showModal();
+  // Ask on open, unless this endpoint's catalogue is already in hand. This is
+  // what "the dropdown opens with everything available" means: the list is
+  // there when the sheet is, not after a second button.
+  if (catalogue.id !== entry.id || catalogue.models.length === 0) {
+    el.catalogueNote.textContent = 'Perguntando ao endereço…';
+    renderCatalogue();
+    await loadModels();
+  }
+  renderCatalogue();
+  el.catalogueSearch.focus();
+});
+
+el.catalogueSearch.addEventListener('input', renderCatalogue);
+el.catalogueAll.addEventListener('click', async () => {
+  catalogue = { id: '', models: [] };
+  el.catalogueNote.textContent = 'Perguntando ao endereço…';
+  await loadModels();
+  renderCatalogue();
+});
+el.catalogueDone.addEventListener('click', () => el.catalogue.close());
 
 /**
  * Ask the server what the phone can do, and put it on screen.
@@ -1527,7 +1699,7 @@ function openSettings() {
   // the browser's own settings since the sheet was last open, and the page is
   // never told when that happens.
   refreshPerms();
-  el.model.value = settings.model;
+  renderModels();
   el.speak.checked = settings.speak;
   el.wake.checked = settings.wake;
   el.voiceMode.textContent = describeVoice();
@@ -1545,7 +1717,9 @@ el.settings.addEventListener('close', () => {
   collectProvider();
   settings = {
     ...settings,
-    model: el.model.value.trim(),
+    // Read from the state, not from the select: `__outro__` is a command, not
+    // a model, and the change handler has already written whatever it meant.
+    model: settings.model,
     speak: el.speak.checked,
     wake: el.wake.checked,
   };
