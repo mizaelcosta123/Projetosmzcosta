@@ -75,8 +75,13 @@ console.log('\nsem gastar nada com rotas que o Ollama não tem');
   await page.click('#menu');
   await page.waitForTimeout(1500);
   check('configurações pergunta só a lista de modelos', [...new Set(calls)], [`GET ${OLLAMA}/api/tags`]);
-  const models = await page.$$eval('#model-options option', (o) => o.map((x) => x.value));
-  check('carregou os modelos', models.length > 0, true);
+  // The catalogue replaced the datalist, so the proof that the list arrived is
+  // the count the picker reports — not options on a field that no longer
+  // holds them. The select lists only what was *chosen*, which is nothing yet.
+  check('carregou o catálogo',
+    /\d+ disponíveis/.test(await page.$eval('#model-pick', (b) => b.textContent)), true);
+  check('e o seletor ainda não escolheu nada por conta própria',
+    await page.$$eval('#model option', (o) => o.map((x) => x.value)), ['', '__outro__']);
   const device = await page.$eval('#device-state', (e) => e.textContent.trim());
   check('diz a verdade sobre o aparelho', /só responde/.test(device), true);
   check('sem erros', errors, []);
