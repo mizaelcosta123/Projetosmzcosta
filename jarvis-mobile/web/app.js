@@ -18,6 +18,8 @@ import { Scene } from './holo.js';
 import { Stage } from './stage.js';
 import { Lens } from './lens.js';
 import { Synth } from './synth.js';
+import { Hud, boot, buzz } from './hud.js';
+import { toScreen } from './hands.js';
 import { NODS, Rotation, THINKING, Talk, VOICE_PROMPT } from './utter.js';
 import { conjure, learnedNames, perform, teaching } from './conjure.js';
 import { Memory } from './memory.js';
@@ -51,6 +53,8 @@ const SETTINGS_KEY = 'jarvis.settings.v1';
 
 const el = {
   canvas: document.getElementById('field'),
+  hud: document.getElementById('hud'),
+  boot: document.getElementById('boot'),
   status: document.getElementById('status'),
   live: document.getElementById('live'),
   wake: document.getElementById('wake'),
@@ -99,6 +103,9 @@ const el = {
   lensNote: document.getElementById('lens-note'),
   lensXr: document.getElementById('lens-xr'),
   lensClose: document.getElementById('lens-close'),
+  lensHelp: document.getElementById('lens-help'),
+  lensGuide: document.getElementById('lens-guide'),
+  lensGuideClose: document.getElementById('lens-guide-close'),
   holoBar: document.getElementById('holo-bar'),
   holoAr: document.getElementById('holo-ar'),
   holoClear: document.getElementById('holo-clear'),
@@ -139,6 +146,7 @@ const el = {
   voiceMode: document.getElementById('voice-mode'),
   modelHint: document.getElementById('model-hint'),
   demoBtn: document.getElementById('demo-btn'),
+  effects: document.querySelectorAll('input[name="effects"]'),
 };
 
 // -- settings ---------------------------------------------------------------
@@ -151,7 +159,7 @@ const el = {
  * should still render the face.
  */
 function loadSettings() {
-  const fallback = { providers: [], active: '', model: '', speak: true, wake: true };
+  const fallback = { providers: [], active: '', model: '', speak: true, wake: true, effects: 'completo' };
   let saved = fallback;
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -187,6 +195,7 @@ function migrate(saved) {
     model: saved.model ?? '',
     speak: saved.speak ?? true,
     wake: saved.wake ?? true,
+    effects: saved.effects ?? 'completo',
   };
 }
 
@@ -244,6 +253,27 @@ const serverOf = (s) => {
 const field = new ParticleField(el.canvas, { count: 6500, shape: 'orb' });
 field.start();
 
+/** The HUD around him: reads the field, never moves it. */
+const hud = new Hud({ canvas: el.hud, field, effects: settings.effects });
+hud.start();
+boot(el.boot, { reduced: Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) });
+
+/** Where the page is: `lens` (the camera), `xr` (a WebXR session) or home.
+ *  The stylesheet moves the chrome out of the room's way from this alone. */
+function setMode(mode) {
+  if (mode) document.body.dataset.mode = mode;
+  else delete document.body.dataset.mode;
+  hud.setMode(mode || 'home');
+}
+
+/** Run a CSS animation again from its start: toasts that fade on their own
+ *  have to come back for the next line. */
+function replay(node) {
+  node.style.animation = 'none';
+  void node.offsetWidth;
+  node.style.animation = '';
+}
+
 // -- what he remembers, and what is in the room -----------------------------
 
 /** Episodes, and the attention that finds them again. Opened at load so the
@@ -258,7 +288,19 @@ const decider = new Decider().open();
 
 /** The holograms. One scene, whether or not a session is open: things made
  *  by voice before entering AR are there waiting when you do. */
-const scene = new Scene();
+const scene = new Scene({
+  // A flash where each one appears, however it was asked for: by voice, by
+  // the model, or by a V held in front of the camera. A frame later, so the
+  // stage has refitted around it first.
+  onAdd: (item) => {
+    requestAnimationFrame(() => {
+      if (reality.running) return;
+      const at = toScreen(item, window.innerWidth, window.innerHeight, stage.cam);
+      hud.burst(at.x, at.y, item.hue);
+    });
+    buzz(18);
+  },
+});
 
 /** The AR session. Created eagerly because it owns nothing until started. */
 const reality = new Reality({
@@ -299,14 +341,47 @@ const lens = new Lens({
   scene,
   onStatus: (text) => {
     el.lensStatus.textContent = text;
+    document.body.dataset.toast = 'status';
+    replay(el.lensStatus);
+  },
+  onRemove: (item) => {
+    buzz([12, 50, 12]);
+    return `Apaguei ${item.shape === 'esfera' || item.shape === 'piramide' ? 'a' : 'o'} ${item.shape}.`;
   },
   onPose: (label) => {
+    if (label.startsWith('pinça') && !el.lensPose.textContent.startsWith('pinça')) buzz(10);
     el.lensPose.textContent = label;
+    if (!label) return;
     // Once a hand has been seen the legend has done its job, and it covers
-    // the top of the frame, which is where fingers are.
-    if (label) el.lensBar.dataset.seen = '';
+    // the room, which is where fingers are.
+    if (!('seen' in el.lensBar.dataset) && 'auto' in el.lensGuide.dataset) showGuide(false);
+    el.lensBar.dataset.seen = '';
+    // Focus: while a hand is followed, the rail and the chips fade back.
+    tracking(true);
   },
 });
+
+/** Focus mode in the camera, held for a moment after the hand goes. */
+let trackingTimer = 0;
+function tracking(on) {
+  clearTimeout(trackingTimer);
+  if (!on) {
+    delete el.lensBar.dataset.tracking;
+    delete document.body.dataset.tracking;
+    return;
+  }
+  el.lensBar.dataset.tracking = '';
+  document.body.dataset.tracking = '';
+  trackingTimer = setTimeout(() => tracking(false), 1500);
+}
+
+/** The gestures card, open or shut; `auto` when it opened by itself. */
+function showGuide(open, auto = false) {
+  el.lensGuide.hidden = !open;
+  el.lensHelp.setAttribute('aria-expanded', String(open));
+  if (open && auto) el.lensGuide.dataset.auto = '';
+  else delete el.lensGuide.dataset.auto;
+}
 
 /** Show the stage when there is something to show; put it away when not. */
 function refreshStage() {
@@ -324,7 +399,17 @@ window.addEventListener('resize', () => {
   requestAnimationFrame(() => {
     resizePending = false;
     field.resize();
+    hud.resize();
   });
+});
+
+// The on-screen keyboard. Android resizes the page (interactive-widget in
+// the viewport tag); iOS slides it over the page instead, and the composer
+// would sit under it -- so its height is handed to the stylesheet.
+window.visualViewport?.addEventListener('resize', () => {
+  const view = window.visualViewport;
+  const covered = Math.max(0, window.innerHeight - view.height - view.offsetTop);
+  document.documentElement.style.setProperty('--kb', `${Math.round(covered)}px`);
 });
 
 // -- voice ------------------------------------------------------------------
@@ -604,8 +689,14 @@ function setStatus(text, state = '') {
 }
 
 function setCaption(text) {
+  const changed = el.caption.textContent !== text;
   el.caption.textContent = text;
   el.caption.scrollTop = el.caption.scrollHeight;
+  if (changed && text) {
+    // In the camera, caption and status share one toast: the newer wins.
+    document.body.dataset.toast = 'caption';
+    replay(el.caption);
+  }
 }
 
 // -- talking to the server --------------------------------------------------
@@ -1492,7 +1583,10 @@ function showMenu(open) {
   el.moreMenu.hidden = !open;
   el.more.setAttribute('aria-expanded', String(open));
   el.composer.dataset.more = open ? 'open' : '';
-  if (open) el.moreMenu.querySelector('button')?.focus();
+  if (open) {
+    el.moreMenu.querySelector('button')?.focus();
+    buzz(8);
+  }
 }
 
 const MENU_DOES = {
@@ -1649,6 +1743,7 @@ async function enterAR() {
   // The field would go on drawing behind a transparent canvas, over the
   // camera, for no one's benefit and at a real cost in frames.
   field.stop();
+  setMode('xr');
   const opened = await reality.start(el.arOverlay);
   if (!opened) leaveAR();
 }
@@ -1656,6 +1751,7 @@ async function enterAR() {
 function leaveAR() {
   el.holo.hidden = true;
   el.arOverlay.hidden = true;
+  setMode('');
   field.start();
   // Whatever was made in the room is still there, and now shows on the glass.
   refreshStage();
@@ -1685,6 +1781,17 @@ async function openLens() {
   el.lensBar.hidden = false;
   el.holoBar.hidden = true;
   field.stop();
+  setMode('lens');
+  // The gestures open by themselves the first time only; after that they
+  // are one tap away, behind "?".
+  let guided = false;
+  try {
+    guided = localStorage.getItem('jarvis.lens.guided') === '1';
+    localStorage.setItem('jarvis.lens.guided', '1');
+  } catch {
+    /* Storage refused: show it, it is one tap to dismiss. */
+  }
+  showGuide(!guided, true);
   const opened = await lens.open();
   if (!opened) {
     // The reason is already in the bar; say it where it stays too.
@@ -1703,13 +1810,20 @@ async function toggleSynth() {
     lens.quiet();
   } else if (!(await synth.start())) {
     el.lensStatus.textContent = 'Este navegador não tem áudio sintetizado (Web Audio).';
+    document.body.dataset.toast = 'status';
+    replay(el.lensStatus);
     return;
   } else {
     el.lensStatus.textContent =
       'Sintetizador ligado: esquerda/direita é a nota, cima/baixo o brilho, abrir a mão o volume. ' +
       'O holograma sob a mão escolhe o timbre; a outra mão faz eco e vibrato.';
+    document.body.dataset.toast = 'status';
+    replay(el.lensStatus);
+    buzz(15);
   }
   el.lensSynth.setAttribute('aria-pressed', String(synth.running));
+  if (synth.running) document.body.dataset.synth = 'on';
+  else delete document.body.dataset.synth;
 }
 
 function closeLens() {
@@ -1720,6 +1834,10 @@ function closeLens() {
   el.lensBar.hidden = true;
   el.lensPose.textContent = '';
   delete el.lensBar.dataset.seen;
+  delete document.body.dataset.synth;
+  tracking(false);
+  showGuide(false);
+  setMode('');
   field.start();
   refreshStage();
 }
@@ -1727,6 +1845,8 @@ function closeLens() {
 el.lensFlip.addEventListener('click', () => lens.flip());
 el.lensSynth.addEventListener('click', () => toggleSynth());
 el.lensClose.addEventListener('click', () => closeLens());
+el.lensHelp.addEventListener('click', () => showGuide(el.lensGuide.hidden));
+el.lensGuideClose.addEventListener('click', () => showGuide(false));
 el.lensXr.addEventListener('click', () => {
   closeLens();
   enterAR();
@@ -2217,6 +2337,7 @@ function openSettings() {
   renderModels();
   el.speak.checked = settings.speak;
   el.wake.checked = settings.wake;
+  for (const radio of el.effects) radio.checked = radio.value === (settings.effects ?? 'completo');
   el.voiceMode.textContent = describeVoice();
   el.settings.showModal();
 }
@@ -2237,7 +2358,9 @@ el.settings.addEventListener('close', () => {
     model: settings.model,
     speak: el.speak.checked,
     wake: el.wake.checked,
+    effects: [...el.effects].find((radio) => radio.checked)?.value ?? 'completo',
   };
+  hud.setEffects(settings.effects);
   resolvedModel = '';
   saveSettings(settings);
   watchAgentEvents();

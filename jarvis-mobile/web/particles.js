@@ -213,6 +213,17 @@ export class ParticleField {
     this.cx = width / 2;
     this.cy = height / 2;
     this.unit = Math.max(1, ratio);
+    // The ground: black at the edges, the faintest blue where he is, like
+    // the light an arc reactor leaves on a dark room. Built once per size;
+    // a flat colour where the context cannot make gradients.
+    this.ground = this.ctx.createRadialGradient?.(
+      this.cx, this.cy, 0, this.cx, this.cy, Math.max(width, height) * 0.7
+    ) ?? null;
+    if (this.ground) {
+      this.ground.addColorStop(0, '#0a2234');
+      this.ground.addColorStop(0.45, '#04101b');
+      this.ground.addColorStop(1, '#02050b');
+    }
   }
 
   /**
@@ -654,7 +665,7 @@ export class ParticleField {
       list.push(this.cx + x[i] * scale * k, this.cy + y[i] * scale * k, size * k);
     }
 
-    ctx.fillStyle = '#04060b';
+    ctx.fillStyle = this.ground ?? '#02050b';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const unit = this.unit;

@@ -2,16 +2,26 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<meta name="theme-color" content="#04060b">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=resizes-content">
+<meta name="theme-color" content="#02050b">
+<meta name="color-scheme" content="dark">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Jarvis</title>
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <canvas id="field" aria-hidden="true"></canvas>
+
+  <!-- The HUD around him: dust, rings, flashes (hud.js). Its own layer, so
+       the field's stillness stays his; and a still vignette over both, which
+       costs nothing per frame because it never changes. -->
+  <canvas id="hud" aria-hidden="true"></canvas>
+  <div class="cine" aria-hidden="true"></div>
 
   <!-- Augmented reality through the camera: the video, and the hand drawn
        over it. Before the hologram canvas in the document, so the holograms
@@ -27,7 +37,7 @@
 
   <!-- The holograms without AR: shown with the stage, over the field. -->
   <div id="holo-bar" class="holo-bar" hidden>
-    <p class="hint">Toque para escolher · arraste para mover · pince para girar e escalar · toque duas vezes para apagar</p>
+    <p class="hint fades">Toque para escolher · arraste para mover · pince para girar e escalar · toque duas vezes para apagar</p>
     <menu class="row">
       <button type="button" id="holo-ar" class="quiet">Ver no ambiente</button>
       <button type="button" id="holo-clear" class="quiet">Limpar</button>
@@ -36,17 +46,47 @@
   </div>
 
   <!-- The camera mode's controls. After the hologram canvas, or it would
-       take their taps. -->
+       take their taps. Nothing here sits in the middle of the view: the
+       status is a toast that leaves, the gestures are a card behind "?",
+       and the buttons are a rail at the thumb's edge that dims while a hand
+       is being followed. -->
   <div id="lens-bar" class="lens-bar" hidden>
     <p id="lens-status" class="lens-status" aria-live="polite"></p>
-    <p class="hint">Pinça: agarrar e mover · aproxime ou afaste a mão: tamanho · gire a mão: girar · ✌️ segurado: criar · punho segurado: apagar · palma aberta sobre um objeto: ele pousa na mão, e os dedos levantados giram</p>
+    <section id="lens-guide" class="lens-guide" aria-labelledby="lens-guide-title" hidden>
+      <h2 id="lens-guide-title">Gestos</h2>
+      <ul class="hint">
+        <li><strong>Pinça</strong> agarrar e mover</li>
+        <li><strong>Aproxime ou afaste a mão</strong> tamanho</li>
+        <li><strong>Gire a mão</strong> girar</li>
+        <li><strong>✌️ segurado</strong> criar</li>
+        <li><strong>Punho segurado</strong> apagar</li>
+        <li><strong>Palma aberta sobre um objeto</strong> ele pousa na mão, e os dedos levantados giram</li>
+      </ul>
+      <button type="button" id="lens-guide-close">Entendi</button>
+    </section>
     <p class="lens-readout"><span id="lens-pose" class="lens-pose" aria-live="off"></span><span id="lens-note" class="lens-note" aria-live="off"></span></p>
-    <menu class="row">
-      <button type="button" id="lens-synth" class="quiet" aria-pressed="false"
-              title="Tocar com as mãos: esquerda/direita é a nota, cima/baixo o brilho, abrir a mão o volume">Sintetizador</button>
-      <button type="button" id="lens-flip" class="quiet">Virar câmera</button>
-      <button type="button" id="lens-xr" class="quiet" hidden>Fixar no chão</button>
-      <button type="button" id="lens-close" class="quiet">Sair</button>
+    <menu class="rail" aria-label="Controles da câmera">
+      <button type="button" id="lens-synth" aria-pressed="false" aria-label="Sintetizador"
+              title="Tocar com as mãos: esquerda/direita é a nota, cima/baixo o brilho, abrir a mão o volume">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2 10c1.5-4 3-4 4.5 0s3 4 4.5 0 3-4 4.5 0 1.5 2 2.5 2" /></svg>
+        <span class="label">Sintetizador</span>
+      </button>
+      <button type="button" id="lens-flip" aria-label="Virar câmera" title="Virar câmera">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 8a6 6 0 0 1 11-2l1 1.5M16 12a6 6 0 0 1-11 2l-1-1.5M16 3.5v4h-4M4 16.5v-4h4" /></svg>
+        <span class="label">Virar câmera</span>
+      </button>
+      <button type="button" id="lens-xr" aria-label="Fixar no chão" title="Fixar no chão" hidden>
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v8M7 8l3 3 3-3M3 15.5c2-1.5 12-1.5 14 0" /></svg>
+        <span class="label">Fixar no chão</span>
+      </button>
+      <button type="button" id="lens-help" aria-label="Gestos" title="Gestos" aria-expanded="false" aria-controls="lens-guide">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7.5 7.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.7M10 14.6v.4" /></svg>
+        <span class="label">Gestos</span>
+      </button>
+      <button type="button" id="lens-close" class="danger" aria-label="Sair" title="Sair">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 5l10 10M15 5L5 15" /></svg>
+        <span class="label">Sair</span>
+      </button>
     </menu>
   </div>
 
@@ -54,10 +94,19 @@
        while the session has the screen. -->
   <div id="ar-overlay" class="ar-overlay" hidden>
     <p id="ar-status" class="ar-status" aria-live="polite"></p>
-    <menu class="row">
-      <button type="button" id="ar-drop">Soltar</button>
-      <button type="button" id="ar-clear" class="quiet">Limpar</button>
-      <button type="button" id="ar-stop" class="quiet">Sair</button>
+    <menu class="dock">
+      <button type="button" id="ar-clear" class="quiet">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 6h12M7 6V4h6v2M6 6l1 10h6l1-10" /></svg>
+        Limpar
+      </button>
+      <button type="button" id="ar-drop" class="primary">
+        <span class="reactor" aria-hidden="true"></span>
+        Soltar
+      </button>
+      <button type="button" id="ar-stop" class="quiet danger">
+        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 5l10 10M15 5L5 15" /></svg>
+        Sair
+      </button>
     </menu>
   </div>
 
@@ -73,6 +122,7 @@
     <!-- State lives in the field itself — still, breathing, or speaking. This
          carries it for anyone who cannot see the field, and surfaces visually
          only when something went wrong. -->
+    <span class="brand" aria-hidden="true">J.A.R.V.I.S</span>
     <p id="status" class="state" role="status" aria-live="polite">em repouso</p>
 
     <button id="shape" class="ghost-btn" aria-label="Alternar entre esfera e rosto" title="Alternar forma">
@@ -300,6 +350,17 @@
       </menu>
       <input id="memory-file" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" multiple hidden>
 
+      <h2 id="effects-heading">Efeitos</h2>
+      <!-- The HUD's cost, chosen here: a phone that drops frames with the
+           dust on can still have the rings. -->
+      <div class="segmented" role="radiogroup" aria-labelledby="effects-heading">
+        <label><input type="radio" name="effects" value="completo" checked><span>Completo</span></label>
+        <label><input type="radio" name="effects" value="leve"><span>Leve</span></label>
+        <label><input type="radio" name="effects" value="desligado"><span>Desligado</span></label>
+      </div>
+      <p class="hint">Partículas 3D, anéis e transições. Em “Leve” a poeira diminui; na câmera só as transições rodam, para as mãos terem a GPU.</p>
+
+      <h2 id="voice-heading">Voz</h2>
       <label class="switch">
         <input id="speak" type="checkbox" checked>
         <span>Falar as respostas em voz alta</span>
@@ -318,6 +379,15 @@
       </menu>
     </form>
   </dialog>
+
+  <!-- The start-up sequence: once a session, never with reduced motion,
+       and it never takes a tap (hud.js `boot`). -->
+  <div id="boot" class="boot" aria-hidden="true" hidden>
+    <div class="boot-scan"></div>
+    <div class="boot-rings"><i></i><i></i><i></i><b></b></div>
+    <p class="boot-name">J.A.R.V.I.S</p>
+    <p class="boot-note">sistemas online</p>
+  </div>
 
   <script type="module" src="app.js"></script>
 </body>

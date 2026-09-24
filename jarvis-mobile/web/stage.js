@@ -164,6 +164,7 @@ export class Stage {
     if (!context) return;
     paint(context, this.canvas.width, this.canvas.height, this.scene, this.cam.matrix, {
       selected: this.hands.selected,
+      materialize: true,
     });
   }
 }

@@ -196,6 +196,7 @@ export class Reality {
     if (!inverse) return;
     paint(context, this.canvas.width, this.canvas.height, this.scene, inverse, {
       reticle: this.reticle,
+      materialize: true,
     });
   }
 }
@@ -208,26 +209,52 @@ export class Reality {
  * session, and over the field on the stage -- so they cannot drift apart.
  * `selected` is drawn brighter and heavier: something you are holding has
  * to look held.
+ *
+ * Two things make a wireframe read as light rather than as lines. A glow
+ * under each object -- its edges again, wide and faint, added onto what is
+ * behind -- and a bright node at every corner. Both are drawn through
+ * `Path2D`, one stroke per object, so the per-edge pass stays exactly one
+ * `moveTo` per edge (the tests count them) and the glow costs a handful of
+ * strokes a frame, not a blur per line.
+ *
+ * `materialize` grows each new object's edges out from their first corner
+ * over its first moments in the scene (`scene.time - item.born`), so things
+ * are built in front of you instead of appearing.
  */
-export function paint(context, width, height, scene, inverse, { reticle = null, selected = null } = {}) {
+export function paint(context, width, height, scene, inverse, { reticle = null, selected = null, materialize = false } = {}) {
   context.clearRect(0, 0, width, height);
   const half = Math.min(width, height) / 2;
 
+  const lines = [];
   for (const edge of scene.edges()) {
     const a = project(apply(inverse, edge.a));
     const b = project(apply(inverse, edge.b));
     if (!a.visible || !b.visible) continue;
+    const ax = width / 2 + a.x * half;
+    const ay = height / 2 - a.y * half;
+    let bx = width / 2 + b.x * half;
+    let by = height / 2 - b.y * half;
+    if (materialize) {
+      const grown = built(scene.time - (edge.item.born ?? -Infinity));
+      bx = ax + (bx - ax) * grown;
+      by = ay + (by - ay) * grown;
+    }
+    lines.push({ item: edge.item, ax, ay, bx, by, depth: (a.depth + b.depth) / 2 });
+  }
+
+  if (typeof Path2D === 'function' && context.save) glow(context, lines, width, selected);
+
+  for (const line of lines) {
     // Further is dimmer and thinner, which is most of what makes a
     // wireframe sit in a room instead of floating on the glass.
-    const depth = (a.depth + b.depth) / 2;
-    const fade = Math.max(0.08, Math.min(1, 1.6 / depth));
-    const held = selected !== null && edge.item === selected;
-    const light = held ? 78 : 52 + fade * 18;
-    context.strokeStyle = `hsla(${edge.item.hue}, 90%, ${light}%, ${held ? 1 : fade})`;
+    const fade = Math.max(0.08, Math.min(1, 1.6 / line.depth));
+    const held = selected !== null && line.item === selected;
+    const light = held ? 80 : 58 + fade * 18;
+    context.strokeStyle = `hsla(${line.item.hue}, 95%, ${light}%, ${held ? 1 : fade})`;
     context.lineWidth = Math.max(0.6, fade * 2.2) * (held ? 1.8 : 1);
     context.beginPath();
-    context.moveTo(width / 2 + a.x * half, height / 2 - a.y * half);
-    context.lineTo(width / 2 + b.x * half, height / 2 - b.y * half);
+    context.moveTo(line.ax, line.ay);
+    context.lineTo(line.bx, line.by);
     context.stroke();
   }
 
@@ -242,6 +269,47 @@ export function paint(context, width, height, scene, inverse, { reticle = null, 
       context.stroke();
     }
   }
+}
+
+/** How much of a new object is built, 0 to 1, eased to land softly. */
+export function built(age, duration = 0.6) {
+  if (!(age >= 0)) return 1;
+  const t = Math.min(1, age / duration);
+  return 1 - (1 - t) ** 3;
+}
+
+/** The glow and the corner nodes: one stroke and one fill per object. */
+function glow(context, lines, width, selected) {
+  const unit = Math.max(1, width / 520);
+  const byItem = new Map();
+  for (const line of lines) {
+    let entry = byItem.get(line.item);
+    if (!entry) {
+      entry = { edges: new Path2D(), nodes: new Path2D() };
+      byItem.set(line.item, entry);
+    }
+    entry.edges.moveTo(line.ax, line.ay);
+    entry.edges.lineTo(line.bx, line.by);
+    for (const [x, y] of [[line.ax, line.ay], [line.bx, line.by]]) {
+      entry.nodes.moveTo(x + 2.2 * unit, y);
+      entry.nodes.arc(x, y, 2.2 * unit, 0, Math.PI * 2);
+    }
+  }
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  context.lineCap = 'round';
+  for (const [item, { edges, nodes }] of byItem) {
+    const held = item === selected;
+    context.strokeStyle = `hsla(${item.hue}, 95%, 60%, ${held ? 0.34 : 0.2})`;
+    context.lineWidth = (held ? 12 : 9) * unit;
+    context.stroke(edges);
+    context.strokeStyle = `hsla(${item.hue}, 95%, 66%, 0.3)`;
+    context.lineWidth = 4 * unit;
+    context.stroke(edges);
+    context.fillStyle = `hsla(${item.hue}, 100%, 88%, ${held ? 0.95 : 0.7})`;
+    context.fill(nodes);
+  }
+  context.restore();
 }
 
 /**

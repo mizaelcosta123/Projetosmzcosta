@@ -192,10 +192,16 @@ export function project(point, fov = 1.6) {
  * times should not end with a phone at four frames a second.
  */
 export class Scene {
-  constructor({ limit = 24 } = {}) {
+  /**
+   * @param {{limit?: number, onAdd?: (item: object) => void}} [options]
+   *   `onAdd` hears about every new one, whoever made it -- a sentence, the
+   *   model, a hand -- which is where the interface marks its arrival.
+   */
+  constructor({ limit = 24, onAdd = null } = {}) {
     this.items = [];
     this.limit = limit;
     this.time = 0;
+    this.onAdd = onAdd;
   }
 
   /** Put one in the room. Returns it. */
@@ -206,6 +212,7 @@ export class Scene {
     // Oldest out first: the one you just asked for is the one you are looking
     // at, and dropping that instead would be absurd.
     while (this.items.length > this.limit) this.items.shift();
+    this.onAdd?.(item);
     return item;
   }
 

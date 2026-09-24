@@ -1,19 +1,35 @@
 /* Dark by necessity, not fashion: the field is luminous dots on black, and a
    light background would wash it out entirely.
 
-   The governing rule for everything else here: he is the interface. Chrome is
-   dim until touched, and nothing sits where it competes with his face. */
+   The governing rule for everything else here: he is the interface. The
+   chrome is a heads-up display -- glass, hairlines, corner brackets, light
+   that moves -- but it keeps to the edges, and nothing sits where it competes
+   with his face, the room behind the camera, or the hands in front of it.
+
+   Only system fonts: the server's policy is `font-src 'self' data:`, so a
+   web font from a CDN would never load, and a phone has good ones already. */
 :root {
-  --bg: #04060b;
-  --ink: #e8eff8;
-  --dim: #6b7d96;
-  --dimmer: #44546b;
-  --accent: #38bdf8;
-  --danger: #fb7185;
-  --sheet: rgba(10, 15, 24, 0.94);
-  --line: rgba(120, 150, 190, 0.18);
+  color-scheme: dark;
+  --bg: #02050b;
+  --ink: #e6f6ff;
+  --dim: #8aa6ba;
+  --dimmer: #5f7f99;
+  --accent: #5ce1ff;
+  --accent-deep: #1c8cff;
+  --amber: #ffb547;
+  --danger: #ff5577;
+  --glow: rgba(92, 225, 255, 0.45);
+  --glass: rgba(5, 14, 26, 0.62);
+  --sheet: rgba(5, 13, 24, 0.94);
+  --line: rgba(92, 225, 255, 0.2);
+  --line-strong: rgba(92, 225, 255, 0.42);
   --gutter: 18px;
+  --kb: 0px; /* the on-screen keyboard's height, from visualViewport (app.js) */
+  --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --spring: cubic-bezier(0.2, 1.3, 0.3, 1);
+  --chamfer: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  --hex: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
 }
 
 * { box-sizing: border-box; }
@@ -26,8 +42,13 @@ html, body {
   color: var(--ink);
   font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overscroll-behavior: none;
 }
+
+/* A tap is a tap: no 300 ms wait for a double-tap zoom on either platform. */
+button, a, label, input, select { touch-action: manipulation; }
 
 #field {
   position: fixed;
@@ -38,6 +59,28 @@ html, body {
   touch-action: none;
 }
 
+/* The HUD layer and the still vignette, both over the field and under
+   everything else, and neither takes a tap. */
+#hud {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.cine {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 85% at 50% 46%, transparent 58%, rgba(0, 0, 0, 0.55) 100%),
+    repeating-linear-gradient(0deg, rgba(160, 230, 255, 0.022) 0 1px, transparent 1px 3px);
+}
+/* The camera is the room: nothing darkens it, and the flashes go over it. */
+body[data-mode="lens"] .cine { display: none; }
+body[data-mode="lens"] #hud { z-index: 7; }
+body[data-mode="xr"] #hud { display: none; }
+
 /* -- frame ---------------------------------------------------------------- */
 
 .frame {
@@ -47,23 +90,29 @@ html, body {
   right: 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: calc(env(safe-area-inset-top) + 10px) var(--gutter) 10px;
+  user-select: none;
+  -webkit-user-select: none;
 }
+body[data-mode="lens"] .frame { display: none; }
 
 .ghost-btn {
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   padding: 0;
-  color: var(--dimmer);
-  background: transparent;
-  border: 0;
-  border-radius: 12px;
+  color: #9fdcf0;
+  background: rgba(5, 14, 26, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  clip-path: var(--chamfer);
   cursor: pointer;
-  transition: color 0.25s var(--ease);
+  opacity: 0.72;
+  transition: color 0.25s var(--ease), opacity 0.25s var(--ease), background 0.25s var(--ease), transform 0.2s var(--spring);
 }
 .ghost-btn svg {
   width: 20px;
@@ -74,23 +123,46 @@ html, body {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.ghost-btn:hover, .ghost-btn:focus-visible { color: var(--ink); }
+.ghost-btn:hover, .ghost-btn:focus-visible { color: var(--ink); opacity: 1; background: rgba(92, 225, 255, 0.12); }
+.ghost-btn:active { transform: scale(0.92); }
 .ghost-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 /* Filled circle while he wears a face — the control shows what tapping returns
    him to, not what he currently is. */
 .ghost-btn[data-shape="face"] svg circle { fill: currentColor; }
 
+/* The wordmark: small, spaced, dim. A signature, not a headline. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 11px/1 var(--mono);
+  letter-spacing: 0.42em;
+  color: rgba(170, 232, 255, 0.55);
+  pointer-events: none;
+}
+.brand::before, .brand::after {
+  content: "";
+  width: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(92, 225, 255, 0.6));
+}
+.brand::after { background: linear-gradient(90deg, rgba(92, 225, 255, 0.6), transparent); }
+
 /* The field already says what he is doing: still, breathing, or speaking. This
    stays for screen readers and appears on screen only when something failed,
-   which the field has no way to express. */
+   which the field has no way to express -- as a strip under the frame. */
 .state {
-  flex: 1;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
   margin: 0;
   text-align: center;
-  font-size: 11px;
+  font: 11px/1.4 var(--mono);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--danger);
+  text-shadow: 0 0 12px rgba(255, 85, 119, 0.6);
   opacity: 0;
   transition: opacity 0.3s var(--ease);
   pointer-events: none;
@@ -99,13 +171,13 @@ html, body {
 
 /* -- what he said --------------------------------------------------------- */
 
-/* Anchored above the composer and scrimmed, so text stays readable over the
-   field without a panel boxing it in. */
+/* Anchored above the composer, no panel: text on the field with a glow that
+   keeps it readable over the dots. */
 .caption {
   position: fixed;
   left: var(--gutter);
   right: var(--gutter);
-  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  bottom: calc(env(safe-area-inset-bottom) + 86px + var(--kb));
   max-width: 33rem;
   max-height: 32vh;
   margin: 0 auto;
@@ -114,63 +186,148 @@ html, body {
   overscroll-behavior: contain;
   text-align: center;
   text-wrap: pretty;
-  color: var(--ink);
+  font-size: 16px;
+  color: #eefaff;
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16px);
   mask-image: linear-gradient(to bottom, transparent, #000 16px);
-  text-shadow: 0 1px 16px rgba(4, 6, 11, 0.95), 0 0 34px rgba(4, 6, 11, 0.8);
+  text-shadow: 0 0 18px rgba(92, 225, 255, 0.3), 0 1px 16px rgba(2, 5, 11, 0.95), 0 0 34px rgba(2, 5, 11, 0.8);
   opacity: 0;
   transform: translateY(6px);
-  transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
+  transition: opacity 0.4s var(--ease), transform 0.4s var(--ease), bottom 0.25s var(--ease);
 }
 .caption:not(:empty) { opacity: 1; transform: none; }
+/* Each new line arrives out of a blur, like a readout resolving (app.js
+   replays the animation on every change). */
+.caption:not(:empty) { animation: resolve 0.45s var(--ease); }
+@keyframes resolve {
+  from { filter: blur(5px); opacity: 0.2; }
+  to { filter: none; opacity: 1; }
+}
+
+/* In the camera the caption is a toast at the top that leaves by itself --
+   the same slot and the same glass as the camera's own status, and the
+   newer of the two is the one shown (`data-toast`, set by app.js). With the
+   synthesizer on it is not shown at all: both are views of the room, and a
+   paragraph over the hands is a paragraph in the way. */
+body[data-mode="lens"] .caption {
+  top: calc(env(safe-area-inset-top) + 18px);
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  width: max-content;
+  max-width: calc(100vw - 150px);
+  max-height: 5.2em;
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  text-shadow: none;
+  background: rgba(4, 12, 22, 0.66);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  -webkit-mask-image: none;
+  mask-image: none;
+  transform: translateX(-50%);
+  animation: status-toast 5s var(--ease) both;
+}
+body[data-mode="lens"][data-toast="status"] .caption,
+body[data-mode="lens"][data-toast="caption"] .lens-status,
+body[data-synth="on"] .caption { display: none; }
 
 /* -- composer ------------------------------------------------------------- */
 
-/* A hairline, not a bar. It brightens on focus and otherwise recedes. */
+/* A capsule of glass. A line of light runs along it while it has focus. */
 .composer {
   position: fixed;
   left: var(--gutter);
   right: var(--gutter);
-  bottom: calc(env(safe-area-inset-bottom) + 14px);
+  bottom: calc(env(safe-area-inset-bottom) + 14px + var(--kb));
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   max-width: 33rem;
+  height: 56px;
   margin: 0 auto;
-  padding-left: 4px;
-  border-bottom: 1px solid var(--line);
-  transition: border-color 0.25s var(--ease);
+  padding: 0 6px;
+  overflow: hidden;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: 0 0 24px rgba(92, 225, 255, 0.08), inset 0 0 18px rgba(92, 225, 255, 0.05);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  transition: border-color 0.25s var(--ease), box-shadow 0.25s var(--ease), opacity 0.3s var(--ease), bottom 0.25s var(--ease);
 }
-.composer:focus-within { border-color: rgba(56, 189, 248, 0.55); }
+.composer::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 32%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0;
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.composer:focus-within {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 30px rgba(92, 225, 255, 0.16), inset 0 0 18px rgba(92, 225, 255, 0.07);
+}
+.composer:focus-within::after { opacity: 1; animation: sweep 3.2s var(--ease) infinite; }
+@keyframes sweep {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(330%); }
+}
 
 .composer input {
   flex: 1;
   min-width: 0;
-  padding: 13px 4px;
-  font: inherit;
+  height: 44px;
+  padding: 0 6px;
+  /* 16px or iOS zooms the page in on focus and never zooms back out. */
+  font: 16px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--ink);
   background: transparent;
   border: 0;
 }
-.composer input::placeholder { color: var(--dimmer); }
+.composer input::placeholder { color: #7394ab; }
 .composer input:focus { outline: none; }
+
+/* The camera keeps the composer -- "cria uma esfera" still works there --
+   but small and faint until it is touched. With the synthesizer on, only
+   the live button is left. */
+body[data-mode="lens"] .composer { height: 50px; opacity: 0.55; }
+body[data-mode="lens"] .composer:focus-within { opacity: 1; }
+body[data-mode="lens"] .composer #more { display: none; }
+body[data-synth="on"] .composer {
+  left: auto;
+  right: var(--gutter);
+  width: 52px;
+  padding: 0 3px;
+  border-radius: 50%;
+}
+body[data-synth="on"] .composer > :not(#live) { display: none; }
 
 /* The send control earns its contrast: invisible until there is something to
    send, so an empty composer is just a line. */
 .composer button {
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   padding: 0;
-  color: var(--dimmer);
+  color: #7fdcf5;
   background: transparent;
   border: 0;
   border-radius: 50%;
   cursor: pointer;
-  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease), color 0.2s var(--ease);
+  transition: opacity 0.2s var(--ease), transform 0.3s var(--spring), color 0.2s var(--ease), background 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
+.composer button:active { transform: scale(0.9); }
 
 /* Only the send control hides. The comment above was always about it, but the
    rule sat on every button in the row — so the camera, the clip, the create
@@ -178,7 +335,7 @@ html, body {
    which is precisely backwards: you press those *before* there is text. */
 #send {
   opacity: 0;
-  transform: translateX(-4px);
+  transform: scale(0.6);
 }
 .composer button svg {
   width: 19px;
@@ -189,7 +346,15 @@ html, body {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.composer[data-ready="true"] #send { opacity: 1; transform: none; color: var(--accent); }
+/* Ready: the reactor lights. */
+.composer[data-ready="true"] #send {
+  opacity: 1;
+  transform: none;
+  color: var(--bg);
+  background: radial-gradient(circle, #e9fdff 0 22%, var(--accent) 23% 100%);
+  box-shadow: 0 0 18px var(--glow), 0 0 0 4px rgba(92, 225, 255, 0.14);
+}
+.composer[data-ready="true"] #send svg { stroke-width: 2.2; }
 .composer button:focus-visible { opacity: 1; transform: none; outline: 1px solid var(--accent); outline-offset: 2px; }
 .composer button:disabled { opacity: 0.35; cursor: default; }
 
@@ -197,74 +362,120 @@ html, body {
 
 /* Findable on an empty composer, for the same reason the live button is: it
    is what you reach for before there is any text. */
-.composer #more { opacity: 0.5; }
+.composer #more { opacity: 0.8; }
 .composer #more:hover,
 .composer #more:focus-visible { opacity: 1; }
 /* Rotates into an x while the menu is open, so the same button closes it and
    looks like it would. */
 .composer[data-more="open"] #more { opacity: 1; color: var(--accent); }
-.composer[data-more="open"] #more svg { transform: rotate(45deg); }
-.composer #more svg { transition: transform 0.22s var(--ease); }
+.composer[data-more="open"] #more svg { transform: rotate(135deg); }
+.composer #more svg { transition: transform 0.35s var(--spring); }
 
+/* A holographic panel: it resolves out of a line and flickers once. */
 .more-menu {
   position: fixed;
   left: var(--gutter);
   right: var(--gutter);
   /* Sits on the composer, which is itself above the safe area. */
-  bottom: calc(env(safe-area-inset-bottom) + 68px);
+  bottom: calc(env(safe-area-inset-bottom) + 80px + var(--kb));
   z-index: 6;
   max-width: 33rem;
+  max-height: calc(100dvh - env(safe-area-inset-bottom) - 170px);
+  overflow-y: auto;
   margin: 0 auto;
-  padding: 6px;
+  padding: 8px;
   display: grid;
   gap: 2px;
-  background: rgba(8, 12, 22, 0.92);
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  background: rgba(5, 14, 26, 0.8);
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
   /* The blur is what keeps the field readable behind it instead of fighting
      it: he goes on moving under the menu rather than being covered by it. */
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 0 40px rgba(92, 225, 255, 0.12), 0 18px 50px rgba(0, 0, 0, 0.6);
   transform-origin: left bottom;
-  animation: menu-in 0.18s var(--ease);
+  animation: materialize 0.42s var(--ease) both;
 }
-@keyframes menu-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
-  to { opacity: 1; transform: none; }
+.more-menu::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+@keyframes materialize {
+  0% { opacity: 0; clip-path: inset(100% 0 0 0 round 18px); }
+  35% { opacity: 1; }
+  45% { opacity: 0.55; }
+  55% { opacity: 1; }
+  100% { opacity: 1; clip-path: inset(0 0 0 0 round 18px); }
 }
 
 .more-menu button {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
-  padding: 11px 12px;
+  min-height: 52px;
+  padding: 6px 10px;
   color: var(--ink);
   font: inherit;
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: 11px;
+  border-radius: 12px;
   cursor: pointer;
+  overflow: hidden;
+  animation: item-in 0.3s var(--ease) both;
+}
+.more-menu button:nth-child(1) { animation-delay: 0.1s; }
+.more-menu button:nth-child(2) { animation-delay: 0.135s; }
+.more-menu button:nth-child(3) { animation-delay: 0.17s; }
+.more-menu button:nth-child(4) { animation-delay: 0.205s; }
+.more-menu button:nth-child(5) { animation-delay: 0.24s; }
+.more-menu button:nth-child(6) { animation-delay: 0.275s; }
+.more-menu button:nth-child(7) { animation-delay: 0.31s; }
+@keyframes item-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: none; }
 }
 .more-menu button:hover,
-.more-menu button:focus-visible { background: rgba(56, 189, 248, 0.1); outline: none; }
+.more-menu button:focus-visible { background: rgba(92, 225, 255, 0.1); outline: none; }
+/* A glint crosses the row under the finger. */
+.more-menu button::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(92, 225, 255, 0.16), transparent);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.more-menu button:active::after { animation: sweep 0.5s var(--ease); }
+/* The icon in a hexagonal badge. */
 .more-menu button svg {
   flex: none;
-  width: 19px;
-  height: 19px;
+  width: 38px;
+  height: 38px;
+  padding: 9px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
   color: var(--accent);
+  background: linear-gradient(160deg, rgba(92, 225, 255, 0.2), rgba(92, 225, 255, 0.05));
+  clip-path: var(--hex);
 }
+.more-menu button[data-does="create"] svg { color: var(--amber); }
 .more-menu button > span { display: grid; gap: 1px; }
-.more-menu small { color: var(--dimmer); font-size: 0.78rem; }
+.more-menu small { color: var(--dim); font-size: 0.8rem; }
 /* A toggle that is currently on says so, since the menu closes behind you. */
-.more-menu button[aria-pressed="true"] { background: rgba(56, 189, 248, 0.16); }
+.more-menu button[aria-pressed="true"] { background: rgba(92, 225, 255, 0.16); }
 .more-menu button[aria-pressed="true"] small::after { content: " · ligado"; color: var(--accent); }
 
 /* -- augmented reality ---------------------------------------------------- */
@@ -277,6 +488,7 @@ html, body {
   z-index: 8;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   pointer-events: none;
   background: transparent;
 }
@@ -294,34 +506,51 @@ html, body {
   position: fixed;
   left: var(--gutter);
   right: var(--gutter);
-  top: calc(env(safe-area-inset-top) + 60px);
+  top: calc(env(safe-area-inset-top) + 64px);
   max-width: 33rem;
   margin: 0 auto;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   text-align: center;
 }
 .holo-bar .hint { margin: 0; font-size: 0.78rem; color: var(--dim); }
+/* Said once, then it leaves the view to the objects. */
+.holo-bar .hint.fades { animation: hint-out 7s var(--ease) both; }
+@keyframes hint-out {
+  0%, 80% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
 .holo-bar menu { display: flex; gap: 8px; justify-content: center; margin: 0; padding: 0; }
 .holo-bar button {
-  padding: 8px 14px;
+  min-height: 40px;
+  padding: 8px 16px;
   font: inherit;
   font-size: 0.86rem;
-  color: var(--dim);
-  background: rgba(8, 12, 22, 0.7);
+  color: #b8d6e4;
+  background: var(--glass);
   border: 1px solid var(--line);
   border-radius: 999px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   cursor: pointer;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--spring);
 }
-.holo-bar button:hover, .holo-bar button:focus-visible { color: var(--ink); }
+.holo-bar button:hover, .holo-bar button:focus-visible { color: var(--ink); border-color: var(--line-strong); }
+.holo-bar button:active { transform: scale(0.94); }
 
 /* The camera mode: the room behind everything but the frame, the
-   holograms and the composer. */
+   holograms and the composer. It opens as an iris from the corner the
+   menu was in. */
 .lens {
   position: fixed;
   inset: 0;
   background: #000;
   pointer-events: none;
+  animation: iris 0.65s cubic-bezier(0.6, 0, 0.2, 1) both;
+}
+@keyframes iris {
+  from { clip-path: circle(0% at 12% 94%); }
+  to { clip-path: circle(150% at 12% 94%); }
 }
 .lens video,
 .lens canvas {
@@ -334,74 +563,304 @@ html, body {
 /* The front camera, as a mirror: what people expect to see of themselves.
    The hand's points are mirrored to match in lens.js. */
 .lens video.mirrored { transform: scaleX(-1); }
+/* Corner brackets frame the view without covering any of it. */
+.lens::after {
+  content: "";
+  position: absolute;
+  inset: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px);
+  pointer-events: none;
+  --b: rgba(92, 225, 255, 0.5);
+  background:
+    linear-gradient(var(--b), var(--b)) top left / 22px 1.5px,
+    linear-gradient(var(--b), var(--b)) top left / 1.5px 22px,
+    linear-gradient(var(--b), var(--b)) top right / 22px 1.5px,
+    linear-gradient(var(--b), var(--b)) top right / 1.5px 22px,
+    linear-gradient(var(--b), var(--b)) bottom left / 22px 1.5px,
+    linear-gradient(var(--b), var(--b)) bottom left / 1.5px 22px,
+    linear-gradient(var(--b), var(--b)) bottom right / 22px 1.5px,
+    linear-gradient(var(--b), var(--b)) bottom right / 1.5px 22px;
+  background-repeat: no-repeat;
+}
 
+/* The bar is not a bar any more: a container whose children place
+   themselves at the edges. It takes no taps of its own, so the glass
+   under it stays the hand. */
 .lens-bar {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.lens-bar > * { pointer-events: auto; }
+
+/* The status: a toast at the top that fades on its own (app.js replays it
+   each time the text changes). */
+.lens-status {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 18px);
+  left: 50%;
+  max-width: calc(100vw - 150px);
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  text-align: center;
+  color: #dff7ff;
+  background: rgba(4, 12, 22, 0.66);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transform: translateX(-50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.lens-status:empty { display: none; }
+.lens-status:not(:empty) { animation: status-toast 5s var(--ease) both; }
+@keyframes status-toast {
+  0% { opacity: 0; visibility: visible; transform: translate(-50%, -6px); }
+  8%, 75% { opacity: 1; visibility: visible; transform: translateX(-50%); }
+  100% { opacity: 0; visibility: hidden; transform: translateX(-50%); }
+}
+
+/* The gestures, as a card behind "?": open on the first visit, gone with
+   the first hand, and back whenever it is asked for. */
+.lens-guide {
+  position: fixed;
+  left: var(--gutter);
+  right: 76px;
+  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  max-width: 26rem;
+  padding: 14px 16px 16px;
+  background: rgba(4, 12, 22, 0.82);
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  box-shadow: 0 0 36px rgba(92, 225, 255, 0.14);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: materialize 0.42s var(--ease) both;
+}
+.lens-guide h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #7fe9ff;
+}
+.lens-guide h2::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(92, 225, 255, 0.5), transparent);
+}
+.lens-guide ul {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+  color: #a2c3d4;
+}
+.lens-guide li { display: grid; }
+.lens-guide strong { color: var(--ink); font-weight: 600; }
+.lens-guide button {
+  width: 100%;
+  min-height: 44px;
+  font: 600 0.92rem/1 inherit;
+  color: var(--bg);
+  background: linear-gradient(180deg, #8ff0ff, #3fcff5);
+  border: 0;
+  clip-path: var(--chamfer);
+  cursor: pointer;
+}
+
+/* What the hand is doing and the note it plays: a small chip in a corner. */
+.lens-readout {
+  position: fixed;
+  left: var(--gutter);
+  bottom: calc(env(safe-area-inset-bottom) + 76px);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none !important;
+}
+.lens-pose, .lens-note {
+  padding: 5px 9px;
+  font: 11px/1.2 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: rgba(4, 12, 22, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.lens-pose { color: #7fe9ff; }
+.lens-note {
+  color: var(--amber);
+  border-color: rgba(255, 181, 71, 0.35);
+  font-variant-numeric: tabular-nums;
+}
+.lens-pose:empty, .lens-note:empty { display: none; }
+/* With the keyboard along the bottom, the chips go above it. */
+body[data-synth="on"] .lens-readout { bottom: calc(env(safe-area-inset-bottom) + 150px); }
+
+/* The rail: round glass buttons down the right edge, where a thumb is. */
+.lens-bar .rail {
+  position: fixed;
+  right: 12px;
+  top: 50%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transform: translateY(-50%);
+  transition: opacity 0.4s var(--ease);
+}
+.lens-bar .rail button {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #bfefff;
+  background: rgba(4, 12, 22, 0.55);
+  border: 1px solid rgba(92, 225, 255, 0.35);
+  border-radius: 50%;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: transform 0.25s var(--spring), background 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.lens-bar .rail button:active { transform: scale(0.9); }
+.lens-bar .rail button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lens-bar .rail svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.lens-bar .rail button.danger { color: #ffc1cc; border-color: rgba(255, 85, 119, 0.45); }
+.lens-bar .rail button[aria-pressed="true"] {
+  color: var(--bg);
+  background: var(--amber);
+  border-color: var(--amber);
+  box-shadow: 0 0 18px rgba(255, 181, 71, 0.6);
+}
+.lens-bar .rail button[aria-expanded="true"] {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 18px var(--glow);
+}
+.label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Focus: while a hand is being followed, everything that is not the room
+   fades back. A touch on any of it brings it up again. */
+.lens-bar[data-tracking] .rail,
+.lens-bar[data-tracking] .lens-readout { opacity: 0.3; }
+/* Only a keyboard's focus brings it back: a tapped button keeps focus on a
+   phone, and a rail lit by the last tap would never fade again. */
+.lens-bar[data-tracking] .rail:has(:focus-visible),
+.lens-bar[data-tracking] .rail:active { opacity: 1; }
+@media (hover: hover) {
+  .lens-bar[data-tracking] .rail:hover { opacity: 1; }
+}
+body[data-mode="lens"][data-tracking] .composer:not(:focus-within) { opacity: 0.25; }
+
+/* The dom-overlay root. WebXR hands the screen to the session, and these are
+   the only controls that survive it — so they are large and few: a dock of
+   three, the middle one the one that matters. */
+.ar-overlay {
   position: fixed;
   left: var(--gutter);
   right: var(--gutter);
-  top: calc(env(safe-area-inset-top) + 60px);
+  bottom: calc(env(safe-area-inset-bottom) + 22px);
+  z-index: 9;
   max-width: 33rem;
   margin: 0 auto;
   display: grid;
+  justify-items: center;
+  gap: 14px;
+}
+.ar-overlay .dock {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 28px;
+  margin: 0;
+  padding: 0;
+}
+.ar-overlay button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 6px;
-  padding: 10px 12px;
+  padding: 0;
+  font: 12px/1 inherit;
+  color: #b8d6e4;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ar-overlay button svg {
+  width: 52px;
+  height: 52px;
+  padding: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  background: rgba(4, 12, 22, 0.62);
+  border: 1px solid rgba(92, 225, 255, 0.35);
+  border-radius: 50%;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.ar-overlay button.danger { color: #ffc1cc; }
+.ar-overlay button.danger svg { border-color: rgba(255, 85, 119, 0.45); }
+.ar-overlay .primary { color: #dff7ff; font-weight: 600; }
+.reactor {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #e9fdff 0 16%, var(--accent) 17% 30%, rgba(92, 225, 255, 0.2) 31% 100%);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 26px rgba(92, 225, 255, 0.6);
+  transition: transform 0.25s var(--spring);
+}
+.ar-overlay .primary:active .reactor { transform: scale(0.9); }
+.ar-status {
+  margin: 0;
+  max-width: 100%;
+  padding: 8px 14px;
+  font-size: 0.84rem;
   text-align: center;
-  background: rgba(4, 6, 11, 0.62);
+  color: #dff7ff;
+  background: rgba(4, 12, 22, 0.62);
   border: 1px solid var(--line);
   border-radius: 16px;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
-.lens-status { margin: 0; font-size: 0.86rem; color: var(--ink); }
-.lens-bar .hint { margin: 0; font-size: 0.74rem; color: var(--dim); }
-.lens-bar[data-seen] .hint { display: none; }
-.lens-readout { margin: 0; min-height: 1.2em; display: flex; gap: 12px; justify-content: center; }
-.lens-pose { font-size: 0.8rem; color: var(--accent); }
-.lens-note { font-size: 0.8rem; color: #f0abfc; font-variant-numeric: tabular-nums; }
-.lens-bar button[aria-pressed="true"] { color: var(--ink); border-color: rgba(240, 171, 252, 0.6); background: rgba(240, 171, 252, 0.16); }
-.lens-bar menu { display: flex; gap: 8px; justify-content: center; margin: 0; padding: 0; flex-wrap: wrap; }
-.lens-bar button {
-  padding: 8px 14px;
-  font: inherit;
-  font-size: 0.86rem;
-  color: var(--dim);
-  background: rgba(8, 12, 22, 0.7);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  cursor: pointer;
-}
-
-/* The dom-overlay root. WebXR hands the screen to the session, and these are
-   the only controls that survive it — so they are large and few. */
-.ar-overlay {
-  position: fixed;
-  left: var(--gutter);
-  right: var(--gutter);
-  bottom: calc(env(safe-area-inset-bottom) + 18px);
-  z-index: 9;
-  max-width: 33rem;
-  margin: 0 auto;
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  background: rgba(8, 12, 22, 0.86);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-}
-.ar-overlay button {
-  flex: 1;
-  padding: 12px 14px;
-  font: inherit;
-  color: var(--ink);
-  background: rgba(56, 189, 248, 0.16);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  cursor: pointer;
-}
-.ar-overlay button.quiet { background: transparent; color: var(--dim); }
-.ar-status { margin: 0; font-size: 0.86rem; color: var(--dim); }
+.ar-status:empty { display: none; }
 
 /* -- the model catalogue -------------------------------------------------- */
 
@@ -427,6 +886,7 @@ html, body {
   gap: 10px;
   margin-bottom: 0;
   padding: 10px 12px;
+  min-height: 44px;
   font-size: inherit;
   font-weight: 400;
   letter-spacing: normal;
@@ -437,15 +897,15 @@ html, body {
   box-shadow: inset 0 -1px 0 var(--line);
 }
 .sheet .catalogue label:last-child { box-shadow: none; }
-.sheet .catalogue label:hover { background: rgba(56, 189, 248, 0.08); }
-.catalogue input[type='checkbox'] { flex: none; width: 17px; height: 17px; accent-color: var(--accent); }
+.sheet .catalogue label:hover { background: rgba(92, 225, 255, 0.08); }
+.catalogue input[type='checkbox'] { flex: none; width: 18px; height: 18px; accent-color: var(--accent); }
 /* The id is the thing being chosen, so it gets the readable treatment: a
    monospace face, and it wraps rather than being cut off — "vendor/model:tag"
    is long and the tail is where the difference usually is. */
 .sheet .catalogue label span {
   flex: 1;
   min-width: 0;
-  font: 0.85rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 0.85rem/1.35 var(--mono);
   overflow-wrap: anywhere;
 }
 .sheet .catalogue label[data-chosen='yes'] span { color: var(--accent); }
@@ -456,21 +916,21 @@ html, body {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--dimmer);
-  background: rgba(255, 255, 255, 0.02);
+  color: var(--dim);
+  background: rgba(92, 225, 255, 0.04);
   box-shadow: inset 0 -1px 0 var(--line);
 }
 
 #catalogue-search {
   width: 100%;
   padding: 11px 12px;
-  font: inherit;
+  font: 16px/1.3 inherit;
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(2, 8, 16, 0.7);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: 12px;
 }
-#catalogue-search:focus { outline: none; border-color: rgba(56, 189, 248, 0.55); }
+#catalogue-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(92, 225, 255, 0.15); }
 
 /* -- permissions ---------------------------------------------------------- */
 
@@ -480,22 +940,23 @@ html, body {
   align-items: center;
   gap: 10px;
   padding: 9px 10px;
+  background: rgba(2, 8, 16, 0.45);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: 12px;
 }
 .perms-row > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .perms-row strong { font-weight: 600; font-size: 0.92rem; }
-.perms-row small { color: var(--dimmer); font-size: 0.78rem; }
+.perms-row small { color: var(--dim); font-size: 0.78rem; }
 /* The state, as a word rather than a colour alone: a colour-blind eye and a
    screen reader both need this to survive without the dot. */
-.perms-state { font-size: 0.74rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.perms-state { font: 0.72rem/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
 .perms-row[data-state="granted"] .perms-state { color: #4ade80; }
 .perms-row[data-state="denied"] .perms-state,
 .perms-row[data-state="blocked"] .perms-state,
-.perms-row[data-state="insecure"] .perms-state { color: #fb7185; }
+.perms-row[data-state="insecure"] .perms-state { color: #ff7a93; }
 .perms-row[data-state="prompt"] .perms-state { color: var(--accent); }
 .perms-row[data-state="unknown"] .perms-state,
-.perms-row[data-state="missing"] .perms-state { color: var(--dimmer); }
+.perms-row[data-state="missing"] .perms-state { color: var(--dim); }
 .perms-row button { flex: none; }
 /* Nothing to ask for once it is granted, and a denial cannot be undone from
    here — the browser requires its own UI for that. `blocked` hides it for a
@@ -510,22 +971,30 @@ html, body {
 /* Not a send affordance: this one has to be findable on an *empty* composer,
    because an empty composer is exactly when you reach for it. */
 .composer .live-btn {
-  opacity: 0.5;
+  opacity: 0.8;
   transform: none;
 }
 .composer .live-btn:hover,
 .composer .live-btn:focus-visible { opacity: 1; }
 
 /* The three bars move only while the session is open, and the middle one
-   leads — the same shape as a meter, which is what it is standing for. */
-.composer[data-live="on"] .live-btn { opacity: 1; color: var(--accent); }
-.composer[data-live="on"] .live-btn line {
+   leads — the same shape as a meter, which is what it is standing for. The
+   button lights, and a ring breathes out of it. */
+.composer[data-live] .live-btn {
+  opacity: 1;
+  color: var(--bg);
+  background: var(--accent);
+  box-shadow: 0 0 18px var(--glow);
+}
+.composer[data-live] .live-btn svg { stroke-width: 2; }
+.composer[data-live] .live-btn line {
   transform-box: fill-box;
   transform-origin: center;
   animation: bar 1.25s var(--ease) infinite;
 }
-.composer[data-live="on"] .live-btn line:nth-child(1) { animation-delay: -0.42s; }
-.composer[data-live="on"] .live-btn line:nth-child(3) { animation-delay: -0.84s; }
+.composer[data-live] .live-btn line:nth-child(1) { animation-delay: -0.42s; }
+.composer[data-live] .live-btn line:nth-child(3) { animation-delay: -0.84s; }
+.composer[data-live] .live-btn { animation: live-ring 1.8s var(--ease) infinite; }
 
 /* Hearing you: the bars stop idling and stand up, so the page shows it is
    taking your turn rather than filling silence. */
@@ -535,28 +1004,93 @@ html, body {
   0%, 100% { transform: scaleY(0.45); }
   50% { transform: scaleY(1); }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .composer[data-live] .live-btn line { animation: none; }
+@keyframes live-ring {
+  0% { box-shadow: 0 0 18px var(--glow), 0 0 0 0 rgba(92, 225, 255, 0.5); }
+  100% { box-shadow: 0 0 18px var(--glow), 0 0 0 10px rgba(92, 225, 255, 0); }
 }
 
 /* -- settings ------------------------------------------------------------- */
 
 .sheet {
   width: min(27rem, calc(100vw - 28px));
+  max-height: calc(100dvh - 40px);
   padding: 26px 24px 22px;
   color: var(--ink);
   background: var(--sheet);
-  border: 1px solid var(--line);
-  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 22px;
+  box-shadow: 0 0 60px rgba(92, 225, 255, 0.12), 0 30px 80px rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  overscroll-behavior: contain;
+  counter-reset: section;
 }
-.sheet::backdrop { background: rgba(4, 6, 11, 0.76); }
+.sheet[open] { animation: sheet-in 0.42s var(--spring) both; }
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.sheet::backdrop {
+  background: rgba(2, 5, 11, 0.74);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+/* On a phone the sheet comes up from the bottom, where the thumb already is,
+   with a handle that says it is a sheet. */
+@media (max-width: 600px) {
+  .sheet {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 90dvh;
+    margin: auto 0 0;
+    padding: 30px 20px calc(env(safe-area-inset-bottom) + 22px);
+    border-width: 1px 0 0;
+    border-radius: 26px 26px 0 0;
+  }
+  .sheet[open] { animation: sheet-up 0.5s cubic-bezier(0.2, 1.1, 0.3, 1) both; }
+  .sheet::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    width: 44px;
+    height: 4px;
+    margin-left: -22px;
+    border-radius: 2px;
+    background: rgba(160, 225, 250, 0.35);
+  }
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+
+/* Numbered sections: 01 — CONEXÃO, with a line running off to the edge. */
 .sheet h2 {
-  margin: 0 0 20px;
-  font-size: 15px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 26px 0 16px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  counter-increment: section;
+}
+.sheet h2:first-child,
+.sheet form > h2:first-child { margin-top: 0; }
+.sheet h2::before {
+  content: counter(section, decimal-leading-zero);
+  font: 11px/1 var(--mono);
+  color: var(--accent);
+}
+.sheet h2::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  align-self: center;
+  background: linear-gradient(90deg, rgba(92, 225, 255, 0.45), transparent);
 }
 
 .sheet label {
@@ -564,7 +1098,7 @@ html, body {
   margin-bottom: 6px;
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--dim);
 }
@@ -574,29 +1108,99 @@ html, body {
 .sheet input[type="text"] {
   width: 100%;
   margin-bottom: 16px;
-  padding: 11px 13px;
-  font: 15px/1.4 inherit;
+  padding: 12px 13px;
+  font: 16px/1.3 inherit;
   color: var(--ink);
-  background: rgba(4, 6, 11, 0.55);
+  background: rgba(2, 8, 16, 0.7);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  transition: border-color 0.2s var(--ease);
+  border-radius: 12px;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
-.sheet input:focus-visible { outline: none; border-color: var(--accent); }
+.sheet input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(92, 225, 255, 0.15); }
 
 .sheet label.switch {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
   margin: 4px 0 8px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
   color: var(--ink);
   cursor: pointer;
 }
-.sheet label.switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+.sheet label.switch span { order: -1; }
+/* A switch drawn over the checkbox, which stays the real control. */
+.sheet label.switch input {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 46px;
+  height: 26px;
+  margin: 0;
+  background: rgba(2, 8, 16, 0.8);
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  cursor: pointer;
+  transition: background 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+.sheet label.switch input::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #7f9bb0;
+  transition: transform 0.3s var(--spring), background 0.25s var(--ease);
+}
+.sheet label.switch input:checked { background: rgba(92, 225, 255, 0.25); box-shadow: 0 0 12px rgba(92, 225, 255, 0.35); }
+.sheet label.switch input:checked::after { transform: translateX(20px); background: var(--accent); }
+.sheet label.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Three choices in one control, the chosen one lit. */
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.sheet .segmented label {
+  position: relative;
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #b8d6e4;
+  cursor: pointer;
+}
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.segmented span {
+  display: grid;
+  place-items: center;
+  min-height: 42px;
+  border-radius: 10px;
+  transition: background 0.25s var(--ease), color 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+.segmented input:checked + span {
+  color: var(--bg);
+  background: var(--accent);
+  box-shadow: 0 0 16px rgba(92, 225, 255, 0.45);
+}
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .hint {
   margin: 0 0 20px;
@@ -612,27 +1216,48 @@ html, body {
   margin: 0;
   padding: 0;
 }
+/* Primary: lit and chamfered. Quiet: a hairline. */
 .sheet menu button {
+  min-height: 44px;
   padding: 10px 18px;
-  font: 14px/1 inherit;
+  font: 600 14px/1 inherit;
   color: var(--bg);
-  background: var(--accent);
+  background: linear-gradient(180deg, #8ff0ff, #3fcff5);
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
+  clip-path: var(--chamfer);
+  box-shadow: 0 0 20px rgba(92, 225, 255, 0.35);
   cursor: pointer;
+  transition: transform 0.2s var(--spring), filter 0.2s var(--ease);
 }
+.sheet menu button:active { transform: scale(0.96); }
+.sheet menu button:hover { filter: brightness(1.1); }
 .sheet menu button.quiet {
-  color: var(--dim);
+  font-weight: 400;
+  color: #b8d6e4;
   background: transparent;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  clip-path: none;
+  box-shadow: none;
 }
-.sheet menu button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.sheet menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* The field's motion is the product and stays; the chrome's decorative
-   transitions are what a reduced-motion preference is actually asking about. */
+   transitions and animations are what a reduced-motion preference is
+   actually asking about. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: 0.01ms !important; }
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
   .caption { transform: none; }
+  .composer[data-live] .live-btn line { animation: none; }
+  /* Toasts that fade by animation would fade instantly: they stay instead. */
+  .lens-status:not(:empty),
+  body[data-mode="lens"] .caption,
+  .holo-bar .hint.fades { animation: none !important; opacity: 1; visibility: visible; }
 }
 
 /* A hint carrying a correction, not a description. Same size and rhythm as the
@@ -645,20 +1270,22 @@ html, body {
 
 .sheet select {
   width: 100%;
+  min-height: 46px;
   padding: 0.7rem 0.75rem;
-  border-radius: 0.6rem;
-  border: 1px solid rgba(120, 170, 210, 0.28);
-  background: rgba(10, 18, 30, 0.85);
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: rgba(2, 8, 16, 0.75);
   color: inherit;
-  font: inherit;
+  font: 16px/1.3 inherit;
 }
+.sheet select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(92, 225, 255, 0.15); }
 
 .sheet .stack {
   margin: 0.35rem 0 0.2rem;
   padding: 0.75rem;
-  border-radius: 0.7rem;
-  border: 1px solid rgba(120, 170, 210, 0.16);
-  background: rgba(8, 14, 24, 0.55);
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(2, 8, 16, 0.5);
 }
 
 /* A row of buttons rather than the sheet's footer menu, which is right-aligned
@@ -669,6 +1296,7 @@ html, body {
   margin: 0.6rem 0 0;
   padding: 0;
 }
+.sheet menu.row + label { margin-top: 18px; }
 
 .sheet menu.row button {
   flex: 1;
@@ -680,7 +1308,7 @@ html, body {
 .sheet button.danger,
 .sheet menu button.danger {
   color: #ffb4a8;
-  border-color: rgba(255, 140, 120, 0.35);
+  border-color: rgba(255, 120, 120, 0.4);
 }
 
 /* What he remembers: the newest few, each with a way to take it back. */
@@ -699,23 +1327,24 @@ html, body {
   align-items: center;
   gap: 8px;
   padding: 7px 8px 7px 10px;
+  background: rgba(2, 8, 16, 0.45);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 0.86rem;
 }
 .memory-list li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.memory-list li small { flex: none; color: var(--dimmer); font-size: 0.72rem; }
+.memory-list li small { flex: none; color: var(--dim); font: 0.7rem/1 var(--mono); }
 .memory-list li button {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   font: inherit;
   line-height: 1;
   color: var(--dim);
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -784,7 +1413,7 @@ html, body {
 
 .composer-btn {
   flex: 0 0 auto;
-  opacity: 0.5; /* present but quiet, like the live button beside them */
+  opacity: 0.8; /* present but quiet, like the live button beside them */
 }
 
 .composer-btn:hover,
@@ -803,11 +1432,11 @@ html, body {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 4.6rem;
+  bottom: calc(env(safe-area-inset-bottom) + 76px + var(--kb));
   display: flex;
-  gap: 0.5rem;
+  gap: 0.6rem;
   overflow-x: auto;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem var(--gutter);
   z-index: 5;
 }
 
@@ -815,14 +1444,16 @@ html, body {
   position: relative;
   margin: 0;
   flex: 0 0 auto;
+  animation: item-in 0.3s var(--spring) both;
 }
 
 .tray img {
   width: 3.4rem;
   height: 3.4rem;
   object-fit: cover;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(120, 170, 210, 0.3);
+  border-radius: 0.6rem;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 0 14px rgba(92, 225, 255, 0.2);
   display: block;
 }
 
@@ -831,10 +1462,10 @@ html, body {
   place-items: center;
   width: 3.4rem;
   height: 3.4rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(120, 170, 210, 0.3);
-  background: rgba(10, 18, 30, 0.85);
-  font-size: 0.6rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--line-strong);
+  background: rgba(5, 14, 26, 0.85);
+  font: 0.6rem/1.2 var(--mono);
   padding: 0.2rem;
   text-align: center;
   overflow: hidden;
@@ -843,16 +1474,16 @@ html, body {
 
 .tray button {
   position: absolute;
-  top: -0.35rem;
-  right: -0.35rem;
-  width: 1.2rem;
-  height: 1.2rem;
+  top: -0.45rem;
+  right: -0.45rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 50%;
-  border: none;
-  background: #1a2634;
+  border: 1px solid var(--line-strong);
+  background: #0a1726;
   color: #e6edf5;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -861,9 +1492,10 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: 20;
-  background: #04060b;
+  background: var(--bg);
   display: grid;
   grid-template-rows: 1fr auto;
+  animation: iris 0.55s cubic-bezier(0.6, 0, 0.2, 1) both;
 }
 
 .viewfinder video {
@@ -873,17 +1505,38 @@ html, body {
   min-height: 0;
 }
 
+/* The dock under a viewfinder: glass, with round-cornered pills; the first
+   button is the one it is for, and it is lit. */
 .viewfinder menu {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.6rem;
   margin: 0;
-  padding: 1rem;
+  padding: 1rem var(--gutter);
   padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  background: rgba(3, 9, 17, 0.9);
+  border-top: 1px solid var(--line);
 }
 
 .viewfinder menu button {
   flex: 1;
+  min-height: 48px;
+  font: 500 15px/1 inherit;
+  color: #b8d6e4;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.2s var(--spring);
 }
+.viewfinder menu button:first-child:not(.quiet) {
+  font-weight: 600;
+  color: var(--bg);
+  background: linear-gradient(180deg, #8ff0ff, #3fcff5);
+  border: 0;
+  box-shadow: 0 0 20px rgba(92, 225, 255, 0.35);
+}
+.viewfinder menu button:active { transform: scale(0.96); }
+.viewfinder menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* -- the preview stage ----------------------------------------------------- */
 
@@ -891,8 +1544,19 @@ html, body {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 4.8rem;
+  bottom: calc(env(safe-area-inset-bottom) + 80px + var(--kb));
   z-index: 6;
+  min-height: 40px;
+  padding: 8px 18px;
+  font: 500 14px/1 inherit;
+  color: var(--accent);
+  background: var(--glass);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  box-shadow: 0 0 18px rgba(92, 225, 255, 0.2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
 }
 
 #stage iframe {
@@ -908,7 +1572,7 @@ html, body {
 /* The mode is a state of the composer, not a separate screen: the field is
    still the field, it is just pointed somewhere else. */
 .composer-btn[aria-pressed='true'] {
-  color: #ffd9a0;
+  color: var(--amber);
 }
 
 .shot {
@@ -916,6 +1580,7 @@ html, body {
   place-items: center;
   gap: 0.75rem;
   padding: 1rem;
+  padding-top: calc(env(safe-area-inset-top) + 1rem);
   min-height: 0;
 }
 
@@ -923,8 +1588,10 @@ html, body {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  border-radius: 0.6rem;
-  background: rgba(10, 18, 30, 0.85);
+  border-radius: 0.8rem;
+  border: 1px solid var(--line);
+  box-shadow: 0 0 40px rgba(92, 225, 255, 0.15);
+  background: rgba(5, 14, 26, 0.85);
   min-height: 0;
 }
 
@@ -948,4 +1615,88 @@ html, body {
 #again[disabled],
 #save[disabled] {
   opacity: 0.45;
+}
+
+/* -- the start-up sequence ------------------------------------------------- */
+
+/* A scan line, three rings opening, the name typed out, gone. It never
+   takes a tap (pointer-events: none), so anything under it works at once;
+   a touch anywhere fades it early (`.skip`). */
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  background: var(--bg);
+  pointer-events: none;
+  animation: boot-out 2.6s var(--ease) forwards;
+}
+.boot.skip { animation: boot-out 0.3s var(--ease) forwards; }
+@keyframes boot-out {
+  0%, 80% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+.boot-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 18px var(--accent);
+  animation: boot-scan 1.4s ease-in 0.15s both;
+}
+@keyframes boot-scan {
+  0% { transform: translateY(0); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+.boot-rings {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+.boot-rings i, .boot-rings b {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 50%;
+  animation: ring-in 0.9s var(--ease) both;
+}
+.boot-rings i:nth-child(1) { width: 200px; height: 200px; border: 1px dashed rgba(92, 225, 255, 0.7); animation-delay: 0.1s; }
+.boot-rings i:nth-child(2) { width: 156px; height: 156px; border: 2px solid transparent; border-top-color: var(--accent); border-bottom-color: var(--accent); box-shadow: 0 0 14px rgba(92, 225, 255, 0.4); animation: ring-in 0.9s var(--ease) 0.3s both, spin 2.4s linear 0.3s infinite; }
+.boot-rings i:nth-child(3) { width: 104px; height: 104px; border: 1.5px solid transparent; border-left-color: var(--amber); border-right-color: var(--amber); animation: ring-in 0.9s var(--ease) 0.5s both, spin 1.6s linear 0.5s infinite reverse; }
+.boot-rings b { width: 18px; height: 18px; background: #dffaff; box-shadow: 0 0 22px var(--accent), 0 0 50px var(--accent); animation-delay: 0.05s; }
+@keyframes ring-in {
+  from { transform: scale(0.15); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes spin { to { rotate: 360deg; } }
+.boot-name {
+  margin: 12px 0 0;
+  font: 20px/1 var(--mono);
+  letter-spacing: 0.5em;
+  padding-left: 0.5em;
+  color: #bff4ff;
+  text-shadow: 0 0 14px var(--accent);
+  animation: type 0.8s steps(11) 0.85s both;
+}
+@keyframes type {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.boot-note {
+  margin: 0;
+  font: 10px/1 var(--mono);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--amber);
+  animation: blink 0.4s steps(2) 1.6s 3 both;
+}
+@keyframes blink {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
