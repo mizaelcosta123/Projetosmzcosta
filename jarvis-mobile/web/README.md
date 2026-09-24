@@ -22,6 +22,7 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 | `decide.js` | Which of the kept models to send a message through, learned from outcomes |
 | `place.js` | Position and weather, only for a question about either |
 | `pwa.js` / `sw.js` | Offline shell and reply notifications |
+| `hud.js` | The HUD around him: dust, rings, flashes, the start-up, a buzz |
 | `index.html` / `styles.css` | The frame around the canvas |
 
 ## The frame
@@ -433,3 +434,78 @@ Os turnos, como numa conversa:
 - **Interromper para tudo**: a voz, o que estava na fila e o pedido ao modelo —
   que para de gerar uma resposta que ninguém está ouvindo, e a sua próxima
   pergunta não é descartada enquanto ele termina.
+
+
+## A moldura do HUD
+
+A moldura virou um HUD — vidro, linhas finas, cantoneiras, luz que corre —,
+mas continua nas bordas. A regra de sempre vale mais que nunca: **ele é a
+interface**, e nada fica onde compete com o rosto, com a sala atrás da
+câmera ou com as mãos na frente dela.
+
+São camadas, de baixo para cima:
+
+| camada | o que é | custo por quadro |
+|---|---|---|
+| `#field` | ele: o campo de partículas, com um fundo em degradê radial (a luz de um reator num quarto escuro) | o de antes |
+| `#hud` (`hud.js`) | poeira 3D girando devagar, três anéis em volta do orbe, as explosões de luz | algumas centenas de quadradinhos e uma dúzia de traços |
+| `.cine` | vinheta e linhas de varredura | nenhum: é CSS parado |
+| moldura | topo, compositor, menu, painéis | só quando muda |
+
+**O que se move e o que continua parado.** O HUD só *lê* o campo
+(`field.level`, `field.thinking`, a forma) e nunca escreve nele — então o
+silêncio continua sendo deriva zero, e `field.test.mjs` continua passando. O
+que se move em repouso é a sala em volta: os anéis giram, pensando eles
+aceleram e ganham uma varredura, falando eles se abrem com o nível da voz; em
+volta de um rosto ficam a um terço, como halo.
+
+**Efeitos** (Configurações): *Completo*, *Leve* (um terço da poeira) ou
+*Desligado* (os anéis desenhados uma vez, parados). Movimento reduzido no
+sistema vale como *Desligado* e pula a abertura. Quadros longos por dois
+segundos rebaixam a poeira sozinhos, e ela não volta por conta própria: um
+celular que engasgou uma vez vai engasgar de novo.
+
+Medido no Chromium, 390×844 a 2×: **60 fps** nos três níveis, igual a antes.
+A primeira versão dos anéis usava `shadowBlur` para o brilho e derrubava a
+página para **12 fps** — é um desfoque por traço. O brilho agora é o mesmo
+traço desenhado largo e fraco por baixo, e o dos hologramas vai por `Path2D`,
+um traço por objeto.
+
+### A câmera fica livre
+
+Antes, a barra da câmera era uma caixa no topo com status, um parágrafo de
+gestos, a leitura e quatro botões — exatamente onde ficam os dedos. Agora:
+
+- o **status** é um aviso no topo que some sozinho em ~4 s;
+- os **gestos** são um cartão atrás do botão **?**, aberto sozinho só na
+  primeira visita e fechado pela primeira mão;
+- os **botões** são um trilho de ícones redondos na borda direita, onde o
+  polegar está;
+- a **pose e a nota** são um chip pequeno num canto;
+- com uma mão sendo seguida, trilho, chips e compositor **esmaecem** (modo
+  foco) e voltam 1,5 s depois de a mão sair;
+- o **teclado do sintetizador** é uma faixa só embaixo: marcas curtas, os
+  nomes, e a nota tocada com um feixe que se apaga antes do meio da tela. As
+  linhas de altura inteira sumiram. Com ele ligado, a legenda some e o
+  compositor vira só o botão de voz.
+
+A câmera entra como uma íris a partir do canto do menu, o cursor da mão é
+uma mira (anel tracejado girando, arco de segurar, e com o sintetizador um
+arco com o volume), e cada holograma novo — por voz, pelo modelo ou por um ✌️
+— é **construído** na frente de você (as arestas crescem em 0,6 s) com um
+anel de luz no lugar. No WebXR sobra um dock de três botões, o do meio aceso.
+
+### Android e iOS
+
+- Campos com 16 px de fonte: abaixo disso o iOS dá zoom no foco e não volta.
+- `interactive-widget=resizes-content` no Android; no iOS o teclado passa por
+  cima da página, então a altura dele vem do `visualViewport` para a variável
+  `--kb` e o compositor sobe junto.
+- `100dvh` onde era `100vh`, áreas seguras em tudo que é fixo, alvos de 44 px
+  ou mais, `touch-action: manipulation` (sem a espera do toque duplo) e
+  `apple-touch-icon` para a tela de início.
+- Vibração curta (`buzz`) ao abrir o menu, pinçar, criar, apagar e ligar o
+  sintetizador — no Android; o iOS não tem `navigator.vibrate`, e ali é nada.
+- Só fontes do sistema: a política do servidor é `font-src 'self' data:`, e
+  uma fonte de CDN nunca carregaria.
+
