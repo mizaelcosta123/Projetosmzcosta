@@ -90,6 +90,20 @@ PROVIDERS: dict[str, Provider] = {
             ),
         ),
         Provider(
+            id="xai",
+            label="xAI (Grok)",
+            base_url="https://api.x.ai",
+            key_env=("XAI_API_KEY",),
+            console_url="https://console.x.ai",
+            suggested_models=("grok-4.7", "grok-4.6"),
+            notes=(
+                "xAI's own API for the Grok models, OpenAI-compatible at "
+                "https://api.x.ai/v1. The key is created in the console, which "
+                "needs credits loaded before the first request answers. This "
+                "is the engine the cloud deploy uses by default."
+            ),
+        ),
+        Provider(
             id="nous",
             label="Nous Portal (Hermes)",
             base_url="https://inference-api.nousresearch.com",

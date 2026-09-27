@@ -6,7 +6,7 @@
 # also makes it a small, fast image anywhere else.
 #
 #   docker build -f deploy/Dockerfile -t jarvis .
-#   docker run -p 8000:8000 -e OPENROUTER_API_KEY=... jarvis
+#   docker run -p 8000:8000 -e XAI_API_KEY=... jarvis
 
 FROM python:3.12-slim-bookworm
 
