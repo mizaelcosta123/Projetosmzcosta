@@ -45,6 +45,7 @@ const OLLAMA_PORT = '11434';
  */
 const PROVIDER_HOSTS = [
   'openrouter.ai',
+  'api.x.ai',
   'api.openai.com',
   'api.anthropic.com',
   'api.groq.com',
@@ -326,6 +327,19 @@ function hostLabel(url) {
   } catch {
     return url;
   }
+}
+
+/** Grok's own endpoint and the model it starts on. */
+export const GROK_URL = 'https://api.x.ai';
+export const GROK_MODEL = 'grok-4.7';
+
+/**
+ * Grok, straight from xAI: the address is filled in, only the key is left
+ * (https://console.x.ai). It answers and nothing more -- the phone's tools
+ * live in a Jarvis, and the cloud Jarvis already runs on Grok.
+ */
+export function grok() {
+  return makeProvider({ name: 'Grok (xAI)', url: GROK_URL, models: [GROK_MODEL] });
 }
 
 /** The Ollama running on this very phone, which is the whole Termux case. */

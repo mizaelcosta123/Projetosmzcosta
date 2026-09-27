@@ -121,10 +121,12 @@ def run_checks(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--provider", default="openrouter")
+    # The engine the cloud deploy runs on (deploy/config.toml), so a bare
+    # run checks the thing that matters.
+    parser.add_argument("--provider", default="xai")
     parser.add_argument(
         "--model",
-        default="openrouter/auto",
+        default="grok-4.7",
         help="Which model to send the test request to.",
     )
     args = parser.parse_args(argv)

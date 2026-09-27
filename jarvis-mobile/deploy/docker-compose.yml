@@ -1,6 +1,6 @@
 # For a VPS or a machine on your own network.
 #
-#   OPENROUTER_API_KEY=... docker compose -f deploy/docker-compose.yml up -d
+#   XAI_API_KEY=... docker compose -f deploy/docker-compose.yml up -d
 services:
   jarvis:
     build:
@@ -10,6 +10,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
+      XAI_API_KEY: ${XAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Set this and the server accepts a non-loopback bind; leave it out and
       # it refuses, which is the behaviour you want by default.

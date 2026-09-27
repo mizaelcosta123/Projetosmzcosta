@@ -29,6 +29,8 @@ import {
   readModels,
   relearn,
   termuxOllama,
+  grok,
+  GROK_MODEL,
 } from '../web/providers.js';
 
 // -- telling the two kinds apart --------------------------------------------
@@ -433,4 +435,23 @@ test('an empty list is not carried as an empty list', () => {
   // Absent is the shape everything else checks for; `[]` would read as "asked
   // and got nothing" rather than "never asked".
   assert.equal('models' in makeProvider({ url: 'https://x.test', models: [] }), false);
+});
+
+// -- Grok ---------------------------------------------------------------------
+
+test('Grok comes with its address filled in, and is a provider, not a Jarvis', () => {
+  const entry = grok();
+  assert.equal(entry.name, 'Grok (xAI)');
+  assert.equal(entry.url, 'https://api.x.ai');
+  assert.equal(entry.kind, OPENAI);
+  assert.equal(reachesDevice(entry), false, 'um provedor só responde; o aparelho é do Jarvis');
+  assert.equal(chatUrl(entry), 'https://api.x.ai/v1/chat/completions');
+  assert.equal(modelsUrl(entry), 'https://api.x.ai/v1/models');
+  assert.deepEqual(entry.models, [GROK_MODEL]);
+  assert.equal(entry.key, '', 'a chave é de quem tem conta; nunca vem preenchida');
+});
+
+test('the xAI address pasted with /v1 is still recognised as a provider', () => {
+  assert.equal(detectKind('https://api.x.ai/v1'), OPENAI);
+  assert.equal(detectKind('https://api.x.ai/v1/'), OPENAI);
 });
