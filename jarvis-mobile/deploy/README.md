@@ -90,6 +90,46 @@ navegador de verdade.
 detecta essas variáveis e monta um motor de nuvem adicional, o que só embaralha
 qual caminho atende a conversa.
 
+### O modelo de decisão (Ollaya), e por que ele vem desligado
+
+O [Ollaya](https://github.com/ollaya-dev/ollaya) (Apache-2.0) roda **modelos de
+decisão** locais — os do tipo que o Jev, da TypeSafe, popularizou. Eles não
+escrevem uma palavra: recebem uma frase e perguntas tipadas, e devolvem
+probabilidades calibradas em milissegundos. Não é um motor e **não substitui o
+Grok**; é outra coisa, ao lado.
+
+Para que ele serve aqui: as regras de `conjure.js` desenham um cubo no quadro em
+que você pede, e recusam qualquer frase que não entendam por inteiro — aí a
+frase inteira vai para o modelo de conversa, o que custa segundos. "faz aí um
+cubo grandão pra mim" é esse caso. O modelo de decisão resolve em
+milissegundos. Ele só é consultado **depois** que as regras recusaram, então o
+caminho rápido continua igual e o pior caso é a velocidade que o app já tinha.
+
+**Vem desligado, e o motivo é memória.** O daemon tem ~20 MB, mas o modelo
+atrás dele tem algumas centenas de milhões de parâmetros — mais do que o plano
+gratuito comporta. Tudo que usa isso já trata "não há modelo de decisão" como o
+caso normal, então deixar desligado não muda nada.
+
+Para ligar, num plano com memória (ou num VPS, ou no compose):
+
+```bash
+docker build --build-arg WITH_OLLAYA=1 -f deploy/Dockerfile -t jarvis .
+```
+
+O modelo é baixado **na construção da imagem**, de propósito: sem disco
+persistente, o que é baixado em tempo de execução é baixado de novo a cada
+reinício.
+
+| variável | o que muda |
+|---|---|
+| `OLLAYA_HOST` | Onde o daemon escuta. O padrão é `http://127.0.0.1:11435`, dentro do próprio contêiner. Apontando para o endpoint da TypeSafe, o formato é o mesmo e passa a valer a chave deles. |
+| `JARVIS_DECIDE_MODEL` | Qual modelo responde. O padrão é `laya:multilingual`, e o *multilingual* importa: as frases aqui são em português e o `laya:en` é só inglês. |
+| `OLLAYA_API_KEY` | Só quando o `OLLAYA_HOST` exige chave. |
+
+Sem daemon, a rota `/v1/decide` responde `{"available": false}` — 200, não erro:
+não ter um modelo de decisão é configuração, não falha, e a interface pergunta
+uma vez e para de perguntar.
+
 ### Duas coisas do plano gratuito que vão te surpreender
 
 **Sem disco persistente.** O Render rejeita um bloco `disk:` num serviço

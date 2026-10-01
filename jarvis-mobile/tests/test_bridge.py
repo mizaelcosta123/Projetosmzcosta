@@ -247,17 +247,26 @@ def test_whitespace_is_not_a_token(monkeypatch):
 
 
 def test_the_route_is_not_mounted_without_a_token(monkeypatch):
-    """An unset secret must mean "no bridge", never "no check"."""
+    """An unset secret must mean "no bridge", never "no check".
+
+    The decision route is mounted anyway and is counted here: it has nothing
+    to do with a phone, and it answers "nobody could decide" rather than 404
+    whether or not one is linked.
+    """
     from jarvis_mobile.bridge import install as install_module
 
     monkeypatch.delenv("JARVIS_DEVICE_TOKEN", raising=False)
 
+    class FakeRouter:
+        def __init__(self):
+            self.routes = ["/{full_path:path}"]
+
     class FakeApp:
         def __init__(self):
-            self.routers = []
+            self.router = FakeRouter()
 
         def include_router(self, router):
-            self.routers.append(router)
+            self.router.routes.append(router)
 
     class FakeModule:
         @staticmethod
@@ -265,7 +274,9 @@ def test_the_route_is_not_mounted_without_a_token(monkeypatch):
             return FakeApp()
 
     assert install_module.install(FakeModule) is False
-    assert FakeModule.create_app().routers == []
+    routes = FakeModule.create_app().router.routes
+    assert len(routes) == 2, "só a rota de decisão, nunca a do aparelho"
+    assert routes[-1] == "/{full_path:path}"
 
 
 def test_the_route_is_mounted_with_a_token(monkeypatch):
@@ -302,12 +313,13 @@ def test_the_route_is_mounted_with_a_token(monkeypatch):
 
     assert install_module.install(FakeModule) is True
     routes = FakeModule.create_app().router.routes
-    assert len(routes) == 2
+    # The catch-all it started with, plus the decision route and the device one.
+    assert len(routes) == 3
     assert routes[-1] == "/{full_path:path}", "the device routes must come first"
 
     # Idempotent: installing twice must not stack two routers.
     install_module.install(FakeModule)
-    assert len(FakeModule.create_app().router.routes) == 2
+    assert len(FakeModule.create_app().router.routes) == 3
 
 
 def test_the_protocol_version_is_shared_by_both_ends():

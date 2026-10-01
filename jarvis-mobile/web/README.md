@@ -20,6 +20,7 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 | `synth.js` | The synthesizer the hands play |
 | `memory.js` / `vault.js` | What he learns, recalled by attention; out to and back from an Obsidian note |
 | `decide.js` | Which of the kept models to send a message through, learned from outcomes |
+| `systemone.js` | The sentences the rules only half understood, settled by a decision model |
 | `place.js` | Position and weather, only for a question about either |
 | `pwa.js` / `sw.js` | Offline shell and reply notifications |
 | `hud.js` | The HUD around him: dust, rings, flashes, the start-up, a buzz |
@@ -508,4 +509,45 @@ anel de luz no lugar. No WebXR sobra um dock de três botões, o do meio aceso.
   sintetizador — no Android; o iOS não tem `navigator.vibrate`, e ali é nada.
 - Só fontes do sistema: a política do servidor é `font-src 'self' data:`, e
   uma fonte de CDN nunca carregaria.
+
+
+## As frases que as regras quase entenderam
+
+As regras de `conjure.js` desenham um cubo no quadro em que você pede, e é por
+isso que elas existem: *"um segundo e meio para um endpoint concordar não é
+realidade aumentada, é um formulário com atraso"*. Em troca, elas recusam
+qualquer frase que não entendam por inteiro — e aí a frase vai para o modelo de
+conversa, o que custa segundos.
+
+"faz aí um cubo grandão pra mim" é exatamente esse meio: tem verbo, tem forma, e
+tem duas palavras que nenhuma tabela conhece. As regras recusam, e estão certas
+em recusar — o que faltava a elas era uma resposta **calibrada**.
+
+É isso que `systemone.js` busca, e só isso. Um **modelo de decisão** (o
+[Ollaya](https://github.com/ollaya-dev/ollaya), no backend) recebe a frase e uma
+pergunta tipada — holograma, imagem ou conversa? — e devolve probabilidades em
+milissegundos. Ele nunca escreve uma palavra, e nunca substitui o modelo de
+conversa.
+
+Três condições, e cada uma é o que impede isso de custar alguma coisa:
+
+- **só depois que as regras recusaram** — o caminho rápido não é tocado, e o
+  pior caso passa a ser a velocidade que o app já tinha;
+- **só quando havia o que fazer** — um verbo, ou uma forma sozinha (que o
+  `parse` lê como "cria uma"). Uma mensagem comum não nomeia nenhum dos dois e
+  nunca espera um classificador dizer "conversa";
+- **só contra um Jarvis** — `/v1/decide` é rota deste servidor; um endpoint de
+  provedor responde 404, e a resposta é lembrada para não perguntar de novo.
+
+Abaixo de **0,75** de confiança, nada acontece: a frase segue para o modelo como
+seguia antes. Uma probabilidade calibrada é o que esses modelos têm de melhor, e
+agir em 0,51 seria desenhar cubos para quem fez uma pergunta.
+
+`imagem` é decidido e **de propósito não é executado**: gerar uma figura custa
+uma requisição limitada e toma a tela inteira, então continua sendo o modo
+manual que sempre foi. A opção ganha o lugar dela na pergunta mesmo assim — sem
+ela competindo, um pedido de desenho cairia em `holograma`.
+
+Sem modelo de decisão no backend — que é o padrão — nada disso existe e o app se
+comporta exatamente como antes.
 

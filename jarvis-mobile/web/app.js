@@ -21,7 +21,8 @@ import { Synth } from './synth.js';
 import { Hud, boot, buzz } from './hud.js';
 import { toScreen } from './hands.js';
 import { NODS, Rotation, THINKING, Talk, VOICE_PROMPT } from './utter.js';
-import { conjure, learnedNames, perform, teaching } from './conjure.js';
+import { conjure, learnedNames, parse, perform, teaching } from './conjure.js';
+import { intent as decideIntent } from './systemone.js';
 import { Memory } from './memory.js';
 import { contextFor as placeContext } from './place.js';
 import { notifyReply, registerWorker } from './pwa.js';
@@ -931,6 +932,12 @@ function handleHere(text) {
 
   const done = conjure(scene, text, { aliases: learnedNames(memory) });
   if (!done) return false;
+  applyConjured(text, done);
+  return true;
+}
+
+/** Everything that follows from the room having changed. */
+function applyConjured(text, done) {
   // Worth remembering: what somebody asks for in the room is the best signal
   // there is about what they will ask for next.
   memory.learn(text, { kind: 'pedido' });
@@ -944,6 +951,49 @@ function handleHere(text) {
   const last = scene.last();
   if (last) lens.pending = { shape: last.shape, hue: last.hue, size: last.size };
   say(done).catch(() => {});
+}
+
+/**
+ * The sentences the rules almost understood.
+ *
+ * "faz aí um cubo grandão pra mim" has a verb and a shape and two words no
+ * table knows, so `conjure` declines and the whole thing goes to the chat
+ * model -- seconds, for a cube. A decision model settles it in milliseconds
+ * (`systemone.js`), and this is the only place it is asked.
+ *
+ * Three conditions, and each one is what keeps this from costing anything:
+ *
+ *  - only after the rules have already declined, so the fast path is untouched;
+ *  - only when the rules found something to act on -- a verb, or a shape
+ *    alone, which `parse` reads as "create one". An ordinary message names
+ *    neither and never waits for a classifier to say "conversa";
+ *  - only against a Jarvis, because `/v1/decide` is this server's route and a
+ *    provider endpoint answers 404.
+ *
+ * Returns true when the room changed and the model is not needed.
+ */
+async function settleNearMiss(text) {
+  if (!text) return false;
+  const aliases = learnedNames(memory);
+  const said = parse(text, { aliases });
+  if (!said.verb) return false;
+
+  const provider = activeProvider();
+  if (!reachesDevice(provider)) return false;
+
+  const choice = await decideIntent(text, {
+    base: serverOf(settings),
+    headers: headersFor(provider),
+  });
+  // `imagem` is decided but deliberately not acted on: making a picture costs
+  // a rate-limited request and takes over the screen, so it stays the manual
+  // mode it has always been. It earns its place in the question anyway --
+  // without it competing, a request for a drawing lands on `holograma`.
+  if (choice !== 'holograma') return false;
+
+  const done = conjure(scene, text, { aliases, trust: true });
+  if (!done) return false;
+  applyConjured(text, done);
   return true;
 }
 
@@ -1023,6 +1073,20 @@ async function ask(text, { byVoice = false } = {}) {
   // Only when nothing is attached: a picture is a question for the model,
   // whatever words came with it.
   if (attached.length === 0 && handleHere(text)) return;
+
+  // The rules declined. Before paying for the model, let a decision model
+  // look at the sentences they only half understood. `busy` is held across
+  // the wait so a second send cannot start while this one is deciding.
+  if (attached.length === 0) {
+    busy = true;
+    let settled = false;
+    try {
+      settled = await settleNearMiss(text);
+    } finally {
+      busy = false;
+    }
+    if (settled) return;
+  }
 
   busy = true;
   el.send.disabled = true;

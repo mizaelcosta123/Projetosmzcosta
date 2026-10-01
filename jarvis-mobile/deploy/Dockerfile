@@ -118,6 +118,52 @@ RUN set -eux; \
 RUN python -m jarvis_mobile.speech.install_voices --source /opt/brasiltts \
     || echo 'WARNING: Brazilian voice data not installed'
 
+# --- the decision model, if this deploy has room for it ---------------------
+#
+# Ollaya (https://github.com/ollaya-dev/ollaya, Apache-2.0) serves open
+# decision models over the wire format TypeSafe's Jev uses. It answers typed
+# questions about a sentence with calibrated probabilities in milliseconds and
+# never writes a word, so it is not an engine and does not replace the one in
+# config.toml -- see src/jarvis_mobile/systemone.py for what it is asked.
+#
+# OFF BY DEFAULT, and the reason is memory, not taste: the daemon is ~20 MB but
+# the model behind it is a few hundred million parameters, which is more than a
+# free plan has. Everything that uses it already treats "no decision model" as
+# the ordinary case, so leaving this off costs nothing and changes nothing.
+#
+#   docker build --build-arg WITH_OLLAYA=1 -f deploy/Dockerfile -t jarvis .
+#
+# The model is pulled here, at build time, on purpose: the free plan has no
+# persistent disk, so anything downloaded at run time is downloaded again on
+# every restart.
+ARG WITH_OLLAYA=0
+ARG OLLAYA_MODEL=laya:multilingual
+RUN set -eux; \
+    if [ "${WITH_OLLAYA}" = "1" ]; then \
+      case "$(uname -m)" in \
+        x86_64) arch=amd64 ;; \
+        aarch64) arch=arm64 ;; \
+        *) echo "no ollaya build for $(uname -m)" >&2; exit 1 ;; \
+      esac; \
+      apt-get update; \
+      apt-get install -y --no-install-recommends curl zstd; \
+      rm -rf /var/lib/apt/lists/*; \
+      curl -fsSL -o /tmp/ollaya.tar.zst \
+        "https://github.com/ollaya-dev/ollaya/releases/latest/download/ollaya-linux-${arch}.tar.zst"; \
+      tar --zstd -xf /tmp/ollaya.tar.zst -C /usr/local; \
+      rm /tmp/ollaya.tar.zst; \
+      ollaya --version || true; \
+      OLLAYA_MODELS=/opt/ollaya-models ollaya serve & \
+      for i in $(seq 30); do ollaya list >/dev/null 2>&1 && break; sleep 1; done; \
+      OLLAYA_MODELS=/opt/ollaya-models ollaya pull "${OLLAYA_MODEL}"; \
+      ollaya stop || true; \
+    fi
+
+# Where the pulled model lives, and where the daemon listens. Read by the
+# entrypoint below and by systemone.py; harmless when nothing was installed.
+ENV OLLAYA_MODELS=/opt/ollaya-models \
+    OLLAYA_HOST=http://127.0.0.1:11435
+
 # Config and state live under /data, written by the step above. No VOLUME is
 # declared here on purpose: whether that path survives a restart is the
 # platform's decision, not the image's — Render mounts a disk there on a paid
@@ -139,4 +185,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # bridge's WebSocket route mounted. OpenJarvis has no plugin hook for routes,
 # so this wrapper is how the phone gets somewhere to dial. With no
 # JARVIS_DEVICE_TOKEN set it behaves exactly like `jarvis serve`.
-ENTRYPOINT ["sh", "-c", "exec jarvis-mobile serve --host \"$JARVIS_HOST\" --port \"$JARVIS_PORT\""]
+# The decision daemon first, when the image has one, then the server. It is
+# backgrounded rather than supervised on purpose: it is an optional extra, and
+# a container that dies because an optional extra died would be worse than one
+# that simply decides nothing. `ollaya` missing is the ordinary case, so the
+# whole clause is guarded by `command -v`.
+ENTRYPOINT ["sh", "-c", "if command -v ollaya >/dev/null 2>&1; then ollaya serve >/tmp/ollaya.log 2>&1 & fi; exec jarvis-mobile serve --host \"$JARVIS_HOST\" --port \"$JARVIS_PORT\""]

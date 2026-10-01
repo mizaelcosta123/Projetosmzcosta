@@ -26,7 +26,7 @@ from typing import Any
 from jarvis_mobile import webheaders
 from jarvis_mobile.bridge import ssh
 from jarvis_mobile.bridge.hub import TOKEN_ENV, configured_token
-from jarvis_mobile.bridge.routes import create_device_router
+from jarvis_mobile.bridge.routes import create_decide_router, create_device_router
 
 __all__ = ["install", "main"]
 
@@ -58,6 +58,13 @@ def install(app_module: Any = None) -> bool:
         # camera works only on servers that also have a device token, which is
         # an unrelated setting and would have looked like witchcraft.
         webheaders.install(application)
+
+        # Typed judgements about a sentence, from a decision model on this
+        # machine. Mounted whether or not one is installed, and whether or
+        # not a phone is linked: the route answers "nobody could decide"
+        # rather than 404, which is what lets the interface ask once and
+        # stop asking without treating a plain configuration as a fault.
+        _mount_first(application, create_decide_router())
 
         token = configured_token()
         over_ssh = ssh.configured_target()

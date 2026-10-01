@@ -245,14 +245,21 @@ export function teaching(text, { aliases = {} } = {}) {
 export function conjure(scene, text, known = {}) {
   const said = parse(text, known);
   if (!said.verb) return null;
-  // Anything the rules do not understand makes the whole sentence the
-  // model's. Guessing from half a sentence is how "tira uma dúvida" emptied
-  // the room.
-  if (said.extra.length > 0) return null;
-  // A question about a shape is not a request for one, and the words of a
-  // question are mostly ones the index throws away ("que", "é"), so they do
-  // not show up as leftovers.
-  if (said.question) return null;
+  // The two guards below are the rules refusing to guess. `trust` is how
+  // something that is *not* guessing gets past them: `app.js` sets it only
+  // after a decision model has answered, with a calibrated probability, that
+  // this sentence really is about the room. Without that it stays exactly as
+  // careful as it was.
+  if (!known.trust) {
+    // Anything the rules do not understand makes the whole sentence the
+    // model's. Guessing from half a sentence is how "tira uma dúvida" emptied
+    // the room.
+    if (said.extra.length > 0) return null;
+    // A question about a shape is not a request for one, and the words of a
+    // question are mostly ones the index throws away ("que", "é"), so they do
+    // not show up as leftovers.
+    if (said.question) return null;
+  }
 
   if (said.verb === 'limpar') {
     if (said.all || !said.shape) {
