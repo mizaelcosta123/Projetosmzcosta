@@ -49,7 +49,26 @@ ACTIONS: dict[str, str] = {
 }
 
 #: The solids the browser can build. Mirrors ``SOLIDS`` in ``web/holo.js``.
-SHAPES: tuple[str, ...] = ("cubo", "esfera", "piramide", "toro", "plano", "eixo")
+SHAPES: tuple[str, ...] = (
+    "cubo",
+    "esfera",
+    "piramide",
+    "toro",
+    "plano",
+    "eixo",
+    "cilindro",
+    "cone",
+    "tetraedro",
+    "octaedro",
+    "icosaedro",
+    "dodecaedro",
+    "prisma",
+    "estrela",
+    "helice",
+    "capsula",
+    "disco",
+    "linha",
+)
 
 #: Mirrors ``HUES`` in ``web/conjure.js``.
 COLOURS: tuple[str, ...] = (
@@ -63,6 +82,8 @@ COLOURS: tuple[str, ...] = (
     "roxo",
     "branco",
     "dourado",
+    "marrom",
+    "prata",
 )
 
 #: Mirrors ``SIZES`` in ``web/conjure.js``: 8 cm to 90 cm.
@@ -99,8 +120,13 @@ class ConjureTool(BaseTool):
                 + actions
                 + ". Available shapes: "
                 + ", ".join(SHAPES)
-                + ". Anything else (a chair, a planet) is "
-                "not buildable: say so and offer the nearest shape."
+                + ". For anything that is not one of these shapes (a car, a "
+                "house, a vase, a planet with rings), do NOT call this tool: "
+                "build it in your reply instead, as a fenced ```holograma block "
+                "of JSON whose 'pecas' (parts) are these shapes stretched, "
+                "turned and placed -- the interface builds it from the block. "
+                "Redraw, turn or remove such a figure the same way, by its "
+                "'nome', with 'acao' set to 'redesenhar', 'girar' or 'apagar'."
             ),
             parameters={
                 "type": "object",

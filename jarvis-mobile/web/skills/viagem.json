@@ -1,0 +1,110 @@
+[
+ {
+  "id": "roteiro",
+  "nome": "Roteiro de viagem",
+  "categoria": "viagem",
+  "quando": "montar roteiro, itinerário ou programação de viagem para uma cidade ou país",
+  "exemplos": [
+   "roteiro de 3 dias em salvador",
+   "o que fazer em lisboa",
+   "itinerário para gramado"
+  ],
+  "instrucoes": "Pergunte (ou assuma e diga) datas, orçamento e estilo. Organize por dia, manhã/tarde/noite, agrupando atrações próximas para reduzir deslocamento. Inclua uma sugestão de comida local por dia e dicas de transporte. Avise que horários e preços devem ser conferidos.",
+  "apis": [
+   "clima"
+  ]
+ },
+ {
+  "id": "mala",
+  "nome": "Lista de mala",
+  "categoria": "viagem",
+  "quando": "fazer lista do que levar na mala, bagagem ou checklist de viagem",
+  "exemplos": [
+   "o que levar para a praia",
+   "lista de mala para viagem de inverno",
+   "checklist de viagem internacional"
+  ],
+  "instrucoes": "Monte uma checklist por categoria (documentos, roupas, higiene, eletrônicos, saúde), ajustada ao destino, clima e duração. Destaque o que não pode esquecer (documento, carregador, remédios). Considere o clima previsto se souber o destino.",
+  "apis": [
+   "clima"
+  ]
+ },
+ {
+  "id": "documentos-viagem",
+  "nome": "Documentos para viajar",
+  "categoria": "viagem",
+  "quando": "documentos, passaporte, visto, vacina, menor viajando ou regras de entrada em outro país",
+  "exemplos": [
+   "preciso de visto para o chile",
+   "documentos para viajar com criança",
+   "passaporte vencido posso viajar"
+  ],
+  "instrucoes": "Explique as regras gerais e diga claramente que exigências mudam: confirme no site do consulado/Itamaraty e da companhia aérea. Para o Mercosul, RG emitido há menos de 10 anos costuma bastar. Menores desacompanhados precisam de autorização."
+ },
+ {
+  "id": "orcamento-viagem",
+  "nome": "Orçamento de viagem",
+  "categoria": "viagem",
+  "quando": "quanto custa viajar, orçamento de viagem, economizar em passagem ou hospedagem",
+  "exemplos": [
+   "quanto vou gastar em uma semana no rio",
+   "como achar passagem barata",
+   "viagem barata para o nordeste"
+  ],
+  "instrucoes": "Divida em transporte, hospedagem, alimentação, passeios e reserva (10–15%). Dê faixas de valor por dia, deixando claro que são estimativas. Dicas: datas flexíveis, alertas de preço, baixa temporada. Use a API de câmbio para destinos fora do país.",
+  "apis": [
+   "cambio"
+  ]
+ },
+ {
+  "id": "frases-idioma",
+  "nome": "Frases para viagem",
+  "categoria": "viagem",
+  "quando": "frases úteis em outro idioma para viagem, restaurante, hotel ou emergência",
+  "exemplos": [
+   "frases em inglês para o aeroporto",
+   "como pedir comida em espanhol",
+   "frases básicas em francês"
+  ],
+  "instrucoes": "Liste 10–15 frases essenciais agrupadas por situação, com a pronúncia aproximada para quem fala português. Inclua emergências e alergia alimentar."
+ },
+ {
+  "id": "direcao-transporte",
+  "nome": "Como chegar",
+  "categoria": "viagem",
+  "quando": "como chegar a um lugar, transporte público, distância ou trajeto entre cidades",
+  "exemplos": [
+   "como ir do aeroporto ao centro",
+   "distância entre sp e rio",
+   "melhor jeito de chegar em paraty"
+  ],
+  "instrucoes": "Compare as opções (carro, ônibus, metrô, aplicativo, avião) com tempo e custo aproximados. Use a API de geocodificação para coordenadas se precisar de distância em linha reta e diga que é em linha reta. Indique conferir no app de mapas.",
+  "apis": [
+   "geocodificar"
+  ]
+ },
+ {
+  "id": "hospedagem",
+  "nome": "Escolher hospedagem",
+  "categoria": "viagem",
+  "quando": "escolher hotel, pousada, Airbnb ou bairro para ficar",
+  "exemplos": [
+   "onde ficar em são paulo",
+   "hotel ou airbnb",
+   "melhor bairro para hospedar no rio"
+  ],
+  "instrucoes": "Compare por localização (perto do que a pessoa quer fazer), segurança, transporte e preço. Recomende 2-3 regiões com prós e contras. Dicas: ler avaliações recentes, conferir taxas extras e política de cancelamento."
+ },
+ {
+  "id": "viagem-carro",
+  "nome": "Viagem de carro",
+  "categoria": "viagem",
+  "quando": "viagem de carro, estrada, combustível, pedágio ou revisão antes de viajar",
+  "exemplos": [
+   "quanto vou gastar de gasolina",
+   "checklist para viajar de carro",
+   "dicas para pegar estrada"
+  ],
+  "instrucoes": "Calcule combustível: distância ÷ consumo (km/l) × preço do litro (peça ou estime e diga). Checklist do carro (pneus, óleo, água, estepe, documentos) e paradas a cada 2 horas."
+ }
+]

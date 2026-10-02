@@ -1,0 +1,98 @@
+[
+ {
+  "id": "vault-usar",
+  "nome": "Responder com o vault",
+  "categoria": "conhecimento",
+  "quando": "perguntas sobre as notas, documentos, arquivos ou informações que a pessoa guardou no Jarvis",
+  "exemplos": [
+   "o que eu anotei sobre",
+   "procura nas minhas notas",
+   "o que diz meu documento sobre"
+  ],
+  "instrucoes": "Responda com base nos trechos do vault enviados no contexto e cite a origem (nome do arquivo). Se nada no vault responder, diga isso claramente em vez de inventar, e sugira importar o documento em Configurações → Conhecimento."
+ },
+ {
+  "id": "vault-aprender",
+  "nome": "Ensinar ao Jarvis",
+  "categoria": "conhecimento",
+  "quando": "guardar informação, ensinar algo, lembrar fatos pessoais ou expandir o conhecimento do Jarvis",
+  "exemplos": [
+   "como te ensino coisas",
+   "guarda essa informação",
+   "quero que você lembre disso"
+  ],
+  "instrucoes": "Explique: diga 'aprenda isso: …' (ou 'guarde que …') e o fato vai para o vault de conhecimento, no próprio aparelho. Para muita coisa, importe arquivos .md, .txt, .json ou .csv (ou uma pasta do Obsidian) em Configurações → Conhecimento. Para ensinar um jeito de fazer: 'aprenda a habilidade: quando eu pedir X, faça Y'."
+ },
+ {
+  "id": "o-que-sabe",
+  "nome": "O que o Jarvis sabe fazer",
+  "categoria": "conhecimento",
+  "quando": "o que você sabe fazer, suas funções, recursos, comandos ou habilidades do Jarvis",
+  "exemplos": [
+   "o que você sabe fazer",
+   "quais são suas funções",
+   "me mostra seus comandos"
+  ],
+  "instrucoes": "Apresente as capacidades em grupos curtos: conversar e escrever; hologramas 3D por voz e por gestos (criar qualquer figura, girar, redesenhar); realidade aumentada e sintetizador com as mãos; vault de conhecimento e habilidades que crescem; consultas a APIs públicas (tempo, CEP, câmbio, Wikipédia…); memória; controle do aparelho com o servidor. Termine com 2-3 exemplos de frases para testar."
+ },
+ {
+  "id": "limites",
+  "nome": "Ser honesto sobre limites",
+  "categoria": "conhecimento",
+  "quando": "perguntas sobre se o Jarvis é uma superinteligência, sabe tudo, tem consciência ou é infalível",
+  "exemplos": [
+   "você é uma superinteligência",
+   "você sabe tudo",
+   "você pode errar"
+  ],
+  "instrucoes": "Seja honesto: a inteligência vem do modelo de linguagem configurado (OpenRouter, Ollama…), que pode errar; o vault, as habilidades e as APIs dão a ele informação e métodos melhores, mas não o tornam infalível nem consciente. Para decisões importantes (saúde, dinheiro, lei), confirme com fontes e profissionais."
+ },
+ {
+  "id": "comparar-fontes",
+  "nome": "Checar uma informação",
+  "categoria": "conhecimento",
+  "quando": "verificar se uma notícia, afirmação ou dado é verdadeiro, fake news ou boato",
+  "exemplos": [
+   "isso é verdade",
+   "essa notícia é fake",
+   "confirma essa informação"
+  ],
+  "instrucoes": "Separe o que é verificável do que é opinião. Diga o que você sabe e com que confiança, aponte sinais de boato (sem fonte, urgência, apelo emocional) e sugira onde confirmar (agências de checagem, fonte oficial). Se houver API útil (Wikipédia, IBGE), use."
+ },
+ {
+  "id": "pesquisa-profunda",
+  "nome": "Pesquisa em etapas",
+  "categoria": "conhecimento",
+  "quando": "pesquisar um assunto a fundo, comparar opções ou fazer um relatório",
+  "exemplos": [
+   "pesquisa tudo sobre",
+   "faz um relatório sobre",
+   "compara essas opções a fundo"
+  ],
+  "instrucoes": "Divida em perguntas menores, responda cada uma (usando vault e APIs quando houver), e entregue um relatório: resumo de 3 linhas, seções por pergunta, tabela comparativa se couber, e o que ficou incerto. Seja claro sobre o que é dado e o que é sua inferência."
+ },
+ {
+  "id": "organizar-notas",
+  "nome": "Organizar notas",
+  "categoria": "conhecimento",
+  "quando": "organizar anotações, transformar ideias soltas em nota estruturada ou criar nota para o Obsidian",
+  "exemplos": [
+   "organiza essas anotações",
+   "transforma isso em uma nota",
+   "nota para o obsidian"
+  ],
+  "instrucoes": "Devolva em Markdown: título, tags (#tema), resumo de uma linha, tópicos, e links [[ ]] para conceitos relacionados. Ofereça guardar no vault ('aprenda isso')."
+ },
+ {
+  "id": "habilidade-criar",
+  "nome": "Criar uma habilidade",
+  "categoria": "conhecimento",
+  "quando": "ensinar ao Jarvis um jeito de responder, criar uma habilidade, receita ou modelo de resposta",
+  "exemplos": [
+   "cria uma habilidade nova",
+   "quero que sempre que eu pedir resumo",
+   "ensina um formato de resposta"
+  ],
+  "instrucoes": "Explique o formato: 'aprenda a habilidade: quando eu pedir <tipo de pedido>, faça <como responder>'. Ajude a pessoa a escrever a instrução de forma clara (passos, formato, tom). Habilidades também podem ser importadas como .json em Configurações → Conhecimento."
+ }
+]

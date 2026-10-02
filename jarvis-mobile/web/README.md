@@ -14,12 +14,17 @@ phone: there is no npm, no bundler and no toolchain in the loop on Android.
 | `particles.js` | The field: slots, morphing, the spring, the renderer |
 | `voice.js` | Two ways to answer "how loud is he right now?" |
 | `app.js` | Wiring: settings, chat streaming, speech, the agent's mode switch |
-| `holo.js` / `conjure.js` | Hologram geometry, and a sentence (or the model's `conjure` call) to objects |
+| `holo.js` / `conjure.js` | Hologram geometry (18 solids, detail, parts composed into any figure, three axes), and a sentence (or the model's `conjure` call) to objects |
+| `forge.js` | The ```holograma block: any figure from any model, created, redrawn, turned or removed by name |
+| `knowledge.js` | The vault: documents cut into passages, kept in IndexedDB, the few about a message sent with it |
+| `skills.js` / `skills/*.json` | The skills catalogue: ~120 recipes, the one that fits a request chosen per message |
+| `apis.js` / `apis.json` | Free public APIs the model asks for with a ```api block; the browser calls them |
 | `ar.js` / `stage.js` / `hands.js` | Where holograms are drawn: in the room under WebXR, or on the screen, handled with a finger |
 | `lens.js` / `vision.js` / `handpose.js` | The camera mode: the video, the hand model, and 21 points turned into gestures |
 | `synth.js` | The synthesizer the hands play |
 | `memory.js` / `vault.js` | What he learns, recalled by attention; out to and back from an Obsidian note |
 | `decide.js` | Which of the kept models to send a message through, learned from outcomes |
+| `systemone.js` | The sentences the rules only half understood, settled by a decision model |
 | `place.js` | Position and weather, only for a question about either |
 | `pwa.js` / `sw.js` | Offline shell and reply notifications |
 | `hud.js` | The HUD around him: dust, rings, flashes, the start-up, a buzz |
@@ -509,3 +514,82 @@ anel de luz no lugar. No WebXR sobra um dock de três botões, o do meio aceso.
 - Só fontes do sistema: a política do servidor é `font-src 'self' data:`, e
   uma fonte de CDN nunca carregaria.
 
+
+## As frases que as regras quase entenderam
+
+As regras de `conjure.js` desenham um cubo no quadro em que você pede, e é por
+isso que elas existem: *"um segundo e meio para um endpoint concordar não é
+realidade aumentada, é um formulário com atraso"*. Em troca, elas recusam
+qualquer frase que não entendam por inteiro — e aí a frase vai para o modelo de
+conversa, o que custa segundos.
+
+"faz aí um cubo grandão pra mim" é exatamente esse meio: tem verbo, tem forma, e
+tem duas palavras que nenhuma tabela conhece. As regras recusam, e estão certas
+em recusar — o que faltava a elas era uma resposta **calibrada**.
+
+É isso que `systemone.js` busca, e só isso. Um **modelo de decisão** (o
+[Ollaya](https://github.com/ollaya-dev/ollaya), no backend) recebe a frase e uma
+pergunta tipada — holograma, imagem ou conversa? — e devolve probabilidades em
+milissegundos. Ele nunca escreve uma palavra, e nunca substitui o modelo de
+conversa.
+
+Três condições, e cada uma é o que impede isso de custar alguma coisa:
+
+- **só depois que as regras recusaram** — o caminho rápido não é tocado, e o
+  pior caso passa a ser a velocidade que o app já tinha;
+- **só quando havia o que fazer** — um verbo, ou uma forma sozinha (que o
+  `parse` lê como "cria uma"). Uma mensagem comum não nomeia nenhum dos dois e
+  nunca espera um classificador dizer "conversa";
+- **só contra um Jarvis** — `/v1/decide` é rota deste servidor; um endpoint de
+  provedor responde 404, e a resposta é lembrada para não perguntar de novo.
+
+Abaixo de **0,75** de confiança, nada acontece: a frase segue para o modelo como
+seguia antes. Uma probabilidade calibrada é o que esses modelos têm de melhor, e
+agir em 0,51 seria desenhar cubos para quem fez uma pergunta.
+
+`imagem` é decidido e **de propósito não é executado**: gerar uma figura custa
+uma requisição limitada e toma a tela inteira, então continua sendo o modo
+manual que sempre foi. A opção ganha o lugar dela na pergunta mesmo assim — sem
+ela competindo, um pedido de desenho cairia em `holograma`.
+
+Sem modelo de decisão no backend — que é o padrão — nada disso existe e o app se
+comporta exatamente como antes.
+
+
+## Qualquer figura 3D, girada e redesenhada
+
+As 18 formas (`SOLIDS` em `holo.js`) saem pela regra, sem rede: "um cilindro azul", "uma estrela dourada". O resto — um carro,
+uma casa, um vaso — o modelo descreve como peças num bloco ` ```holograma ` e `forge.js` monta. Funciona com OpenRouter, com o
+Ollama do Termux e com o servidor, porque não depende de chamada de ferramenta: todo modelo sabe escrever um bloco.
+
+```holograma
+{"acao":"criar","nome":"carro","cor":"vermelho",
+ "pecas":[{"forma":"cubo","escala":[2,0.5,1]},
+          {"forma":"cilindro","pos":[0.6,-0.3,0.5],"escala":[0.4,0.12,0.4],"rot":[90,0,0],"cor":"branco"}]}
+```
+
+- `redesenhar` com o mesmo `nome` troca as peças e mantém lugar, giro e tamanho — "deixa as rodas maiores".
+- `girar` aceita `graus` (relativo) ou `rotacao` (absoluto), nos três eixos; `apagar` remove pelo nome.
+- Além das formas, `torno` (perfil girado: vaso, garrafa), `extrusao` (contorno levantado: letra, planta) e `linhas`.
+- O formato e a cena atual só vão ao modelo quando a conversa envolve a sala; a legenda e a voz nunca mostram o bloco.
+- Por voz, na hora: "gira 90 graus", "vira de cabeça para baixo", "deita", "inclina", "endireita", "mais/menos detalhe",
+  e as figuras do modelo atendem pelo nome ("gira o carro 90 graus").
+- Limites: 60 peças e 2.500 arestas por figura, 6.000 na cena; um carro, uma casa e um vaso juntos ficam a 60 qps.
+
+## Vault, habilidades e APIs
+
+Nada disso é "pré-treino": a inteligência é a do modelo configurado. O que muda é o que está na frente dele a cada mensagem.
+
+- **Vault** (`knowledge.js`): "aprenda isso: …", texto colado ou arquivos em Configurações → Conhecimento (`.md`, `.txt`,
+  `.json`, `.csv`, ou uma pasta do Obsidian). Fica no IndexedDB do aparelho. Cada mensagem leva no máximo 4 trechos, e só
+  os que passam do limiar; um manual do próprio Jarvis (`knowledge/jarvis.json`) vem embutido e nunca é gravado.
+- **Habilidades** (`skills.js`): ~120 receitas em 12 pacotes. A que serve para o pedido vai junto (no máximo 2); conversa
+  comum não leva nenhuma. "aprenda a habilidade: quando eu pedir X, faça Y" cria uma sua, que vale mais que a embutida.
+- **APIs** (`apis.js`): 30 APIs gratuitas, sem chave e com CORS. Só as que servem à pergunta são descritas; o modelo
+  responde ` ```api {"api":"cep","params":{"cep":"01001000"}} `, o navegador chama (até 3 por pergunta, 6 s cada),
+  resume em até 2 KB e pergunta de novo com o resultado. Falha vira "não consegui", nunca um número inventado. Cada
+  parâmetro passa por um padrão e é codificado: nada do que o modelo escreve vira outro caminho ou outro servidor.
+- **Orçamento**: as instruções de formato (voz, holograma) vão sempre que valem; o resto entra nesta ordem — vault,
+  habilidade, APIs, memória, lugar — até ~10 mil caracteres (~2.500 tokens).
+- A escolha é por palavras (o mesmo `embed` da memória, sem as palavras de "como se pergunta"), não por entendimento:
+  rápida e offline, e às vezes erra. Os testes fixam os pedidos que importam.

@@ -1,0 +1,944 @@
+[
+ {
+  "id": "clima",
+  "nome": "Previsão do tempo (Open-Meteo)",
+  "quando": "tempo, clima, previsão, temperatura, chuva, vento ou frio em uma cidade, hoje ou nos próximos dias",
+  "url": "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=auto&forecast_days=4",
+  "params": {
+   "lat": {
+    "descricao": "latitude, ou use 'cidade' no lugar",
+    "padrao": "^-?\\d{1,2}(\\.\\d+)?$",
+    "obrigatorio": true
+   },
+   "lon": {
+    "descricao": "longitude, ou use 'cidade' no lugar",
+    "padrao": "^-?\\d{1,3}(\\.\\d+)?$",
+    "obrigatorio": true
+   }
+  },
+  "cidade": true,
+  "campos": [
+   "current",
+   "daily"
+  ],
+  "exemplo": {
+   "api": "clima",
+   "params": {
+    "cidade": "Recife"
+   }
+  },
+  "limite": "sem limite prático para uso pessoal",
+  "exemplos": [
+   "vai chover amanhã",
+   "como está o tempo hoje",
+   "previsão do tempo para o fim de semana",
+   "qual a temperatura agora",
+   "vai fazer frio",
+   "está calor lá"
+  ]
+ },
+ {
+  "id": "qualidade-ar",
+  "nome": "Qualidade do ar e índice UV (Open-Meteo)",
+  "quando": "qualidade do ar, poluição, índice UV, sol forte ou poeira em uma cidade",
+  "url": "https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&current=pm10,pm2_5,us_aqi,european_aqi,uv_index",
+  "params": {
+   "lat": {
+    "descricao": "latitude, ou use 'cidade' no lugar",
+    "padrao": "^-?\\d{1,2}(\\.\\d+)?$",
+    "obrigatorio": true
+   },
+   "lon": {
+    "descricao": "longitude, ou use 'cidade' no lugar",
+    "padrao": "^-?\\d{1,3}(\\.\\d+)?$",
+    "obrigatorio": true
+   }
+  },
+  "cidade": true,
+  "campos": [
+   "current"
+  ],
+  "exemplo": {
+   "api": "qualidade-ar",
+   "params": {
+    "cidade": "São Paulo"
+   }
+  },
+  "exemplos": [
+   "como está a qualidade do ar",
+   "o índice uv está alto",
+   "está muito poluído hoje"
+  ]
+ },
+ {
+  "id": "mar",
+  "nome": "Ondas e mar (Open-Meteo Marine)",
+  "quando": "mar, ondas, surf, altura das ondas ou condições do mar numa praia",
+  "url": "https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&current=wave_height,wave_direction,wave_period,sea_surface_temperature",
+  "params": {
+   "lat": {
+    "descricao": "latitude, ou use 'cidade' no lugar",
+    "padrao": "^-?\\d{1,2}(\\.\\d+)?$",
+    "obrigatorio": true
+   },
+   "lon": {
+    "descricao": "longitude, ou use 'cidade' no lugar",
+    "padrao": "^-?\\d{1,3}(\\.\\d+)?$",
+    "obrigatorio": true
+   }
+  },
+  "cidade": true,
+  "campos": [
+   "current"
+  ],
+  "exemplo": {
+   "api": "mar",
+   "params": {
+    "cidade": "Florianópolis"
+   }
+  },
+  "exemplos": [
+   "como estão as ondas",
+   "dá para surfar hoje",
+   "o mar está agitado"
+  ]
+ },
+ {
+  "id": "geocodificar",
+  "nome": "Coordenadas de uma cidade (Open-Meteo Geocoding)",
+  "quando": "coordenadas, latitude e longitude, onde fica uma cidade, população ou fuso horário de uma cidade",
+  "url": "https://geocoding-api.open-meteo.com/v1/search?name={cidade}&count=3&language=pt&format=json",
+  "params": {
+   "cidade": {
+    "descricao": "nome da cidade",
+    "padrao": "^.{2,80}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "results[].name",
+   "results[].admin1",
+   "results[].country",
+   "results[].latitude",
+   "results[].longitude",
+   "results[].population",
+   "results[].timezone"
+  ],
+  "exemplo": {
+   "api": "geocodificar",
+   "params": {
+    "cidade": "Campinas"
+   }
+  },
+  "exemplos": [
+   "quais as coordenadas de",
+   "onde fica a cidade",
+   "latitude e longitude de"
+  ]
+ },
+ {
+  "id": "sol",
+  "nome": "Nascer e pôr do sol",
+  "quando": "que horas o sol nasce ou se põe, nascer do sol, pôr do sol, crepúsculo ou duração do dia",
+  "url": "https://api.sunrise-sunset.org/json?lat={lat}&lng={lon}&formatted=0&date={data}",
+  "params": {
+   "lat": {
+    "descricao": "latitude, ou use 'cidade' no lugar",
+    "padrao": "^-?\\d{1,2}(\\.\\d+)?$",
+    "obrigatorio": true
+   },
+   "lon": {
+    "descricao": "longitude, ou use 'cidade' no lugar",
+    "padrao": "^-?\\d{1,3}(\\.\\d+)?$",
+    "obrigatorio": true
+   },
+   "data": {
+    "descricao": "AAAA-MM-DD ou today",
+    "padrao": "^(today|\\d{4}-\\d{2}-\\d{2})$",
+    "valor_padrao": "today",
+    "obrigatorio": false
+   }
+  },
+  "cidade": true,
+  "campos": [
+   "results.sunrise",
+   "results.sunset",
+   "results.day_length",
+   "results.civil_twilight_end"
+  ],
+  "exemplo": {
+   "api": "sol",
+   "params": {
+    "cidade": "Natal"
+   }
+  },
+  "nota": "horários em UTC: converta para o fuso local",
+  "exemplos": [
+   "que horas o sol se põe",
+   "que horas amanhece",
+   "horário do pôr do sol"
+  ]
+ },
+ {
+  "id": "wikipedia",
+  "nome": "Resumo da Wikipédia",
+  "quando": "o que é, quem foi, explicação enciclopédica, biografia, fato histórico, lugar ou conceito",
+  "url": "https://pt.wikipedia.org/api/rest_v1/page/summary/{titulo}",
+  "params": {
+   "titulo": {
+    "descricao": "título do artigo, como na Wikipédia",
+    "padrao": "^.{1,120}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "title",
+   "description",
+   "extract",
+   "content_urls.desktop.page"
+  ],
+  "exemplo": {
+   "api": "wikipedia",
+   "params": {
+    "titulo": "Santos Dumont"
+   }
+  },
+  "espacos": "_",
+  "exemplos": [
+   "quem foi",
+   "o que é",
+   "me fala sobre a história de",
+   "quem inventou"
+  ]
+ },
+ {
+  "id": "wikipedia-busca",
+  "nome": "Busca na Wikipédia",
+  "quando": "pesquisar um assunto na Wikipédia quando não se sabe o título exato do artigo",
+  "url": "https://pt.wikipedia.org/w/rest.php/v1/search/page?q={busca}&limit=4",
+  "params": {
+   "busca": {
+    "descricao": "termos da busca",
+    "padrao": "^.{2,120}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "pages[].title",
+   "pages[].description",
+   "pages[].excerpt"
+  ],
+  "exemplo": {
+   "api": "wikipedia-busca",
+   "params": {
+    "busca": "primeiro avião"
+   }
+  },
+  "exemplos": [
+   "pesquisa na wikipédia sobre",
+   "procura informação sobre"
+  ]
+ },
+ {
+  "id": "cep",
+  "nome": "Endereço pelo CEP (BrasilAPI)",
+  "quando": "CEP, endereço, rua, bairro ou cidade de um CEP brasileiro",
+  "url": "https://brasilapi.com.br/api/cep/v2/{cep}",
+  "params": {
+   "cep": {
+    "descricao": "8 dígitos",
+    "padrao": "^\\d{8}$",
+    "limpar": "digitos",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "cep",
+   "street",
+   "neighborhood",
+   "city",
+   "state"
+  ],
+  "exemplo": {
+   "api": "cep",
+   "params": {
+    "cep": "01001000"
+   }
+  },
+  "exemplos": [
+   "qual o endereço do cep",
+   "de onde é esse cep",
+   "cep da rua"
+  ]
+ },
+ {
+  "id": "cnpj",
+  "nome": "Dados de empresa pelo CNPJ (BrasilAPI)",
+  "quando": "CNPJ, dados de empresa, razão social, situação cadastral, sócios ou atividade de uma empresa",
+  "url": "https://brasilapi.com.br/api/cnpj/v1/{cnpj}",
+  "params": {
+   "cnpj": {
+    "descricao": "14 dígitos",
+    "padrao": "^\\d{14}$",
+    "limpar": "digitos",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "razao_social",
+   "nome_fantasia",
+   "descricao_situacao_cadastral",
+   "data_inicio_atividade",
+   "cnae_fiscal_descricao",
+   "municipio",
+   "uf",
+   "porte",
+   "qsa[].nome_socio"
+  ],
+  "exemplo": {
+   "api": "cnpj",
+   "params": {
+    "cnpj": "00000000000191"
+   }
+  },
+  "exemplos": [
+   "consulta esse cnpj",
+   "de quem é esse cnpj",
+   "a empresa está ativa"
+  ]
+ },
+ {
+  "id": "feriados",
+  "nome": "Feriados nacionais (BrasilAPI)",
+  "quando": "feriados, feriado nacional, quando é o próximo feriado, carnaval ou datas comemorativas do ano",
+  "url": "https://brasilapi.com.br/api/feriados/v1/{ano}",
+  "params": {
+   "ano": {
+    "descricao": "ano com 4 dígitos",
+    "padrao": "^\\d{4}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "[].date",
+   "[].name"
+  ],
+  "exemplo": {
+   "api": "feriados",
+   "params": {
+    "ano": "2026"
+   }
+  },
+  "exemplos": [
+   "quando é o próximo feriado",
+   "quais os feriados do ano",
+   "é feriado amanhã",
+   "quando é o carnaval"
+  ]
+ },
+ {
+  "id": "ddd",
+  "nome": "Cidades de um DDD (BrasilAPI)",
+  "quando": "DDD, de onde é um número de telefone, código de área",
+  "url": "https://brasilapi.com.br/api/ddd/v1/{ddd}",
+  "params": {
+   "ddd": {
+    "descricao": "2 dígitos",
+    "padrao": "^\\d{2}$",
+    "limpar": "digitos",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "state",
+   "cities"
+  ],
+  "exemplo": {
+   "api": "ddd",
+   "params": {
+    "ddd": "81"
+   }
+  },
+  "exemplos": [
+   "de onde é o ddd",
+   "esse número é de qual estado",
+   "ddd de qual cidade"
+  ]
+ },
+ {
+  "id": "banco",
+  "nome": "Banco pelo código (BrasilAPI)",
+  "quando": "código de banco, qual banco é o número, ISPB ou dados de uma instituição financeira",
+  "url": "https://brasilapi.com.br/api/banks/v1/{codigo}",
+  "params": {
+   "codigo": {
+    "descricao": "código numérico do banco",
+    "padrao": "^\\d{1,3}$",
+    "limpar": "digitos",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "code",
+   "name",
+   "fullName",
+   "ispb"
+  ],
+  "exemplo": {
+   "api": "banco",
+   "params": {
+    "codigo": "260"
+   }
+  },
+  "exemplos": [
+   "qual banco é o código",
+   "código do banco nubank"
+  ]
+ },
+ {
+  "id": "taxas",
+  "nome": "Selic, CDI e IPCA (BrasilAPI)",
+  "quando": "taxa Selic, CDI, IPCA, inflação ou juros básicos do Brasil",
+  "url": "https://brasilapi.com.br/api/taxas/v1",
+  "params": {},
+  "campos": [
+   "[].nome",
+   "[].valor"
+  ],
+  "exemplo": {
+   "api": "taxas",
+   "params": {}
+  },
+  "exemplos": [
+   "quanto está a selic",
+   "qual a taxa do cdi",
+   "qual a inflação ipca"
+  ]
+ },
+ {
+  "id": "cambio",
+  "nome": "Cotação de moedas em reais (AwesomeAPI)",
+  "quando": "cotação do dólar, euro, libra, peso ou outra moeda em reais, câmbio de hoje",
+  "url": "https://economia.awesomeapi.com.br/json/last/{pares}",
+  "params": {
+   "pares": {
+    "descricao": "pares como USD-BRL,EUR-BRL",
+    "padrao": "^[A-Z]{3}-[A-Z]{3}(,[A-Z]{3}-[A-Z]{3}){0,5}$",
+    "limpar": "maiusculas",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "*.name",
+   "*.bid",
+   "*.ask",
+   "*.pctChange",
+   "*.create_date"
+  ],
+  "exemplo": {
+   "api": "cambio",
+   "params": {
+    "pares": "USD-BRL,EUR-BRL"
+   }
+  },
+  "exemplos": [
+   "quanto está o dólar",
+   "cotação do euro hoje",
+   "converter dólar para real",
+   "quanto vale a libra"
+  ]
+ },
+ {
+  "id": "cambio-bce",
+  "nome": "Conversão entre moedas (Frankfurter/BCE)",
+  "quando": "converter entre duas moedas estrangeiras, taxa oficial do Banco Central Europeu",
+  "url": "https://api.frankfurter.app/latest?from={de}&to={para}&amount={valor}",
+  "params": {
+   "de": {
+    "descricao": "moeda de origem, ex. USD",
+    "padrao": "^[A-Z]{3}$",
+    "limpar": "maiusculas",
+    "obrigatorio": true
+   },
+   "para": {
+    "descricao": "moeda de destino, ex. EUR",
+    "padrao": "^[A-Z]{3}(,[A-Z]{3})*$",
+    "limpar": "maiusculas",
+    "obrigatorio": true
+   },
+   "valor": {
+    "descricao": "quantia",
+    "padrao": "^\\d+(\\.\\d+)?$",
+    "valor_padrao": "1",
+    "obrigatorio": false
+   }
+  },
+  "campos": [
+   "amount",
+   "base",
+   "date",
+   "rates"
+  ],
+  "exemplo": {
+   "api": "cambio-bce",
+   "params": {
+    "de": "USD",
+    "para": "EUR",
+    "valor": "100"
+   }
+  },
+  "exemplos": [
+   "converter dólar em euro",
+   "quantos euros dá 100 dólares"
+  ]
+ },
+ {
+  "id": "cripto",
+  "nome": "Preço de criptomoedas (CoinGecko)",
+  "quando": "preço do bitcoin, ethereum ou outra criptomoeda, variação em 24h",
+  "url": "https://api.coingecko.com/api/v3/simple/price?ids={moedas}&vs_currencies=brl,usd&include_24hr_change=true",
+  "params": {
+   "moedas": {
+    "descricao": "ids em minúsculas, ex. bitcoin,ethereum",
+    "padrao": "^[a-z0-9-]+(,[a-z0-9-]+){0,9}$",
+    "limpar": "minusculas",
+    "obrigatorio": true
+   }
+  },
+  "campos": [],
+  "exemplo": {
+   "api": "cripto",
+   "params": {
+    "moedas": "bitcoin"
+   }
+  },
+  "limite": "cerca de 10 a 30 consultas por minuto",
+  "exemplos": [
+   "preço do bitcoin",
+   "quanto vale o ethereum",
+   "cotação da criptomoeda"
+  ]
+ },
+ {
+  "id": "pais",
+  "nome": "Dados de um país (REST Countries)",
+  "quando": "país, capital, população, moeda, idioma, área, fuso ou bandeira de um país",
+  "url": "https://restcountries.com/v3.1/translation/{pais}?fields=name,translations,capital,population,region,subregion,languages,currencies,area,timezones,flag",
+  "params": {
+   "pais": {
+    "descricao": "nome do país, pode ser em português",
+    "padrao": "^.{2,60}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "[].translations.por.common",
+   "[].capital",
+   "[].population",
+   "[].region",
+   "[].subregion",
+   "[].languages",
+   "[].currencies",
+   "[].area",
+   "[].timezones",
+   "[].flag"
+  ],
+  "exemplo": {
+   "api": "pais",
+   "params": {
+    "pais": "Japão"
+   }
+  },
+  "exemplos": [
+   "qual a capital do",
+   "quantos habitantes tem o país",
+   "que moeda usa",
+   "qual idioma falam no"
+  ]
+ },
+ {
+  "id": "livros",
+  "nome": "Livros (Open Library)",
+  "quando": "livro, autor, obras de um escritor, ano de publicação ou sugestões de leitura sobre um tema",
+  "url": "https://openlibrary.org/search.json?q={busca}&limit=5&fields=title,author_name,first_publish_year,number_of_pages_median,subject",
+  "params": {
+   "busca": {
+    "descricao": "título, autor ou tema",
+    "padrao": "^.{2,120}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "docs[].title",
+   "docs[].author_name",
+   "docs[].first_publish_year",
+   "docs[].number_of_pages_median"
+  ],
+  "exemplo": {
+   "api": "livros",
+   "params": {
+    "busca": "Machado de Assis"
+   }
+  },
+  "exemplos": [
+   "livros de",
+   "quem escreveu o livro",
+   "sugestões de livros sobre"
+  ]
+ },
+ {
+  "id": "artigos-cientificos",
+  "nome": "Artigos científicos (Crossref)",
+  "quando": "artigo científico, pesquisa acadêmica, DOI, referência ou publicação científica sobre um tema",
+  "url": "https://api.crossref.org/works?query={busca}&rows=4&select=title,author,published,DOI,container-title",
+  "params": {
+   "busca": {
+    "descricao": "tema ou título",
+    "padrao": "^.{2,160}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "message.items[].title",
+   "message.items[].author[].family",
+   "message.items[].published.date-parts",
+   "message.items[].DOI",
+   "message.items[].container-title"
+  ],
+  "exemplo": {
+   "api": "artigos-cientificos",
+   "params": {
+    "busca": "sleep and memory consolidation"
+   }
+  },
+  "exemplos": [
+   "artigos científicos sobre",
+   "pesquisas acadêmicas sobre",
+   "estudo científico que fala de"
+  ]
+ },
+ {
+  "id": "noticias-ibge",
+  "nome": "Notícias e releases do IBGE",
+  "quando": "dados oficiais do IBGE, desemprego, PIB, censo, pesquisa ou estatística do Brasil",
+  "url": "https://servicodados.ibge.gov.br/api/v3/noticias/?qtd=5&busca={busca}",
+  "params": {
+   "busca": {
+    "descricao": "tema",
+    "padrao": "^.{2,80}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "items[].titulo",
+   "items[].introducao",
+   "items[].data_publicacao",
+   "items[].link"
+  ],
+  "exemplo": {
+   "api": "noticias-ibge",
+   "params": {
+    "busca": "desemprego"
+   }
+  },
+  "exemplos": [
+   "dados do ibge sobre",
+   "taxa de desemprego segundo o ibge",
+   "pib do brasil ibge"
+  ]
+ },
+ {
+  "id": "nomes-ibge",
+  "nome": "Frequência de um nome no Brasil (IBGE)",
+  "quando": "quantas pessoas têm um nome, popularidade ou frequência de um nome no Brasil por década",
+  "url": "https://servicodados.ibge.gov.br/api/v2/censos/nomes/{nome}",
+  "params": {
+   "nome": {
+    "descricao": "primeiro nome, sem acento",
+    "padrao": "^[A-Za-z]{2,30}$",
+    "limpar": "sem_acento",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "[].nome",
+   "[].res"
+  ],
+  "exemplo": {
+   "api": "nomes-ibge",
+   "params": {
+    "nome": "Maria"
+   }
+  },
+  "exemplos": [
+   "quantas pessoas se chamam",
+   "o nome é popular no brasil"
+  ]
+ },
+ {
+  "id": "municipios",
+  "nome": "Municípios de um estado (IBGE)",
+  "quando": "lista de municípios ou cidades de um estado brasileiro",
+  "url": "https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf}/municipios?view=nivelado",
+  "params": {
+   "uf": {
+    "descricao": "sigla do estado",
+    "padrao": "^[A-Z]{2}$",
+    "limpar": "maiusculas",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "[].municipio-nome"
+  ],
+  "exemplo": {
+   "api": "municipios",
+   "params": {
+    "uf": "PE"
+   }
+  },
+  "exemplos": [
+   "quais as cidades de",
+   "quantos municípios tem o estado"
+  ]
+ },
+ {
+  "id": "noticias-espaco",
+  "nome": "Notícias de espaço e astronomia (Spaceflight News)",
+  "quando": "notícias de espaço, foguete, NASA, SpaceX, lançamento, astronomia ou exploração espacial",
+  "url": "https://api.spaceflightnewsapi.net/v4/articles/?limit=5&search={busca}",
+  "params": {
+   "busca": {
+    "descricao": "tema",
+    "padrao": "^.{0,80}$",
+    "valor_padrao": "",
+    "obrigatorio": false
+   }
+  },
+  "campos": [
+   "results[].title",
+   "results[].news_site",
+   "results[].published_at",
+   "results[].summary",
+   "results[].url"
+  ],
+  "exemplo": {
+   "api": "noticias-espaco",
+   "params": {
+    "busca": "Artemis"
+   }
+  },
+  "exemplos": [
+   "notícias do espaço",
+   "novidades da nasa",
+   "lançamento de foguete",
+   "notícias da spacex"
+  ]
+ },
+ {
+  "id": "estacao-espacial",
+  "nome": "Posição da Estação Espacial (ISS)",
+  "quando": "onde está a estação espacial internacional agora, ISS, satélite passando",
+  "url": "https://api.wheretheiss.at/v1/satellites/25544",
+  "params": {},
+  "campos": [
+   "latitude",
+   "longitude",
+   "altitude",
+   "velocity",
+   "visibility"
+  ],
+  "exemplo": {
+   "api": "estacao-espacial",
+   "params": {}
+  },
+  "exemplos": [
+   "onde está a estação espacial",
+   "a iss está passando"
+  ]
+ },
+ {
+  "id": "terremotos",
+  "nome": "Terremotos recentes (USGS)",
+  "quando": "terremoto, sismo, abalo sísmico recente no mundo",
+  "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson",
+  "params": {},
+  "campos": [
+   "features[].properties.mag",
+   "features[].properties.place",
+   "features[].properties.time"
+  ],
+  "exemplo": {
+   "api": "terremotos",
+   "params": {}
+  },
+  "exemplos": [
+   "teve terremoto hoje",
+   "terremotos recentes no mundo"
+  ]
+ },
+ {
+  "id": "tecnologia",
+  "nome": "Notícias de tecnologia (Hacker News)",
+  "quando": "notícias de tecnologia, programação, startups ou o que está em alta no Hacker News",
+  "url": "https://hn.algolia.com/api/v1/search?query={busca}&tags=story&hitsPerPage=5",
+  "params": {
+   "busca": {
+    "descricao": "tema",
+    "padrao": "^.{0,80}$",
+    "valor_padrao": "",
+    "obrigatorio": false
+   }
+  },
+  "campos": [
+   "hits[].title",
+   "hits[].url",
+   "hits[].points",
+   "hits[].created_at"
+  ],
+  "exemplo": {
+   "api": "tecnologia",
+   "params": {
+    "busca": "llm"
+   }
+  },
+  "exemplos": [
+   "notícias de tecnologia",
+   "o que está em alta na tecnologia"
+  ]
+ },
+ {
+  "id": "github",
+  "nome": "Repositórios no GitHub",
+  "quando": "projeto de código aberto, repositório, biblioteca ou ferramenta no GitHub",
+  "url": "https://api.github.com/search/repositories?q={busca}&per_page=5&sort=stars",
+  "params": {
+   "busca": {
+    "descricao": "tema ou nome",
+    "padrao": "^.{2,80}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "items[].full_name",
+   "items[].description",
+   "items[].stargazers_count",
+   "items[].html_url",
+   "items[].language"
+  ],
+  "exemplo": {
+   "api": "github",
+   "params": {
+    "busca": "ollama android"
+   }
+  },
+  "limite": "10 buscas por minuto sem login",
+  "exemplos": [
+   "repositório no github de",
+   "projeto open source para",
+   "biblioteca no github"
+  ]
+ },
+ {
+  "id": "alimento",
+  "nome": "Produto alimentício pelo código de barras (Open Food Facts)",
+  "quando": "informação nutricional, calorias, ingredientes ou alérgenos de um produto pelo código de barras",
+  "url": "https://world.openfoodfacts.org/api/v2/product/{codigo}.json?fields=product_name,brands,nutriments,allergens_tags,ingredients_text_pt,ingredients_text,nutriscore_grade,nova_group",
+  "params": {
+   "codigo": {
+    "descricao": "código de barras (EAN), 8 a 14 dígitos",
+    "padrao": "^\\d{8,14}$",
+    "limpar": "digitos",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "product.product_name",
+   "product.brands",
+   "product.nutriscore_grade",
+   "product.nova_group",
+   "product.allergens_tags",
+   "product.nutriments.energy-kcal_100g",
+   "product.nutriments.sugars_100g",
+   "product.nutriments.fat_100g",
+   "product.nutriments.salt_100g",
+   "product.nutriments.proteins_100g",
+   "product.ingredients_text_pt"
+  ],
+  "exemplo": {
+   "api": "alimento",
+   "params": {
+    "codigo": "7891000100103"
+   }
+  },
+  "exemplos": [
+   "informação nutricional do código de barras",
+   "quantas calorias tem esse produto",
+   "ingredientes desse produto"
+  ]
+ },
+ {
+  "id": "dicionario-ingles",
+  "nome": "Dicionário de inglês",
+  "quando": "significado, definição ou pronúncia de uma palavra em inglês",
+  "url": "https://api.dictionaryapi.dev/api/v2/entries/en/{palavra}",
+  "params": {
+   "palavra": {
+    "descricao": "palavra em inglês",
+    "padrao": "^[A-Za-z' -]{1,40}$",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "[].word",
+   "[].phonetic",
+   "[].meanings[].partOfSpeech",
+   "[].meanings[].definitions[].definition"
+  ],
+  "exemplo": {
+   "api": "dicionario-ingles",
+   "params": {
+    "palavra": "serendipity"
+   }
+  },
+  "exemplos": [
+   "o que significa a palavra em inglês",
+   "definição em inglês de",
+   "como se pronuncia em inglês"
+  ]
+ },
+ {
+  "id": "pokemon",
+  "nome": "Pokémon (PokeAPI)",
+  "quando": "pokémon, tipo, habilidades, altura, peso ou status de um pokémon",
+  "url": "https://pokeapi.co/api/v2/pokemon/{nome}",
+  "params": {
+   "nome": {
+    "descricao": "nome em inglês, minúsculas",
+    "padrao": "^[a-z0-9-]{2,30}$",
+    "limpar": "minusculas",
+    "obrigatorio": true
+   }
+  },
+  "campos": [
+   "name",
+   "height",
+   "weight",
+   "types[].type.name",
+   "abilities[].ability.name",
+   "stats[].stat.name",
+   "stats[].base_stat"
+  ],
+  "exemplo": {
+   "api": "pokemon",
+   "params": {
+    "nome": "pikachu"
+   }
+  },
+  "exemplos": [
+   "qual o tipo do pokémon",
+   "status do pikachu",
+   "habilidades do charizard"
+  ]
+ }
+]

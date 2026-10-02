@@ -21,7 +21,14 @@ from jarvis_mobile.bridge import ssh as ssh_module
 from jarvis_mobile.bridge.hub import PROTOCOL_VERSION, RUNNER_PATH, DeviceHub
 from jarvis_mobile.bridge.hub import hub as default_hub
 
-__all__ = ["DEVICE_PATH", "RUNNER_PATH", "STATUS_PATH", "create_device_router"]
+__all__ = [
+    "DECIDE_PATH",
+    "DEVICE_PATH",
+    "RUNNER_PATH",
+    "STATUS_PATH",
+    "create_decide_router",
+    "create_device_router",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +39,12 @@ DEVICE_PATH = "/v1/device/link"
 
 #: The same thing, asked over ordinary HTTP: is a phone on the line?
 STATUS_PATH = "/v1/device"
+
+#: Where the interface asks for a typed judgement about a sentence. Under
+#: /v1 on purpose, unlike the device link: the page calling this is an
+#: ordinary API client and already sends the key, so OpenJarvis's own auth
+#: is the right check and this route does not invent a second one.
+DECIDE_PATH = "/v1/decide"
 
 #: A hello larger than this is not a hello.
 _MAX_HELLO = 64 * 1024
@@ -162,5 +175,50 @@ def create_device_router(token: str, hub: DeviceHub | None = None) -> Any:
             logger.exception("device bridge: the link failed")
         finally:
             target.detach(device)
+
+    return router
+
+
+def create_decide_router(module: Any = None) -> Any:
+    """Build the router that answers "what is this sentence asking for?".
+
+    The work is a local decision model (``jarvis_mobile.systemone``); this is
+    only the door, because the model listens on loopback and the phone is not
+    on this machine.
+
+    Both verbs answer 200 even with no model installed. A missing decision
+    model is not an error: the interface has a complete answer for "nobody
+    could decide" -- it does what it did before -- and a 503 would make an
+    ordinary configuration look like a fault in the logs.
+    """
+    from jarvis_mobile import systemone as default_module
+
+    decider = module or default_module
+    router = APIRouter()
+
+    @router.get(DECIDE_PATH)
+    def decide_status() -> dict[str, Any]:
+        """Is there a decision model, and which one?
+
+        The interface asks once and remembers: a page that retried on every
+        message would spend a network round trip per message to be told the
+        same no.
+        """
+        return {
+            "available": bool(decider.reachable()),
+            "model": decider.model_name(),
+            "host": decider.host_url(),
+        }
+
+    @router.post(DECIDE_PATH)
+    def decide_intent(body: dict[str, Any]) -> dict[str, Any]:
+        """Decide what one sentence is asking for."""
+        text = body.get("text") if isinstance(body, dict) else None
+        if not isinstance(text, str) or not text.strip():
+            return {"available": False, "reason": "sem texto"}
+        answer = decider.classify(text)
+        if answer is None:
+            return {"available": False, "reason": "sem modelo de decisao"}
+        return {"available": True, "pedido": answer.as_dict()}
 
     return router

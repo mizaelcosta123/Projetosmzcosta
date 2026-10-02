@@ -1,0 +1,255 @@
+[
+ {
+  "id": "api-clima",
+  "nome": "Tempo e previsão",
+  "categoria": "apis",
+  "quando": "previsão do tempo, chuva, temperatura, frio ou calor numa cidade",
+  "exemplos": [
+   "vai chover amanhã",
+   "como está o tempo em salvador",
+   "previsão para o fim de semana",
+   "está fazendo calor em manaus"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, diga a condição atual e a previsão dos próximos dias em 2-3 frases, com máximas e mínimas e chance de chuva. Os códigos de tempo da Open-Meteo: 0 céu limpo, 1-3 nuvens, 45/48 neblina, 51-67 chuva/garoa, 80-82 pancadas, 95-99 trovoadas.",
+  "apis": [
+   "clima"
+  ]
+ },
+ {
+  "id": "api-cep",
+  "nome": "Endereço por CEP",
+  "categoria": "apis",
+  "quando": "consultar CEP ou descobrir o endereço de um CEP",
+  "exemplos": [
+   "qual o endereço do cep",
+   "de onde é esse cep",
+   "cep 01001000"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, devolva rua, bairro, cidade e estado em uma linha. Se não existir, diga que o CEP não foi encontrado.",
+  "apis": [
+   "cep"
+  ]
+ },
+ {
+  "id": "api-cnpj",
+  "nome": "Consulta de CNPJ",
+  "categoria": "apis",
+  "quando": "consultar empresa pelo CNPJ, situação cadastral ou se a empresa é confiável",
+  "exemplos": [
+   "consulta esse cnpj",
+   "essa empresa existe",
+   "a loja é confiável cnpj"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, diga razão social, nome fantasia, situação (ativa/baixada), data de abertura e atividade. Lembre que estar ativa não garante idoneidade; sugira também ver reclamações em sites de consumidor.",
+  "apis": [
+   "cnpj"
+  ]
+ },
+ {
+  "id": "api-feriados",
+  "nome": "Feriados",
+  "categoria": "apis",
+  "quando": "próximo feriado, feriados do ano ou se uma data é feriado",
+  "exemplos": [
+   "quando é o próximo feriado",
+   "é feriado amanhã",
+   "feriados de 2026"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, use a data de hoje para dizer o próximo feriado nacional e quantos dias faltam. Lembre que feriados estaduais e municipais não estão na lista.",
+  "apis": [
+   "feriados"
+  ]
+ },
+ {
+  "id": "api-cambio",
+  "nome": "Cotação e conversão de moeda",
+  "categoria": "apis",
+  "quando": "cotação do dólar, euro ou outra moeda, ou converter valores entre moedas",
+  "exemplos": [
+   "quanto está o dólar",
+   "converte 50 euros em reais",
+   "cotação da libra"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, dê a cotação de compra/venda com a hora da cotação e faça a conta pedida. Avise que no cartão e na casa de câmbio há IOF e spread.",
+  "apis": [
+   "cambio",
+   "cambio-bce"
+  ]
+ },
+ {
+  "id": "api-cripto",
+  "nome": "Preço de criptomoeda",
+  "categoria": "apis",
+  "quando": "preço ou variação do bitcoin, ethereum ou outra criptomoeda",
+  "exemplos": [
+   "preço do bitcoin",
+   "quanto vale o ethereum",
+   "o bitcoin subiu"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, diga o preço em reais e dólares e a variação em 24h. Sem recomendação de compra; lembre da volatilidade.",
+  "apis": [
+   "cripto"
+  ]
+ },
+ {
+  "id": "api-taxas",
+  "nome": "Selic, CDI e inflação",
+  "categoria": "apis",
+  "quando": "taxa Selic, CDI, IPCA ou quanto a inflação está",
+  "exemplos": [
+   "quanto está a selic",
+   "qual o cdi hoje",
+   "inflação atual"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, dê os valores e explique em uma frase o que cada um significa para quem investe ou tem dívida.",
+  "apis": [
+   "taxas"
+  ]
+ },
+ {
+  "id": "api-wikipedia",
+  "nome": "Pesquisar na Wikipédia",
+  "categoria": "apis",
+  "quando": "quem foi, o que é, quando aconteceu: perguntas de enciclopédia sobre pessoas, lugares, fatos e conceitos",
+  "exemplos": [
+   "quem foi santos dumont",
+   "o que é um buraco negro",
+   "quando foi a independência do brasil",
+   "pesquisa sobre"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, responda com base no resumo, em 3-5 frases, e cite que veio da Wikipédia. Se o título exato for incerto, use wikipedia-busca primeiro.",
+  "apis": [
+   "wikipedia",
+   "wikipedia-busca"
+  ]
+ },
+ {
+  "id": "api-pais",
+  "nome": "Dados de países",
+  "categoria": "apis",
+  "quando": "capital, população, moeda, idioma ou dados de um país",
+  "exemplos": [
+   "qual a capital da austrália",
+   "quantos habitantes tem o canadá",
+   "que moeda usa a suíça"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, responda o que foi perguntado de forma direta, com o número formatado (ex.: 25,7 milhões) e a bandeira em emoji.",
+  "apis": [
+   "pais"
+  ]
+ },
+ {
+  "id": "api-livros",
+  "nome": "Livros e autores",
+  "categoria": "apis",
+  "quando": "encontrar livros, autores, obras, ano de publicação ou sugestões de leitura",
+  "exemplos": [
+   "livros de clarice lispector",
+   "quem escreveu dom casmurro",
+   "livros sobre estoicismo"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, liste até 5 obras com autor e ano. Para sugestões, explique em uma linha por que cada uma serve.",
+  "apis": [
+   "livros"
+  ]
+ },
+ {
+  "id": "api-ciencia",
+  "nome": "Artigos científicos",
+  "categoria": "apis",
+  "quando": "buscar artigos científicos, estudos ou referências acadêmicas sobre um tema",
+  "exemplos": [
+   "artigos científicos sobre sono",
+   "pesquisas sobre jejum intermitente",
+   "estudo sobre exercício e memória"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, liste os artigos com título, autores, ano e DOI (https://doi.org/…). Não resuma conclusões que não estão no resultado.",
+  "apis": [
+   "artigos-cientificos"
+  ]
+ },
+ {
+  "id": "api-espaco",
+  "nome": "Notícias do espaço",
+  "categoria": "apis",
+  "quando": "notícias de espaço, NASA, SpaceX, foguetes ou onde está a estação espacial",
+  "exemplos": [
+   "notícias da nasa",
+   "próximo lançamento da spacex",
+   "onde está a iss agora"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, resuma as notícias com data e fonte, ou diga a posição da ISS (latitude/longitude, sobre qual região aproximada).",
+  "apis": [
+   "noticias-espaco",
+   "estacao-espacial"
+  ]
+ },
+ {
+  "id": "api-tecnologia",
+  "nome": "Notícias de tecnologia e código aberto",
+  "categoria": "apis",
+  "quando": "novidades de tecnologia, projetos no GitHub ou ferramentas de código aberto",
+  "exemplos": [
+   "notícias de tecnologia hoje",
+   "projeto open source para",
+   "melhor biblioteca no github para"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, liste os itens com uma linha de descrição, estrelas/pontos e link.",
+  "apis": [
+   "tecnologia",
+   "github"
+  ]
+ },
+ {
+  "id": "api-brasil",
+  "nome": "Dados do Brasil (IBGE e BrasilAPI)",
+  "categoria": "apis",
+  "quando": "municípios de um estado, DDD, código de banco, frequência de nomes ou estatísticas oficiais do IBGE",
+  "exemplos": [
+   "de onde é o ddd 81",
+   "quantas pessoas se chamam joão",
+   "cidades do piauí",
+   "dados do ibge sobre desemprego"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, responda com o dado e a fonte (IBGE ou BrasilAPI). Para listas longas, resuma (total e alguns exemplos).",
+  "apis": [
+   "ddd",
+   "banco",
+   "nomes-ibge",
+   "municipios",
+   "noticias-ibge"
+  ]
+ },
+ {
+  "id": "api-sol-mar",
+  "nome": "Sol, mar e qualidade do ar",
+  "categoria": "apis",
+  "quando": "horário do nascer e pôr do sol, ondas do mar, índice UV ou qualidade do ar",
+  "exemplos": [
+   "que horas o sol se põe hoje",
+   "como está o mar em floripa",
+   "índice uv agora"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, converta horários de UTC para o fuso local e dê uma recomendação prática (protetor solar, surf, atividade ao ar livre).",
+  "apis": [
+   "sol",
+   "mar",
+   "qualidade-ar"
+  ]
+ },
+ {
+  "id": "api-dicionario",
+  "nome": "Palavra em inglês",
+  "categoria": "apis",
+  "quando": "significado, definição ou pronúncia de palavra em inglês",
+  "exemplos": [
+   "o que significa serendipity",
+   "definição de awkward",
+   "pronúncia de thoroughly"
+  ],
+  "instrucoes": "Se ainda não tiver o resultado da consulta, responda só com o bloco ```api; com o resultado em mãos, dê a pronúncia, a classe gramatical, a definição em português e um exemplo de frase.",
+  "apis": [
+   "dicionario-ingles"
+  ]
+ }
+]

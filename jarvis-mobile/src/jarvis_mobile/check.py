@@ -59,7 +59,7 @@ def _probe_chat(provider: Any, api_key: str, model: str) -> tuple[str, str]:
     try:
         response = httpx.post(
             f"{provider.endpoint}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={**provider.headers, "Authorization": f"Bearer {api_key}"},
             json={
                 "model": model,
                 "messages": [{"role": "user", "content": "Responda apenas: ok"}],
@@ -121,12 +121,10 @@ def run_checks(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    # The engine the cloud deploy runs on (deploy/config.toml), so a bare
-    # run checks the thing that matters.
-    parser.add_argument("--provider", default="xai")
+    parser.add_argument("--provider", default="openrouter")
     parser.add_argument(
         "--model",
-        default="grok-4.7",
+        default="openrouter/auto",
         help="Which model to send the test request to.",
     )
     args = parser.parse_args(argv)

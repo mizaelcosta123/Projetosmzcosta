@@ -14,16 +14,21 @@ import { COOLDOWN_MS, explainFailure, imageUrl, newSeed } from './generate.js';
 import { SANDBOX, asDocument, describe as describeRun, previewable } from './preview.js';
 import { explain } from './diagnose.js';
 import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
-import { Scene } from './holo.js';
+import { Scene, nounOf } from './holo.js';
 import { Stage } from './stage.js';
 import { Lens } from './lens.js';
 import { Synth } from './synth.js';
 import { Hud, boot, buzz } from './hud.js';
 import { toScreen } from './hands.js';
 import { NODS, Rotation, THINKING, Talk, VOICE_PROMPT } from './utter.js';
-import { conjure, learnedNames, perform, teaching } from './conjure.js';
-import { Memory } from './memory.js';
+import { conjure, learnedNames, parse, perform, teaching } from './conjure.js';
+import { intent as decideIntent } from './systemone.js';
+import { Memory, fold } from './memory.js';
 import { contextFor as placeContext } from './place.js';
+import { applyAll as forgeAll, hasBlock as hasHologram, hideBlocks, roomPrompt, sceneContext } from './forge.js';
+import { Knowledge, learning } from './knowledge.js';
+import { PACKS as SKILL_PACKS, Skills, teachingSkill } from './skills.js';
+import { Apis, asksForCall, resultsMessage } from './apis.js';
 import { notifyReply, registerWorker } from './pwa.js';
 import { download as downloadNote, fromMarkdown, toMarkdown } from './vault.js';
 import { Decider } from './decide.js';
@@ -39,7 +44,6 @@ import {
   listModels,
   relearn,
   termuxOllama,
-  grok,
 } from './providers.js';
 import {
   PERMISSIONS,
@@ -76,7 +80,6 @@ const el = {
   providerRemove: document.getElementById('provider-remove'),
   providerAdd: document.getElementById('provider-add'),
   providerOllama: document.getElementById('provider-ollama'),
-  providerGrok: document.getElementById('provider-grok'),
   providerStatus: document.getElementById('provider-status'),
   more: document.getElementById('more'),
   moreMenu: document.getElementById('more-menu'),
@@ -94,6 +97,21 @@ const el = {
   memoryImport: document.getElementById('memory-import'),
   memoryForget: document.getElementById('memory-forget'),
   memoryFile: document.getElementById('memory-file'),
+  knowledgeState: document.getElementById('knowledge-state'),
+  knowledgeSearch: document.getElementById('knowledge-search'),
+  knowledgeList: document.getElementById('knowledge-list'),
+  knowledgePaste: document.getElementById('knowledge-paste'),
+  knowledgeSave: document.getElementById('knowledge-save'),
+  knowledgeImport: document.getElementById('knowledge-import'),
+  knowledgeFolder: document.getElementById('knowledge-folder'),
+  knowledgeExport: document.getElementById('knowledge-export'),
+  knowledgeForget: document.getElementById('knowledge-forget'),
+  knowledgeFile: document.getElementById('knowledge-file'),
+  knowledgeDir: document.getElementById('knowledge-dir'),
+  skillsState: document.getElementById('skills-state'),
+  skillsImport: document.getElementById('skills-import'),
+  skillsExport: document.getElementById('skills-export'),
+  skillsFile: document.getElementById('skills-file'),
   lens: document.getElementById('lens'),
   lensVideo: document.getElementById('lens-video'),
   lensHands: document.getElementById('lens-hands'),
@@ -282,6 +300,54 @@ function replay(node) {
  *  first message of a session already has context behind it. */
 const memory = new Memory().open();
 
+/**
+ * What he can look up and how he does things well: the vault, the skills
+ * catalogue and the free APIs (knowledge.js, skills.js, apis.js). Loaded in
+ * the background -- the first message never waits for them, it just goes
+ * without until they are in.
+ */
+const knowledge = new Knowledge();
+const skills = new Skills();
+let apis = new Apis([]);
+const library = loadLibrary();
+
+async function loadLibrary() {
+  const json = (path) => fetch(path).then((response) => (response.ok ? response.json() : [])).catch(() => []);
+  await Promise.all([knowledge.open(), skills.open()]);
+  const [manual, catalogue, ...packs] = await Promise.all([
+    json('knowledge/jarvis.json'),
+    json('apis.json'),
+    ...SKILL_PACKS.map((name) => json(`skills/${name}.json`)),
+  ]);
+  knowledge.seed(manual.map((doc) => ({ title: doc.titulo, text: doc.texto, source: 'manual do Jarvis' })));
+  for (const pack of packs) skills.add(Array.isArray(pack) ? pack : []);
+  apis = new Apis(Array.isArray(catalogue) ? catalogue : []);
+}
+
+/** The block languages the app acts on, hidden from captions. */
+const ACTED_ON = new Set(['api', 'consulta', 'chamada']);
+const shownText = (text) => hideBlocks(hideBlocks(text), ACTED_ON);
+
+/**
+ * At most this much system context per message, about 2,500 tokens. The
+ * format instructions (voice, holograms) always go; the rest is added in
+ * priority order -- vault, skill, APIs, memory, place -- until it is full,
+ * whole messages at a time.
+ */
+const SYSTEM_BUDGET = 10000;
+
+function withinBudget(required, optional) {
+  const out = [...required];
+  let used = required.reduce((sum, text) => sum + text.length, 0);
+  for (const text of optional) {
+    if (!text) continue;
+    if (used + text.length > SYSTEM_BUDGET) continue;
+    out.push(text);
+    used += text.length;
+  }
+  return out;
+}
+
 /** Which model to send this through, and what it has learned about each.
  *
  *  Only consulted when several are chosen and none is pinned: picking for
@@ -348,7 +414,7 @@ const lens = new Lens({
   },
   onRemove: (item) => {
     buzz([12, 50, 12]);
-    return `Apaguei ${item.shape === 'esfera' || item.shape === 'piramide' ? 'a' : 'o'} ${item.shape}.`;
+    return `Apaguei ${nounOf(item)}.`;
   },
   onPose: (label) => {
     if (label.startsWith('pinça') && !el.lensPose.textContent.startsWith('pinça')) buzz(10);
@@ -787,7 +853,7 @@ async function modelFor(base, headers) {
  * @param {(chunk: string) => void} onChunk Called with each delta.
  * @returns {Promise<string>} The full reply.
  */
-async function streamReply(text, onChunk, { voice: byVoice = false, signal } = {}) {
+async function streamReply(text, onChunk, { voice: byVoice = false, signal, followUp = [] } = {}) {
   const base = serverOf(settings);
   if (!base) throw new Error('Nenhum servidor configurado.');
 
@@ -809,26 +875,38 @@ async function streamReply(text, onChunk, { voice: byVoice = false, signal } = {
   // lines. A context window filled with old chatter is worse than an empty
   // one, because it crowds out the thing actually being asked.
   const recalled = text ? memory.recall(text, { count: 5 }) : [];
-  const messages = [];
-  if (recalled.length) {
-    messages.push({
-      role: 'system',
-      content:
-        'Coisas que esta pessoa já disse ou pediu antes, das mais relevantes ' +
-        'para a mensagem atual. Use se ajudar; ignore se não vier ao caso.\n' +
-        recalled.map(({ row }) => `- (${row.kind}) ${row.text}`).join('\n'),
-    });
-  }
+  const remembered = recalled.length
+    ? 'Coisas que esta pessoa já disse ou pediu antes, das mais relevantes ' +
+      'para a mensagem atual. Use se ajudar; ignore se não vier ao caso.\n' +
+      recalled.map(({ row }) => `- (${row.kind}) ${row.text}`).join('\n')
+    : '';
   // Where you are and the weather there -- only for a question about either,
   // only when location was already granted, and rounded to a kilometre. See
   // place.js for why each of those three is there.
   const situated = text ? await placeContext(text).catch(() => '') : '';
-  if (situated) messages.push({ role: 'system', content: situated });
-  // A spoken turn is answered out loud while it is written, so ask for what
-  // sounds like speech -- and a short first sentence, because that is how
-  // long the silence lasts before he starts.
-  if (byVoice) messages.push({ role: 'system', content: VOICE_PROMPT });
+
+  // Format instructions: a spoken turn asks for what sounds like speech, and
+  // the room, when it is involved, needs the hologram format and what is
+  // already built. A conversation about the weather pays for neither.
+  const required = [];
+  if (byVoice) required.push(VOICE_PROMPT);
+  if (wantsRoom(text)) {
+    required.push(roomPrompt());
+    const present = sceneContext(scene);
+    if (present) required.push(present);
+  }
+  // What he can look up and how to do this kind of task, each only when it
+  // matches: most messages get none of the three. A follow-up round already
+  // has its API results and must not be offered the APIs again.
+  const looked = text ? [
+    knowledge.contextFor(text),
+    skills.contextFor(text),
+    followUp.length ? '' : apis.contextFor(text),
+  ] : [];
+  const messages = withinBudget(required, [...looked, remembered, situated])
+    .map((content) => ({ role: 'system', content }));
   messages.push({ role: 'user', content });
+  messages.push(...followUp);
 
   const body = {
     model: await modelFor(base, headers),
@@ -885,6 +963,33 @@ async function streamReply(text, onChunk, { voice: byVoice = false, signal } = {
   return full;
 }
 
+/**
+ * Is this message about the room? The stage or the camera is up, something is
+ * already in it, the rules saw a verb or a shape, or it says hologram/3D.
+ */
+function wantsRoom(text) {
+  if (reality.running || lens.running || scene.items.length > 0) return true;
+  if (!text) return false;
+  const said = parse(text, { aliases: learnedNames(memory) });
+  if (said.verb || said.shape) return true;
+  return /\b(holograma|hologram|3d|figura|redesenh|wireframe|modelo tridimensional)/.test(fold(text));
+}
+
+/**
+ * The figures a reply built, carried out once it has finished. Returns what
+ * was done, or null when the reply built nothing.
+ */
+function forgeFrom(reply) {
+  if (!hasHologram(reply)) return null;
+  const done = forgeAll(scene, reply);
+  if (!done) return 'Não consegui montar essa figura.';
+  if (!reality.running) el.arStatus.textContent = done;
+  refreshStage();
+  const last = scene.last();
+  if (last && !last.spec) lens.pending = { shape: last.shape, hue: last.hue, size: last.size };
+  return done;
+}
+
 // -- interactions -----------------------------------------------------------
 
 let busy = false;
@@ -920,6 +1025,28 @@ syncReady();
 function handleHere(text) {
   if (!text) return false;
 
+  // A recipe taught by voice: "aprenda a habilidade: quando eu pedir X, faça Y".
+  const recipe = teachingSkill(text);
+  if (recipe) {
+    skills.learn(recipe).then((skill) => {
+      const said = skill ? `Aprendi a habilidade: ${skill.nome}.` : 'Não consegui entender a habilidade.';
+      setCaption(said);
+      say(said).catch(() => {});
+    });
+    return true;
+  }
+
+  // A fact for the vault: "aprenda isso: …", "guarde que …".
+  const fact = learning(text);
+  if (fact) {
+    knowledge.add(fact, { title: fact.slice(0, 60), source: 'você disse' }).then(({ added }) => {
+      const said = added ? 'Guardado no vault de conhecimento.' : 'Eu já sabia disso.';
+      setCaption(said);
+      say(said).catch(() => {});
+    });
+    return true;
+  }
+
   // Being taught a name. Stored, so it survives the session.
   const taught = teaching(text, { aliases: learnedNames(memory) });
   if (taught) {
@@ -931,6 +1058,12 @@ function handleHere(text) {
 
   const done = conjure(scene, text, { aliases: learnedNames(memory) });
   if (!done) return false;
+  applyConjured(text, done);
+  return true;
+}
+
+/** Everything that follows from the room having changed. */
+function applyConjured(text, done) {
   // Worth remembering: what somebody asks for in the room is the best signal
   // there is about what they will ask for next.
   memory.learn(text, { kind: 'pedido' });
@@ -944,6 +1077,49 @@ function handleHere(text) {
   const last = scene.last();
   if (last) lens.pending = { shape: last.shape, hue: last.hue, size: last.size };
   say(done).catch(() => {});
+}
+
+/**
+ * The sentences the rules almost understood.
+ *
+ * "faz aí um cubo grandão pra mim" has a verb and a shape and two words no
+ * table knows, so `conjure` declines and the whole thing goes to the chat
+ * model -- seconds, for a cube. A decision model settles it in milliseconds
+ * (`systemone.js`), and this is the only place it is asked.
+ *
+ * Three conditions, and each one is what keeps this from costing anything:
+ *
+ *  - only after the rules have already declined, so the fast path is untouched;
+ *  - only when the rules found something to act on -- a verb, or a shape
+ *    alone, which `parse` reads as "create one". An ordinary message names
+ *    neither and never waits for a classifier to say "conversa";
+ *  - only against a Jarvis, because `/v1/decide` is this server's route and a
+ *    provider endpoint answers 404.
+ *
+ * Returns true when the room changed and the model is not needed.
+ */
+async function settleNearMiss(text) {
+  if (!text) return false;
+  const aliases = learnedNames(memory);
+  const said = parse(text, { aliases });
+  if (!said.verb) return false;
+
+  const provider = activeProvider();
+  if (!reachesDevice(provider)) return false;
+
+  const choice = await decideIntent(text, {
+    base: serverOf(settings),
+    headers: headersFor(provider),
+  });
+  // `imagem` is decided but deliberately not acted on: making a picture costs
+  // a rate-limited request and takes over the screen, so it stays the manual
+  // mode it has always been. It earns its place in the question anyway --
+  // without it competing, a request for a drawing lands on `holograma`.
+  if (choice !== 'holograma') return false;
+
+  const done = conjure(scene, text, { aliases, trust: true });
+  if (!done) return false;
+  applyConjured(text, done);
   return true;
 }
 
@@ -1024,6 +1200,20 @@ async function ask(text, { byVoice = false } = {}) {
   // whatever words came with it.
   if (attached.length === 0 && handleHere(text)) return;
 
+  // The rules declined. Before paying for the model, let a decision model
+  // look at the sentences they only half understood. `busy` is held across
+  // the wait so a second send cannot start while this one is deciding.
+  if (attached.length === 0) {
+    busy = true;
+    let settled = false;
+    try {
+      settled = await settleNearMiss(text);
+    } finally {
+      busy = false;
+    }
+    if (settled) return;
+  }
+
   busy = true;
   el.send.disabled = true;
   setCaption('');
@@ -1041,14 +1231,42 @@ async function ask(text, { byVoice = false } = {}) {
   try {
     let shown = '';
     const sent = attached;
-    const reply = await streamReply(text, (chunk) => {
+    // The vault, the skills and the APIs are loaded in the background; a
+    // message sent in the first second waits for them rather than going
+    // without (they are local files and an IndexedDB read).
+    await Promise.race([library, new Promise((done) => setTimeout(done, 1500))]).catch(() => {});
+    let reply = await streamReply(text, (chunk) => {
       shown += chunk;
-      setCaption(shown);
+      // The ```holograma and ```api blocks are for the app, not for reading.
+      setCaption(shownText(shown));
       // Out loud as it arrives, a sentence at a time -- not after the model
       // has finished, which on a free model was seconds of silence.
       talk?.push(chunk);
     }, { voice: byVoice, signal: controller.signal });
     clearTimeout(thinking);
+    // The model asked for data instead of guessing: fetch it, and ask again
+    // with the results. One round -- a reply that asks a second time is
+    // answered with what it has.
+    if (asksForCall(reply)) {
+      const results = await apis.run(reply, {
+        onCall: (name) => setCaption(`Consultando ${name}…`),
+      });
+      if (results.length) {
+        shown = '';
+        reply = await streamReply(text, (chunk) => {
+          shown += chunk;
+          setCaption(shownText(shown));
+          talk?.push(chunk);
+        }, {
+          voice: byVoice,
+          signal: controller.signal,
+          followUp: [
+            { role: 'assistant', content: reply },
+            { role: 'user', content: resultsMessage(results) },
+          ],
+        });
+      }
+    }
     // The outcome, filed against whatever was routed to. An empty reply counts
     // as a failure: a model that answers with nothing has not answered.
     if (routedTo) decider.learn(routedTo, { ok: reply.trim().length > 0, ms: performance.now() - began });
@@ -1059,6 +1277,13 @@ async function ask(text, { byVoice = false } = {}) {
       renderTray();
     }
     offerPreview(reply);
+    const forged = forgeFrom(reply);
+    if (forged) {
+      // A reply that was only a block still says what it did.
+      const words = shownText(reply);
+      setCaption(words ? `${words}\n${forged}` : forged);
+      if (talk && !words) talk.push(` ${forged}`);
+    }
     // Only does anything if you went to another app while he was thinking,
     // and only if notifications were granted in the panel.
     notifyReply(reply).catch(() => {});
@@ -1765,7 +1990,7 @@ el.arStop.addEventListener('click', async () => {
 });
 el.arDrop.addEventListener('click', () => {
   const item = reality.drop();
-  el.arStatus.textContent = `Soltei ${item.shape === 'esfera' ? 'uma' : 'um'} ${item.shape}.`;
+  el.arStatus.textContent = `Soltei ${nounOf(item, { definite: false })}.`;
 });
 el.arClear.addEventListener('click', () => {
   const gone = scene.clear();
@@ -1952,9 +2177,9 @@ el.providerAdd.addEventListener('click', () => {
   el.providerUrl.focus();
 });
 
-/** Select a preset, adding it the first time. Returns the entry in use. */
-function usePreset(entry) {
+el.providerOllama.addEventListener('click', () => {
   collectProvider();
+  const entry = termuxOllama();
   const already = settings.providers.find((row) => row.url === entry.url);
   if (already) {
     settings.active = already.id;
@@ -1963,24 +2188,6 @@ function usePreset(entry) {
     settings.active = entry.id;
   }
   renderProviders();
-  return already ?? entry;
-}
-
-el.providerOllama.addEventListener('click', () => {
-  usePreset(termuxOllama());
-  loadModels();
-});
-
-// The address is known; the key is the one thing only its owner has. Without
-// it the models request is a 401 that says nothing new, so ask for the key
-// first and load once there is one.
-el.providerGrok.addEventListener('click', () => {
-  const entry = usePreset(grok());
-  if (!entry.key) {
-    setProviderStatus('Cole a chave do console.x.ai no campo Chave e toque em Testar.');
-    el.providerKey.focus();
-    return;
-  }
   loadModels();
 });
 
@@ -2341,6 +2548,137 @@ el.memoryForget.addEventListener('click', () => {
   renderMemory(`Esqueci ${gone}.`);
 });
 
+// -- knowledge -----------------------------------------------------------------
+
+const kb = (bytes) => (bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`);
+
+/** Redraw the vault section: counts, then your documents or what a search found. */
+function renderKnowledge(note = '') {
+  const stats = knowledge.stats();
+  const summary = stats.passages
+    ? `${stats.documents} ${stats.documents === 1 ? 'documento' : 'documentos'}, ${stats.passages} ${stats.passages === 1 ? 'trecho' : 'trechos'}, ${kb(stats.bytes)} — mais o manual do Jarvis.`
+    : 'Vazio, fora o manual do Jarvis. Diga "aprenda isso: …" ou importe notas, PDFs convertidos em texto, planilhas .csv ou uma pasta do Obsidian.';
+  el.knowledgeState.textContent = note ? `${note} ${summary}` : summary;
+
+  const query = el.knowledgeSearch.value.trim();
+  const fragment = document.createDocumentFragment();
+  if (query) {
+    const found = knowledge.search(query, { count: 8, floor: 0.1 });
+    for (const { row, score } of found) {
+      const item = document.createElement('li');
+      const text = document.createElement('span');
+      text.textContent = row.text;
+      text.title = row.text;
+      const where = document.createElement('small');
+      where.textContent = `${row.source} · ${Math.round(score * 100)}%`;
+      item.append(text, where);
+      fragment.append(item);
+    }
+    if (!found.length) {
+      const item = document.createElement('li');
+      item.textContent = 'Nada sobre isso no vault.';
+      fragment.append(item);
+    }
+  } else {
+    for (const doc of knowledge.documents().slice(0, 12)) {
+      const item = document.createElement('li');
+      const text = document.createElement('span');
+      text.textContent = doc.title || doc.source;
+      text.title = doc.source;
+      const size = document.createElement('small');
+      size.textContent = `${doc.passages} ${doc.passages === 1 ? 'trecho' : 'trechos'}`;
+      const forget = document.createElement('button');
+      forget.type = 'button';
+      forget.textContent = '×';
+      forget.setAttribute('aria-label', `Esquecer o documento ${doc.title || doc.source}`);
+      forget.addEventListener('click', async () => {
+        await knowledge.forget(doc.doc);
+        renderKnowledge('Documento esquecido.');
+      });
+      item.append(text, size, forget);
+      fragment.append(item);
+    }
+  }
+  el.knowledgeList.replaceChildren(fragment);
+  el.knowledgeExport.disabled = stats.passages === 0;
+  el.knowledgeForget.disabled = stats.passages === 0;
+
+  const counts = skills.stats();
+  el.skillsState.textContent = `${counts.total} habilidades em ${counts.categories} categorias` +
+    (counts.mine ? `, ${counts.mine} ensinadas por você.` : '. Ensine uma: "aprenda a habilidade: quando eu pedir X, faça Y".');
+  el.skillsExport.disabled = counts.mine === 0;
+}
+
+/** Read every chosen file into the vault, one bad file not losing the rest. */
+async function importKnowledge(files) {
+  let added = 0;
+  let read = 0;
+  el.knowledgeState.textContent = `Lendo ${files.length} ${files.length === 1 ? 'arquivo' : 'arquivos'}…`;
+  for (const file of files) {
+    if (!/\.(md|markdown|txt|json|csv|tsv)$/i.test(file.name)) continue;
+    // A note bigger than this is almost certainly not a note.
+    if (file.size > 5 * 1048576) continue;
+    try {
+      const result = await knowledge.importFile(file.webkitRelativePath || file.name, await file.text());
+      added += result.added;
+      read += 1;
+    } catch {
+      /* One unreadable file should not lose the others. */
+    }
+  }
+  renderKnowledge(`${read} ${read === 1 ? 'arquivo lido' : 'arquivos lidos'}, ${added} ${added === 1 ? 'trecho novo' : 'trechos novos'}.`);
+}
+
+el.knowledgeSearch.addEventListener('input', () => renderKnowledge());
+el.knowledgeSave.addEventListener('click', async () => {
+  const text = el.knowledgePaste.value.trim();
+  if (!text) return;
+  const { added } = await knowledge.add(text, { title: text.slice(0, 60), source: 'colado' });
+  el.knowledgePaste.value = '';
+  renderKnowledge(added ? `Guardei ${added} ${added === 1 ? 'trecho' : 'trechos'}.` : 'Isso já estava no vault.');
+});
+el.knowledgeImport.addEventListener('click', () => el.knowledgeFile.click());
+el.knowledgeFolder.addEventListener('click', () => el.knowledgeDir.click());
+for (const input of [el.knowledgeFile, el.knowledgeDir]) {
+  input.addEventListener('change', async () => {
+    const files = [...input.files];
+    input.value = '';
+    await importKnowledge(files);
+  });
+}
+el.knowledgeExport.addEventListener('click', () => {
+  const name = downloadNote(knowledge.toMarkdown(), { name: `jarvis-conhecimento-${new Date().toISOString().slice(0, 10)}.md` });
+  renderKnowledge(`Salvei ${name}. Coloque na pasta do seu vault.`);
+});
+el.knowledgeForget.addEventListener('click', async () => {
+  if (!window.confirm('Esquecer tudo o que você guardou no vault? O manual do Jarvis fica. Não dá para desfazer — exporte antes se quiser guardar.')) return;
+  const gone = await knowledge.clear();
+  renderKnowledge(`Esqueci ${gone} trechos.`);
+});
+el.skillsImport.addEventListener('click', () => el.skillsFile.click());
+el.skillsFile.addEventListener('change', async () => {
+  const files = [...el.skillsFile.files];
+  el.skillsFile.value = '';
+  let taken = 0;
+  for (const file of files) {
+    try {
+      const rows = JSON.parse(await file.text());
+      for (const row of Array.isArray(rows) ? rows : [rows]) if (await skills.learn(row)) taken += 1;
+    } catch {
+      /* Not JSON: skip it, keep the others. */
+    }
+  }
+  renderKnowledge(`${taken} ${taken === 1 ? 'habilidade importada' : 'habilidades importadas'}.`);
+});
+el.skillsExport.addEventListener('click', () => {
+  const blob = new Blob([skills.export()], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'jarvis-habilidades.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+});
+
 /** Open the sheet with everything in it already refreshed. */
 function openSettings() {
   if (el.settings.open) return;
@@ -2354,6 +2692,7 @@ function openSettings() {
   // never told when that happens.
   refreshPerms();
   renderMemory();
+  library.then(() => renderKnowledge()).catch(() => {});
   renderModels();
   el.speak.checked = settings.speak;
   el.wake.checked = settings.wake;

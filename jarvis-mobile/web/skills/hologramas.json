@@ -1,0 +1,74 @@
+[
+ {
+  "id": "holo-figura",
+  "nome": "Criar figura 3D (holograma)",
+  "categoria": "hologramas",
+  "quando": "criar holograma, figura 3D, objeto 3D, modelo tridimensional ou desenhar algo em 3D na tela",
+  "exemplos": [
+   "cria um holograma de um carro",
+   "faz uma casa em 3d",
+   "desenha um foguete tridimensional"
+  ],
+  "instrucoes": "Responda com um bloco ```holograma de JSON com \"acao\":\"criar\", um \"nome\" curto e \"pecas\" que formem a figura (formas básicas esticadas com \"escala\", posicionadas com \"pos\" e giradas com \"rot\"). Pense nas partes reconhecíveis (ex.: carro = carroceria, cabine, 4 rodas como cilindros girados 90° em X). Use cores por peça. Diga em uma frase o que montou."
+ },
+ {
+  "id": "holo-redesenhar",
+  "nome": "Redesenhar holograma",
+  "categoria": "hologramas",
+  "quando": "mudar, redesenhar, detalhar, aumentar parte ou modificar um holograma que já existe",
+  "exemplos": [
+   "deixa as rodas maiores",
+   "coloca uma janela na casa",
+   "faz o foguete mais detalhado"
+  ],
+  "instrucoes": "Use \"acao\":\"redesenhar\" com o mesmo \"nome\" do objeto que está na cena e mande TODAS as peças da nova versão (não só a que mudou), partindo das peças atuais listadas na cena. Mudanças pequenas mexem em uma ou duas peças; grandes podem refazer a figura."
+ },
+ {
+  "id": "holo-girar",
+  "nome": "Girar holograma",
+  "categoria": "hologramas",
+  "quando": "girar, virar, rotacionar, inclinar ou parar de girar um holograma",
+  "exemplos": [
+   "gira o carro de lado",
+   "vira a casa de frente",
+   "faz ele girar devagar"
+  ],
+  "instrucoes": "Use \"acao\":\"girar\" com \"graus\":[x,y,z] para girar a partir de onde está, \"rotacao\":[x,y,z] para um ângulo exato, ou \"giro\":true/false. Y é o eixo vertical (girar como num prato), X tomba para frente, Z deita de lado."
+ },
+ {
+  "id": "holo-cena",
+  "nome": "Montar cena com vários hologramas",
+  "categoria": "hologramas",
+  "quando": "montar cena, sistema solar, molécula, cidade ou vários objetos 3D juntos",
+  "exemplos": [
+   "monta o sistema solar",
+   "faz uma molécula de água",
+   "uma cidadezinha em 3d"
+  ],
+  "instrucoes": "Mande vários objetos como uma lista JSON no bloco ```holograma, cada um com \"nome\" e \"lugar\" [x,y,z] em metros (x direita, y cima, z negativo = à frente, por volta de -1). Para coisas compostas pequenas (molécula), prefira um único objeto com várias peças."
+ },
+ {
+  "id": "holo-geometria",
+  "nome": "Ensinar geometria com hologramas",
+  "categoria": "hologramas",
+  "quando": "aprender geometria, sólidos geométricos, poliedros, faces, arestas e vértices",
+  "exemplos": [
+   "quantas faces tem um icosaedro",
+   "me mostra os sólidos de platão",
+   "o que é um prisma"
+  ],
+  "instrucoes": "Explique o conceito e mostre: crie o sólido com um bloco ```holograma (tetraedro, cubo, octaedro, dodecaedro, icosaedro, prisma com \"lados\"). Dê faces, arestas e vértices e confira com V − A + F = 2."
+ },
+ {
+  "id": "holo-gestos",
+  "nome": "Gestos e realidade aumentada",
+  "categoria": "hologramas",
+  "quando": "usar gestos, mãos, realidade aumentada, câmera, sintetizador ou mexer nos hologramas",
+  "exemplos": [
+   "como mexo no holograma com a mão",
+   "como funciona a realidade aumentada",
+   "como tocar o sintetizador"
+  ],
+  "instrucoes": "Explique pelos gestos do app: pinça para pegar e mover, aproximar a mão para aumentar, girar a mão para girar, ✌️ segurado cria, punho segurado apaga; no palco sem câmera: arrastar, pinçar, toque duplo para apagar. Por voz: 'gira 90 graus', 'deita', 'mais detalhe'."
+ }
+]

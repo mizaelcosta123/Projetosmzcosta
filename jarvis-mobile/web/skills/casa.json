@@ -1,0 +1,115 @@
+[
+ {
+  "id": "limpeza",
+  "nome": "Limpeza e manchas",
+  "categoria": "casa",
+  "quando": "limpar casa, tirar mancha, mofo, cheiro ruim ou organizar faxina",
+  "exemplos": [
+   "como tirar mancha de vinho",
+   "limpar mofo da parede",
+   "cronograma de faxina"
+  ],
+  "instrucoes": "Dê o método mais simples primeiro, com produtos comuns (bicarbonato, vinagre, detergente), passo a passo. Avise o que nunca misturar (água sanitária com amoníaco ou vinagre). Teste antes em área escondida."
+ },
+ {
+  "id": "conserto",
+  "nome": "Pequenos consertos",
+  "categoria": "casa",
+  "quando": "consertar torneira, tomada, descarga, porta ou fazer manutenção em casa",
+  "exemplos": [
+   "torneira pingando",
+   "trocar resistência do chuveiro",
+   "porta rangendo"
+  ],
+  "instrucoes": "Diga as ferramentas, os passos e a segurança primeiro (desligar disjuntor ou registro). Para eletricidade e gás além do básico, recomende um profissional. Passos curtos e numerados."
+ },
+ {
+  "id": "plantas",
+  "nome": "Plantas e jardinagem",
+  "categoria": "casa",
+  "quando": "cuidar de planta, horta, rega, folha amarela ou praga",
+  "exemplos": [
+   "minha planta está com folha amarela",
+   "horta em apartamento",
+   "como regar suculenta"
+  ],
+  "instrucoes": "Pergunte (ou estime) luz, rega e vaso. Dê o diagnóstico mais provável (excesso de água é o mais comum) e o que fazer. Para horta, sugira o que plantar pela estação e pela luz disponível."
+ },
+ {
+  "id": "android",
+  "nome": "Celular Android",
+  "categoria": "casa",
+  "quando": "configurar celular Android, liberar espaço, bateria, permissões ou app travando",
+  "exemplos": [
+   "meu celular está sem espaço",
+   "bateria acabando rápido",
+   "como dar permissão de câmera"
+  ],
+  "instrucoes": "Passos pelo caminho das Configurações (os nomes variam por marca; dê o caminho comum e uma alternativa). Para espaço: Files by Google, cache, fotos na nuvem. Para bateria: apps em segundo plano, brilho, modo economia."
+ },
+ {
+  "id": "eletrica-consumo",
+  "nome": "Consumo de energia",
+  "categoria": "casa",
+  "quando": "calcular consumo de energia, conta de luz, gasto de aparelho ou economizar energia",
+  "exemplos": [
+   "quanto gasta um ar condicionado",
+   "por que minha conta de luz veio alta",
+   "economizar energia"
+  ],
+  "instrucoes": "Calcule: potência (W) × horas por dia × dias ÷ 1000 = kWh no mês; × tarifa (peça ou use ~R$ 0,90/kWh e diga que é estimativa) = custo. Aponte os vilões comuns (chuveiro, ar, geladeira antiga) e economias práticas."
+ },
+ {
+  "id": "mudanca",
+  "nome": "Mudança de casa",
+  "categoria": "casa",
+  "quando": "organizar mudança, alugar imóvel, vistoria, contrato de aluguel ou trocar endereço",
+  "exemplos": [
+   "checklist de mudança",
+   "o que ver antes de alugar",
+   "como fazer vistoria"
+  ],
+  "instrucoes": "Organize por prazo (30 dias, 1 semana, dia D, depois). No aluguel: vistoria com fotos datadas, contrato (reajuste, multa, garantia), e direitos básicos da Lei do Inquilinato. Use a API de CEP para conferir endereço.",
+  "apis": [
+   "cep"
+  ]
+ },
+ {
+  "id": "seguranca-casa",
+  "nome": "Segurança digital e da casa",
+  "categoria": "casa",
+  "quando": "senhas, segurança digital, backup, câmera, golpes ou proteção da casa",
+  "exemplos": [
+   "como criar senha forte",
+   "fazer backup do celular",
+   "segurança do wifi"
+  ],
+  "instrucoes": "Recomende: gerenciador de senhas, verificação em duas etapas em tudo importante, backup automático, roteador com senha forte e WPA2/WPA3, desconfiar de links. Passos práticos e priorizados."
+ },
+ {
+  "id": "pets",
+  "nome": "Animais de estimação",
+  "categoria": "casa",
+  "quando": "cuidar de cachorro, gato, alimentação, adestramento, comportamento ou saúde de pet",
+  "exemplos": [
+   "meu cachorro não para de latir",
+   "o que gato não pode comer",
+   "como adestrar filhote",
+   "meu cachorro está vomitando",
+   "meu gato não come"
+  ],
+  "instrucoes": "Dê orientação prática e positiva (reforço, não punição). Liste alimentos tóxicos quando pertinente (chocolate, uva, cebola, xilitol). Para sintomas, oriente veterinário, com urgência se houver vômito persistente, apatia, sangue ou suspeita de envenenamento."
+ },
+ {
+  "id": "organizar-casa",
+  "nome": "Organizar a casa",
+  "categoria": "casa",
+  "quando": "organizar armário, guarda-roupa, cozinha, destralhar ou rotina de casa",
+  "exemplos": [
+   "como organizar meu guarda-roupa",
+   "destralhar a casa",
+   "rotina de tarefas domésticas"
+  ],
+  "instrucoes": "Método por cômodo: tirar tudo, descartar/doar o que não usa há 1 ano, agrupar por uso, guardar o mais usado à mão. Monte uma rotina semanal dividida em blocos de 15 minutos e, se houver mais pessoas, divida as tarefas."
+ }
+]

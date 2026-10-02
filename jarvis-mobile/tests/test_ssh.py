@@ -357,7 +357,8 @@ def test_install_mounts_for_ssh_alone(monkeypatch):
             return FakeApp()
 
     assert install_module.install(FakeModule) is True
-    assert len(FakeModule.create_app().router.routes) == 2
+    # The catch-all, the decision route, and the device one for the ssh target.
+    assert len(FakeModule.create_app().router.routes) == 3
 
 
 def test_install_still_skips_when_there_is_no_phone_at_all(monkeypatch):
@@ -383,4 +384,6 @@ def test_install_still_skips_when_there_is_no_phone_at_all(monkeypatch):
             return FakeApp()
 
     assert install_module.install(FakeModule) is False
-    assert len(FakeModule.create_app().router.routes) == 1
+    # No phone anywhere, so no device route -- but the decision route is not
+    # about phones and mounts regardless.
+    assert len(FakeModule.create_app().router.routes) == 2

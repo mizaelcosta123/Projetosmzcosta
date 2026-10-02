@@ -45,7 +45,6 @@ const OLLAMA_PORT = '11434';
  */
 const PROVIDER_HOSTS = [
   'openrouter.ai',
-  'api.x.ai',
   'api.openai.com',
   'api.anthropic.com',
   'api.groq.com',
@@ -153,7 +152,28 @@ export function modelsUrl(provider) {
 export function headersFor(provider, extra = {}) {
   const headers = { ...extra };
   if (provider?.key) headers.Authorization = `Bearer ${provider.key}`;
+  // OpenRouter asks apps to say who they are: it is how these requests show
+  // up as Jarvis in their dashboard and rankings, instead of as anonymous
+  // traffic. `HTTP-Referer` and not `Referer`, which a page may not set; both
+  // names are allowed by OpenRouter's CORS. Nobody else gets them.
+  if (isOpenRouter(provider)) Object.assign(headers, openRouterHeaders());
   return headers;
+}
+
+/** Is this provider OpenRouter, by its address? */
+export function isOpenRouter(provider) {
+  try {
+    const host = new URL(provider?.url ?? '').hostname;
+    return host === 'openrouter.ai' || host.endsWith('.openrouter.ai');
+  } catch {
+    return false;
+  }
+}
+
+/** The two identifying headers. The referer is this page's own origin. */
+export function openRouterHeaders(origin = globalThis.location?.origin) {
+  const referer = origin && origin !== 'null' ? origin : 'https://github.com/mizaelcosta123/Projetosmzcosta';
+  return { 'HTTP-Referer': referer, 'X-Title': 'Jarvis' };
 }
 
 /**
@@ -327,19 +347,6 @@ function hostLabel(url) {
   } catch {
     return url;
   }
-}
-
-/** Grok's own endpoint and the model it starts on. */
-export const GROK_URL = 'https://api.x.ai';
-export const GROK_MODEL = 'grok-4.7';
-
-/**
- * Grok, straight from xAI: the address is filled in, only the key is left
- * (https://console.x.ai). It answers and nothing more -- the phone's tools
- * live in a Jarvis, and the cloud Jarvis already runs on Grok.
- */
-export function grok() {
-  return makeProvider({ name: 'Grok (xAI)', url: GROK_URL, models: [GROK_MODEL] });
 }
 
 /** The Ollama running on this very phone, which is the whole Termux case. */

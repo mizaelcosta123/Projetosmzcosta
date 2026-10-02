@@ -1,0 +1,110 @@
+[
+ {
+  "id": "sintomas",
+  "nome": "Orientação sobre sintomas",
+  "categoria": "saude",
+  "quando": "sintomas, dor, febre, mal-estar ou dúvida de saúde que a pessoa sente",
+  "exemplos": [
+   "estou com dor de cabeça forte",
+   "febre de 39 o que faço",
+   "dor no peito"
+  ],
+  "instrucoes": "Não diagnostique. Dê orientação geral e segura, e diga com clareza os sinais de alerta que exigem atendimento imediato (dor no peito, falta de ar, confusão, desmaio, sangramento, febre alta persistente em criança): ligue 192 (SAMU). Recomende procurar um profissional. Seja calmo."
+ },
+ {
+  "id": "primeiros-socorros",
+  "nome": "Primeiros socorros",
+  "categoria": "saude",
+  "quando": "primeiros socorros, engasgo, queimadura, corte, desmaio ou emergência",
+  "exemplos": [
+   "alguém engasgou",
+   "como tratar queimadura",
+   "pessoa desmaiou"
+  ],
+  "instrucoes": "Comece pelo mais urgente: ligar 192 (SAMU) ou 193 (Bombeiros). Depois passos numerados e curtos do que fazer e do que NÃO fazer (ex.: não passar pasta de dente em queimadura). Linguagem simples, frases curtas."
+ },
+ {
+  "id": "sono",
+  "nome": "Dormir melhor",
+  "categoria": "saude",
+  "quando": "dormir melhor, insônia, rotina de sono ou cansaço",
+  "exemplos": [
+   "não consigo dormir",
+   "como melhorar meu sono",
+   "acordo cansado"
+  ],
+  "instrucoes": "Dê higiene do sono prática: horários regulares, luz e telas, cafeína depois das 14h, quarto escuro e fresco, técnica de respiração 4-7-8. Se a insônia durar semanas ou houver ronco com pausas, sugerir médico."
+ },
+ {
+  "id": "exercicio",
+  "nome": "Treino e exercício",
+  "categoria": "saude",
+  "quando": "montar treino, exercício em casa, alongamento, caminhada ou começar a se exercitar",
+  "exemplos": [
+   "treino em casa sem equipamento",
+   "como começar a correr",
+   "alongamento para coluna"
+  ],
+  "instrucoes": "Monte um plano progressivo para o nível declarado, com aquecimento, exercícios com séries/repetições e descanso. Priorize técnica e segurança. Recomende avaliação médica para quem tem condições de saúde ou está parado há muito tempo."
+ },
+ {
+  "id": "alimentacao-saudavel",
+  "nome": "Alimentação saudável",
+  "categoria": "saude",
+  "quando": "comer melhor, cardápio saudável, perder peso, dieta equilibrada ou nutrição",
+  "exemplos": [
+   "cardápio saudável para a semana",
+   "como perder peso com saúde",
+   "lanches saudáveis"
+  ],
+  "instrucoes": "Siga o Guia Alimentar para a População Brasileira: comida de verdade, menos ultraprocessados, pratos coloridos. Sugira trocas simples e um cardápio exemplo. Para dietas restritivas, doenças ou gestação, indicar nutricionista."
+ },
+ {
+  "id": "saude-mental",
+  "nome": "Apoio emocional",
+  "categoria": "saude",
+  "quando": "ansiedade, tristeza, estresse, crise, desabafo ou saúde mental",
+  "exemplos": [
+   "estou muito ansioso",
+   "me sinto triste",
+   "preciso desabafar"
+  ],
+  "instrucoes": "Escute primeiro: valide o sentimento sem minimizar. Ofereça uma técnica simples para o momento (respiração, aterramento 5-4-3-2-1). Sugira apoio profissional (CAPS, psicólogo). Se houver qualquer menção a se machucar, indique o CVV 188 (24h, gratuito) com carinho e clareza."
+ },
+ {
+  "id": "remedios",
+  "nome": "Dúvida sobre remédio",
+  "categoria": "saude",
+  "quando": "dúvida sobre remédio, dose, bula, interação ou efeito colateral",
+  "exemplos": [
+   "posso tomar dipirona com ibuprofeno",
+   "qual a dose de paracetamol",
+   "efeitos colaterais de antibiótico"
+  ],
+  "instrucoes": "Dê informações gerais de bula e diga claramente para seguir a prescrição e confirmar com médico ou farmacêutico, principalmente para crianças, gestantes, idosos e quem usa outros remédios. Nunca sugira dose para criança sem peso e orientação médica."
+ },
+ {
+  "id": "agua-habitos",
+  "nome": "Hábitos e lembretes de saúde",
+  "categoria": "saude",
+  "quando": "beber água, postura, pausas, hábitos saudáveis ou lembrete de remédio",
+  "exemplos": [
+   "quanto de água beber por dia",
+   "me lembra de tomar remédio",
+   "dicas de postura no trabalho"
+  ],
+  "instrucoes": "Dê a recomendação prática (ex.: água ~35 ml por kg por dia como referência geral), um jeito de criar o hábito e, se pedirem lembrete, diga que o Jarvis pode anotar no vault, mas que alarmes do celular são mais confiáveis para horários."
+ },
+ {
+  "id": "gestacao-bebe",
+  "nome": "Gravidez e bebê",
+  "categoria": "saude",
+  "quando": "dúvidas de gravidez, bebê, amamentação ou desenvolvimento infantil",
+  "exemplos": [
+   "meu bebê não dorme",
+   "dicas de amamentação",
+   "enjoo na gravidez"
+  ],
+  "instrucoes": "Dê orientação geral e acolhedora, e reforce o acompanhamento com pediatra ou obstetra. Sinais de alerta (febre em bebê com menos de 3 meses, sangramento na gravidez, recusa total de mamar) exigem atendimento imediato."
+ }
+]

@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 __all__ = [
+    "OPENROUTER_HEADERS",
     "PROVIDERS",
     "Provider",
     "build_engine",
@@ -27,6 +28,15 @@ __all__ = [
     "register_providers",
     "resolve_api_key",
 ]
+
+
+#: How this app introduces itself to OpenRouter. ``HTTP-Referer`` is the app's
+#: page and ``X-Title`` its name, both public; neither carries anything about
+#: the person using it.
+OPENROUTER_HEADERS: dict[str, str] = {
+    "HTTP-Referer": "https://github.com/mizaelcosta123/Projetosmzcosta",
+    "X-Title": "Jarvis",
+}
 
 
 @dataclass(frozen=True)
@@ -46,6 +56,11 @@ class Provider:
         Environment variables consulted in order. The first entry is the name
         the base engine derives on its own (``<ID>_API_KEY``); the rest are the
         conventional names the provider's own docs and SDKs use.
+    headers:
+        Extra headers sent with every request, beside the key. OpenRouter asks
+        apps to identify themselves with ``HTTP-Referer`` and ``X-Title``: it is
+        how a request shows up as this app in their dashboard and rankings
+        rather than as anonymous traffic.
     """
 
     id: str
@@ -56,6 +71,7 @@ class Provider:
     api_prefix: str = "/v1"
     suggested_models: tuple[str, ...] = field(default_factory=tuple)
     notes: str = ""
+    headers: dict[str, str] = field(default_factory=dict, hash=False, compare=False)
 
     @property
     def endpoint(self) -> str:
@@ -80,6 +96,7 @@ PROVIDERS: dict[str, Provider] = {
             # conversation sticks to one model while it stays a leading choice,
             # so switching does not happen mid-thought.
             suggested_models=("qwen/qwen3.8-27b:free", "openrouter/auto"),
+            headers=OPENROUTER_HEADERS,
             notes=(
                 "Aggregator: one key reaches hundreds of models from many "
                 "vendors. Model ids are namespaced, e.g. 'vendor/model'. Use "
@@ -87,20 +104,6 @@ PROVIDERS: dict[str, Provider] = {
                 "matches whatever model it routes to, and the 'cost_tier' "
                 "request field (low, medium, high, xhigh, max; default low) "
                 "caps how expensive that may be."
-            ),
-        ),
-        Provider(
-            id="xai",
-            label="xAI (Grok)",
-            base_url="https://api.x.ai",
-            key_env=("XAI_API_KEY",),
-            console_url="https://console.x.ai",
-            suggested_models=("grok-4.7", "grok-4.6"),
-            notes=(
-                "xAI's own API for the Grok models, OpenAI-compatible at "
-                "https://api.x.ai/v1. The key is created in the console, which "
-                "needs credits loaded before the first request answers. This "
-                "is the engine the cloud deploy uses by default."
             ),
         ),
         Provider(
@@ -207,6 +210,12 @@ def _engine_class(provider: Provider, base: type) -> type:
 
     def __init__(self, host=None, *, api_key=None, **kwargs):
         base.__init__(self, host, api_key=api_key or resolve_api_key(provider), **kwargs)
+        if provider.headers:
+            # On the client, for every synchronous call, and on `_headers`,
+            # which the async streaming path builds its own client from. The
+            # key stays: these are added beside it, never instead of it.
+            self._headers = {**(self._headers or {}), **provider.headers}
+            self._client.headers.update(provider.headers)
 
     def health(self) -> bool:
         return bool(self._api_key) and base.health(self)

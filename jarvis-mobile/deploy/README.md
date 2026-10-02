@@ -20,9 +20,8 @@ https://dashboard.render.com/blueprint/new
 
 O `render.yaml` está na **raiz do repositório**, não aqui — o Render só procura
 nesse lugar, e numa subpasta ele responde "blueprint não encontrado". Depois do primeiro deploy, defina
-`XAI_API_KEY` (o Grok) no painel — **chave em arquivo versionado é chave vazada**,
-por isso ela está marcada `sync: false`. Depois, **Manual Deploy** para o
-servidor subir já com ela.
+`OPENROUTER_API_KEY` no painel — **chave em arquivo versionado é chave vazada**,
+por isso ela está marcada `sync: false`.
 
 O blueprint também gera um `OPENJARVIS_API_KEY`. Sem ele o servidor recusa
 escutar fora do loopback, que é o comportamento certo para algo na internet
@@ -36,8 +35,7 @@ Só duas coisas fazem o serviço funcionar. O resto é escolha.
 | variável | precisa? | para quê |
 |---|---|---|
 | `OPENJARVIS_API_KEY` | **sim** | Sem ela o servidor recusa escutar fora do loopback. O blueprint gera uma (`generateValue: true`) — você não digita, só copia o valor gerado para **Configurações → Chave de API** na interface. |
-| `XAI_API_KEY` | **sim, na prática** | É o motor: Grok (`grok-4.7`) pela API da xAI, `https://api.x.ai/v1`. A chave sai de <https://console.x.ai>, e a conta precisa de crédito — sem ele a resposta é 403. `sync: false` no blueprint, então o campo aparece em branco e fica em branco se você não preencher. **Só aqui.** Chave nunca vai para arquivo do repositório — nem em `config.toml`, nem em `render.yaml`, nem em comentário. Uma chave que entra no histórico do git é uma chave pública, e apagar o commit depois não a apaga. |
-| `OPENROUTER_API_KEY` | não | A alternativa ao Grok (troque `default = "openrouter"` e `default_model = "openrouter/auto"` no `config.toml`) e a voz do `speak` pelo `openrouter_tts`. Sem ela o Grok conversa igual; só a voz fica com a do navegador. |
+| `OPENROUTER_API_KEY` | **sim, na prática** | É o motor. `sync: false` no blueprint, então o campo aparece em branco e fica em branco se você não preencher. A mesma chave atende o `speak` pelo `openrouter_tts`. **Só aqui.** Chave nunca vai para arquivo do repositório — nem em `config.toml`, nem em `render.yaml`, nem em comentário. Uma chave que entra no histórico do git é uma chave pública, e apagar o commit depois não a apaga. |
 | `JARVIS_HOST` / `JARVIS_PORT` | já vêm prontas | `0.0.0.0` e `10000`, definidas no `render.yaml`. Não mexa. |
 
 Opcionais, todas lidas se estiverem presentes:
@@ -48,7 +46,7 @@ Opcionais, todas lidas se estiverem presentes:
 | `TAVILY_API_KEY` | O `web_search` passa a usar o Tavily, com resultados ranqueados. Sem ela a imagem cai no DuckDuckGo, que já funciona porque o `ddgs` está instalado. |
 | `YOUDOTCOM_API_KEY` | Idem, pelo You.com. Sem chave o You.com responde 403 e o fallback entra. |
 | `OPENJARVIS_WEB_SEARCH_ENGINE` | Fixa o buscador (`tavily`, `youcom`, `duckduckgo`) em vez de deixar no `auto`. |
-| `NOUS_API_KEY` · `HUGGINGFACE_API_KEY` (ou `HF_TOKEN`) · `OPENCODE_API_KEY` | Habilitam os outros presets de provedor. Só valem se você trocar o `default_model` / `preferred_engine` no `config.toml` — com o padrão em `grok-4.7` (xAI) elas ficam paradas. |
+| `NOUS_API_KEY` · `HUGGINGFACE_API_KEY` (ou `HF_TOKEN`) · `OPENCODE_API_KEY` | Habilitam os outros presets de provedor. Só valem se você trocar o `default_model` / `preferred_engine` no `config.toml` — com o padrão em `qwen/qwen3.8-27b:free` (OpenRouter) elas ficam paradas. |
 | `OPENROUTER_HOST` e afins (`<ENGINE_ID>_HOST`) | Aponta um preset para outro endereço. Serve para testar contra um servidor compatível com OpenAI local. |
 
 ## Câmera, microfone e localização no servidor
@@ -89,6 +87,46 @@ navegador de verdade.
 `GEMINI_API_KEY` a menos que você queira mesmo esses provedores — o OpenJarvis
 detecta essas variáveis e monta um motor de nuvem adicional, o que só embaralha
 qual caminho atende a conversa.
+
+### O modelo de decisão (Ollaya), e por que ele vem desligado
+
+O [Ollaya](https://github.com/ollaya-dev/ollaya) (Apache-2.0) roda **modelos de
+decisão** locais — os do tipo que o Jev, da TypeSafe, popularizou. Eles não
+escrevem uma palavra: recebem uma frase e perguntas tipadas, e devolvem
+probabilidades calibradas em milissegundos. Não é um motor e **não substitui o
+modelo de conversa**; é outra coisa, ao lado.
+
+Para que ele serve aqui: as regras de `conjure.js` desenham um cubo no quadro em
+que você pede, e recusam qualquer frase que não entendam por inteiro — aí a
+frase inteira vai para o modelo de conversa, o que custa segundos. "faz aí um
+cubo grandão pra mim" é esse caso. O modelo de decisão resolve em
+milissegundos. Ele só é consultado **depois** que as regras recusaram, então o
+caminho rápido continua igual e o pior caso é a velocidade que o app já tinha.
+
+**Vem desligado, e o motivo é memória.** O daemon tem ~20 MB, mas o modelo
+atrás dele tem algumas centenas de milhões de parâmetros — mais do que o plano
+gratuito comporta. Tudo que usa isso já trata "não há modelo de decisão" como o
+caso normal, então deixar desligado não muda nada.
+
+Para ligar, num plano com memória (ou num VPS, ou no compose):
+
+```bash
+docker build --build-arg WITH_OLLAYA=1 -f deploy/Dockerfile -t jarvis .
+```
+
+O modelo é baixado **na construção da imagem**, de propósito: sem disco
+persistente, o que é baixado em tempo de execução é baixado de novo a cada
+reinício.
+
+| variável | o que muda |
+|---|---|
+| `OLLAYA_HOST` | Onde o daemon escuta. O padrão é `http://127.0.0.1:11435`, dentro do próprio contêiner. Apontando para o endpoint da TypeSafe, o formato é o mesmo e passa a valer a chave deles. |
+| `JARVIS_DECIDE_MODEL` | Qual modelo responde. O padrão é `laya:multilingual`, e o *multilingual* importa: as frases aqui são em português e o `laya:en` é só inglês. |
+| `OLLAYA_API_KEY` | Só quando o `OLLAYA_HOST` exige chave. |
+
+Sem daemon, a rota `/v1/decide` responde `{"available": false}` — 200, não erro:
+não ter um modelo de decisão é configuração, não falha, e a interface pergunta
+uma vez e para de perguntar.
 
 ### Duas coisas do plano gratuito que vão te surpreender
 
@@ -225,7 +263,7 @@ Pelo chat, peça alguma coisa do aparelho: *"qual a bateria do meu celular?"*,
 ## Sua própria máquina ou VPS
 
 ```bash
-XAI_API_KEY=xai-... docker compose -f deploy/docker-compose.yml up -d
+OPENROUTER_API_KEY=sk-or-... docker compose -f deploy/docker-compose.yml up -d
 ```
 
 O compose publica só em `127.0.0.1` de propósito. Para alcançar de fora, ponha
