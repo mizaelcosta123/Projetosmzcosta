@@ -29,6 +29,9 @@ const FIRST_MIN = 24;
  */
 export function spoken(text) {
   return String(text ?? '')
+    // A block the app acts on (a hologram, an API call) is silence: it is not
+    // code to look at, and what it did is said separately.
+    .replace(/```(?:holograma|hologram|holo|holograma3d|api)\b[\s\S]*?```/gi, ' ')
     .replace(/```[\s\S]*?```/g, ' (o código está na tela) ')
     .replace(/`([^`]+)`/g, '$1')
     // Markdown links before bare URLs, or the URL inside one is replaced

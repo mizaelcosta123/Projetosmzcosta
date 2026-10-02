@@ -40,7 +40,7 @@ def test_arguments_are_folded_before_checking():
 @pytest.mark.parametrize(
     ("params", "says"),
     [
-        ({"shape": "dodecaedro"}, "Unknown shape"),
+        ({"shape": "tesserato"}, "Unknown shape"),
         ({"shape": "cubo", "color": "magenta"}, "Unknown color"),
         ({"shape": "cubo", "size": "colossal"}, "Unknown size"),
         ({"shape": "cubo", "place": "atras"}, "Unknown place"),
@@ -135,6 +135,6 @@ def test_actions_and_the_limit_match_the_browser():
 
 def test_shapes_match_the_solids_the_browser_can_build():
     source = (WEB / "holo.js").read_text("utf-8")
-    solids = re.search(r"export const SOLIDS = \[(.*?)\];", source)
+    solids = re.search(r"export const SOLIDS = \[(.*?)\];", source, re.DOTALL)
     assert solids
     assert tuple(re.findall(r"'(\w+)'", solids.group(1))) == holograms.SHAPES

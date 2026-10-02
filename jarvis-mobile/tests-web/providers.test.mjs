@@ -434,3 +434,29 @@ test('an empty list is not carried as an empty list', () => {
   // and got nothing" rather than "never asked".
   assert.equal('models' in makeProvider({ url: 'https://x.test', models: [] }), false);
 });
+
+// -- OpenRouter introduces the app ---------------------------------------------
+
+import { headersFor as identify, isOpenRouter, openRouterHeaders } from '../web/providers.js';
+
+test('OpenRouter is told who is calling, beside the key', () => {
+  const headers = identify({ url: 'https://openrouter.ai/api/v1', key: 'sk-or' });
+  assert.equal(headers.Authorization, 'Bearer sk-or');
+  assert.equal(headers['X-Title'], 'Jarvis');
+  assert.ok(headers['HTTP-Referer'], 'tem referer');
+});
+
+test('nobody else gets the identifying headers', () => {
+  for (const url of ['http://127.0.0.1:11434', 'https://router.huggingface.co/v1', 'https://evil.com/openrouter.ai']) {
+    const headers = identify({ url, key: 'k' });
+    assert.equal(headers['X-Title'], undefined, url);
+    assert.equal(headers['HTTP-Referer'], undefined, url);
+  }
+  assert.equal(isOpenRouter({ url: 'not a url' }), false);
+});
+
+test('the referer is the page, or the project when there is no page', () => {
+  assert.equal(openRouterHeaders('https://jarvis.example.com')['HTTP-Referer'], 'https://jarvis.example.com');
+  assert.match(openRouterHeaders(undefined)['HTTP-Referer'], /github\.com/);
+  assert.match(openRouterHeaders('null')['HTTP-Referer'], /github\.com/);
+});

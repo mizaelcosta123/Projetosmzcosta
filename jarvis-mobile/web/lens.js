@@ -19,6 +19,7 @@ import { BONES, HOLD_CREATE, HOLD_REMOVE, HandControl, read, smooth, toGlass } f
 import { controls, keyboard, noteName } from './synth.js';
 import { moveBy, toScreen } from './hands.js';
 import { LIBRARY, explainLoadFailure, loadHands } from './vision.js';
+import { nounOf } from './holo.js';
 
 /** The fingertips, which get a ring: thumb, index, middle, ring, little. */
 const TIPS = new Set([4, 8, 12, 16, 20]);
@@ -83,15 +84,15 @@ export class Lens {
       onCreate: (at) => {
         const { width, height } = size();
         const item = scene.add({ ...this.pending, ...placeAt(at, width, height, stage.cam) });
-        onStatus(onCreate ? onCreate(item) : `Criei ${item.shape === 'esfera' || item.shape === 'piramide' ? 'uma' : 'um'} ${item.shape}.`);
+        onStatus(onCreate ? onCreate(item) : `Criei ${nounOf(item, { definite: false })}.`);
       },
       onRemove: (item) => {
         scene.remove(item.id);
-        onStatus(onRemove ? onRemove(item) : `Apaguei ${item.shape === 'esfera' || item.shape === 'piramide' ? 'a' : 'o'} ${item.shape}.`);
+        onStatus(onRemove ? onRemove(item) : `Apaguei ${nounOf(item)}.`);
       },
       onRest: (item) => {
         onStatus(
-          `${item.shape === 'esfera' || item.shape === 'piramide' ? 'A' : 'O'} ${item.shape} pousou na sua mão. ` +
+          `${nounOf(item, { capital: true })} pousou na sua mão. ` +
             'Levante dedos para girar mais rápido; pince para tirar.'
         );
       },

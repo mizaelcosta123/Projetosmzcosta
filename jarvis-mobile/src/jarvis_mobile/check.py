@@ -59,7 +59,7 @@ def _probe_chat(provider: Any, api_key: str, model: str) -> tuple[str, str]:
     try:
         response = httpx.post(
             f"{provider.endpoint}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={**provider.headers, "Authorization": f"Bearer {api_key}"},
             json={
                 "model": model,
                 "messages": [{"role": "user", "content": "Responda apenas: ok"}],

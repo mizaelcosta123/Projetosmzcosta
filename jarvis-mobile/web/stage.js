@@ -14,6 +14,7 @@
  */
 
 import { paint } from './ar.js';
+import { nounOf } from './holo.js';
 import { Gestures, camera, fit } from './hands.js';
 
 export class Stage {
@@ -52,11 +53,11 @@ export class Stage {
       size: () => this._size(),
       view: () => this.cam,
       onSelect: (item) => {
-        if (item) this.onStatus(`Segurando ${article(item.shape)} ${item.shape}. Arraste, pince para girar ou escalar, toque duas vezes para apagar.`);
+        if (item) this.onStatus(`Segurando ${nounOf(item)}. Arraste, pince para girar ou escalar, toque duas vezes para apagar.`);
       },
       onRemove: (item) => {
         this.scene.remove(item.id);
-        this.onStatus(`Apaguei ${article(item.shape)} ${item.shape}.`);
+        this.onStatus(`Apaguei ${nounOf(item)}.`);
         if (this.scene.items.length === 0) this.hide();
       },
     });
@@ -169,7 +170,3 @@ export class Stage {
   }
 }
 
-const FEMININE = new Set(['esfera', 'piramide']);
-function article(shape) {
-  return FEMININE.has(shape) ? 'a' : 'o';
-}

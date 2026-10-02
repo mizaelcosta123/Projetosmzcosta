@@ -152,7 +152,28 @@ export function modelsUrl(provider) {
 export function headersFor(provider, extra = {}) {
   const headers = { ...extra };
   if (provider?.key) headers.Authorization = `Bearer ${provider.key}`;
+  // OpenRouter asks apps to say who they are: it is how these requests show
+  // up as Jarvis in their dashboard and rankings, instead of as anonymous
+  // traffic. `HTTP-Referer` and not `Referer`, which a page may not set; both
+  // names are allowed by OpenRouter's CORS. Nobody else gets them.
+  if (isOpenRouter(provider)) Object.assign(headers, openRouterHeaders());
   return headers;
+}
+
+/** Is this provider OpenRouter, by its address? */
+export function isOpenRouter(provider) {
+  try {
+    const host = new URL(provider?.url ?? '').hostname;
+    return host === 'openrouter.ai' || host.endsWith('.openrouter.ai');
+  } catch {
+    return false;
+  }
+}
+
+/** The two identifying headers. The referer is this page's own origin. */
+export function openRouterHeaders(origin = globalThis.location?.origin) {
+  const referer = origin && origin !== 'null' ? origin : 'https://github.com/mizaelcosta123/Projetosmzcosta';
+  return { 'HTTP-Referer': referer, 'X-Title': 'Jarvis' };
 }
 
 /**

@@ -239,7 +239,7 @@ export function paint(context, width, height, scene, inverse, { reticle = null, 
       bx = ax + (bx - ax) * grown;
       by = ay + (by - ay) * grown;
     }
-    lines.push({ item: edge.item, ax, ay, bx, by, depth: (a.depth + b.depth) / 2 });
+    lines.push({ item: edge.item, hue: edge.hue ?? edge.item.hue, ax, ay, bx, by, depth: (a.depth + b.depth) / 2 });
   }
 
   if (typeof Path2D === 'function' && context.save) glow(context, lines, width, selected);
@@ -250,7 +250,7 @@ export function paint(context, width, height, scene, inverse, { reticle = null, 
     const fade = Math.max(0.08, Math.min(1, 1.6 / line.depth));
     const held = selected !== null && line.item === selected;
     const light = held ? 80 : 58 + fade * 18;
-    context.strokeStyle = `hsla(${line.item.hue}, 95%, ${light}%, ${held ? 1 : fade})`;
+    context.strokeStyle = `hsla(${line.hue}, 95%, ${light}%, ${held ? 1 : fade})`;
     context.lineWidth = Math.max(0.6, fade * 2.2) * (held ? 1.8 : 1);
     context.beginPath();
     context.moveTo(line.ax, line.ay);
@@ -278,39 +278,59 @@ export function built(age, duration = 0.6) {
   return 1 - (1 - t) ** 3;
 }
 
-/** The glow and the corner nodes: one stroke and one fill per object. */
+/**
+ * The glow and the corner nodes: one stroke and one fill per object and
+ * colour. A composed figure has a colour per part, so the grouping is by
+ * both -- one red body and four white wheels is two strokes, not one wrong one.
+ *
+ * Nodes stop past a few hundred edges: on a dense figure they turn into a
+ * smear of dots and cost an arc each.
+ */
 function glow(context, lines, width, selected) {
   const unit = Math.max(1, width / 520);
-  const byItem = new Map();
+  const groups = new Map();
   for (const line of lines) {
-    let entry = byItem.get(line.item);
+    let byHue = groups.get(line.item);
+    if (!byHue) {
+      byHue = new Map();
+      groups.set(line.item, byHue);
+    }
+    let entry = byHue.get(line.hue);
     if (!entry) {
       entry = { edges: new Path2D(), nodes: new Path2D() };
-      byItem.set(line.item, entry);
+      byHue.set(line.hue, entry);
     }
     entry.edges.moveTo(line.ax, line.ay);
     entry.edges.lineTo(line.bx, line.by);
-    for (const [x, y] of [[line.ax, line.ay], [line.bx, line.by]]) {
-      entry.nodes.moveTo(x + 2.2 * unit, y);
-      entry.nodes.arc(x, y, 2.2 * unit, 0, Math.PI * 2);
+    if (line.item.edges.length <= NODES_UP_TO) {
+      for (const [x, y] of [[line.ax, line.ay], [line.bx, line.by]]) {
+        entry.nodes.moveTo(x + 2.2 * unit, y);
+        entry.nodes.arc(x, y, 2.2 * unit, 0, Math.PI * 2);
+      }
     }
   }
   context.save();
   context.globalCompositeOperation = 'lighter';
   context.lineCap = 'round';
-  for (const [item, { edges, nodes }] of byItem) {
+  for (const [item, byHue] of groups) {
     const held = item === selected;
-    context.strokeStyle = `hsla(${item.hue}, 95%, 60%, ${held ? 0.34 : 0.2})`;
-    context.lineWidth = (held ? 12 : 9) * unit;
-    context.stroke(edges);
-    context.strokeStyle = `hsla(${item.hue}, 95%, 66%, 0.3)`;
-    context.lineWidth = 4 * unit;
-    context.stroke(edges);
-    context.fillStyle = `hsla(${item.hue}, 100%, 88%, ${held ? 0.95 : 0.7})`;
-    context.fill(nodes);
+    for (const [hue, { edges, nodes }] of byHue) {
+      context.strokeStyle = `hsla(${hue}, 95%, 60%, ${held ? 0.34 : 0.2})`;
+      context.lineWidth = (held ? 12 : 9) * unit;
+      context.stroke(edges);
+      context.strokeStyle = `hsla(${hue}, 95%, 66%, 0.3)`;
+      context.lineWidth = 4 * unit;
+      context.stroke(edges);
+      if (item.edges.length <= NODES_UP_TO) {
+        context.fillStyle = `hsla(${hue}, 100%, 88%, ${held ? 0.95 : 0.7})`;
+        context.fill(nodes);
+      }
+    }
   }
   context.restore();
 }
+
+const NODES_UP_TO = 400;
 
 /**
  * A point through a 4x4 matrix, column-major — the order WebXR uses.

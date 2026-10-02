@@ -14,7 +14,7 @@ import { COOLDOWN_MS, explainFailure, imageUrl, newSeed } from './generate.js';
 import { SANDBOX, asDocument, describe as describeRun, previewable } from './preview.js';
 import { explain } from './diagnose.js';
 import { Reality, supported as arSupported, whyNot as arWhyNot } from './ar.js';
-import { Scene } from './holo.js';
+import { Scene, nounOf } from './holo.js';
 import { Stage } from './stage.js';
 import { Lens } from './lens.js';
 import { Synth } from './synth.js';
@@ -23,8 +23,9 @@ import { toScreen } from './hands.js';
 import { NODS, Rotation, THINKING, Talk, VOICE_PROMPT } from './utter.js';
 import { conjure, learnedNames, parse, perform, teaching } from './conjure.js';
 import { intent as decideIntent } from './systemone.js';
-import { Memory } from './memory.js';
+import { Memory, fold } from './memory.js';
 import { contextFor as placeContext } from './place.js';
+import { applyAll as forgeAll, hasBlock as hasHologram, hideBlocks, roomPrompt, sceneContext } from './forge.js';
 import { notifyReply, registerWorker } from './pwa.js';
 import { download as downloadNote, fromMarkdown, toMarkdown } from './vault.js';
 import { Decider } from './decide.js';
@@ -347,7 +348,7 @@ const lens = new Lens({
   },
   onRemove: (item) => {
     buzz([12, 50, 12]);
-    return `Apaguei ${item.shape === 'esfera' || item.shape === 'piramide' ? 'a' : 'o'} ${item.shape}.`;
+    return `Apaguei ${nounOf(item)}.`;
   },
   onPose: (label) => {
     if (label.startsWith('pinça') && !el.lensPose.textContent.startsWith('pinça')) buzz(10);
@@ -827,6 +828,14 @@ async function streamReply(text, onChunk, { voice: byVoice = false, signal } = {
   // sounds like speech -- and a short first sentence, because that is how
   // long the silence lasts before he starts.
   if (byVoice) messages.push({ role: 'system', content: VOICE_PROMPT });
+  // How to build a figure, and what is already built -- only when the room is
+  // part of this: a conversation about the weather should not pay ~500 tokens
+  // for a hologram format it will not use.
+  if (wantsRoom(text)) {
+    messages.push({ role: 'system', content: roomPrompt() });
+    const present = sceneContext(scene);
+    if (present) messages.push({ role: 'system', content: present });
+  }
   messages.push({ role: 'user', content });
 
   const body = {
@@ -882,6 +891,33 @@ async function streamReply(text, onChunk, { voice: byVoice = false, signal } = {
     }
   }
   return full;
+}
+
+/**
+ * Is this message about the room? The stage or the camera is up, something is
+ * already in it, the rules saw a verb or a shape, or it says hologram/3D.
+ */
+function wantsRoom(text) {
+  if (reality.running || lens.running || scene.items.length > 0) return true;
+  if (!text) return false;
+  const said = parse(text, { aliases: learnedNames(memory) });
+  if (said.verb || said.shape) return true;
+  return /\b(holograma|hologram|3d|figura|redesenh|wireframe|modelo tridimensional)/.test(fold(text));
+}
+
+/**
+ * The figures a reply built, carried out once it has finished. Returns what
+ * was done, or null when the reply built nothing.
+ */
+function forgeFrom(reply) {
+  if (!hasHologram(reply)) return null;
+  const done = forgeAll(scene, reply);
+  if (!done) return 'Não consegui montar essa figura.';
+  if (!reality.running) el.arStatus.textContent = done;
+  refreshStage();
+  const last = scene.last();
+  if (last && !last.spec) lens.pending = { shape: last.shape, hue: last.hue, size: last.size };
+  return done;
 }
 
 // -- interactions -----------------------------------------------------------
@@ -1105,7 +1141,8 @@ async function ask(text, { byVoice = false } = {}) {
     const sent = attached;
     const reply = await streamReply(text, (chunk) => {
       shown += chunk;
-      setCaption(shown);
+      // The ```holograma block is for the app, not for reading.
+      setCaption(hideBlocks(shown));
       // Out loud as it arrives, a sentence at a time -- not after the model
       // has finished, which on a free model was seconds of silence.
       talk?.push(chunk);
@@ -1121,6 +1158,13 @@ async function ask(text, { byVoice = false } = {}) {
       renderTray();
     }
     offerPreview(reply);
+    const forged = forgeFrom(reply);
+    if (forged) {
+      // A reply that was only a block still says what it did.
+      const words = hideBlocks(reply);
+      setCaption(words ? `${words}\n${forged}` : forged);
+      if (talk && !words) talk.push(` ${forged}`);
+    }
     // Only does anything if you went to another app while he was thinking,
     // and only if notifications were granted in the panel.
     notifyReply(reply).catch(() => {});
@@ -1827,7 +1871,7 @@ el.arStop.addEventListener('click', async () => {
 });
 el.arDrop.addEventListener('click', () => {
   const item = reality.drop();
-  el.arStatus.textContent = `Soltei ${item.shape === 'esfera' ? 'uma' : 'um'} ${item.shape}.`;
+  el.arStatus.textContent = `Soltei ${nounOf(item, { definite: false })}.`;
 });
 el.arClear.addEventListener('click', () => {
   const gone = scene.clear();

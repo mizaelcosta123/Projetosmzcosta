@@ -16,23 +16,36 @@
  * long tail.
  */
 
-import { SOLIDS } from './holo.js';
+import { LABELS, SOLIDS, clampDetail, nounOf } from './holo.js';
 import { fold, tokens } from './memory.js';
 
 /** Words that mean a shape, before anything is taught. */
 export const NAMES = {
   cubo: ['cubo', 'caixa', 'bloco', 'quadrado', 'cube', 'box'],
-  esfera: ['esfera', 'bola', 'globo', 'circulo', 'sphere', 'ball'],
-  piramide: ['piramide', 'pyramid', 'triangulo', 'cone'],
+  esfera: ['esfera', 'bola', 'globo', 'sphere', 'ball'],
+  piramide: ['piramide', 'pyramid', 'triangulo'],
   toro: ['toro', 'rosquinha', 'anel', 'donut', 'torus', 'ring'],
   plano: ['plano', 'grade', 'chao', 'piso', 'grid', 'floor'],
   eixo: ['eixo', 'eixos', 'seta', 'axis', 'axes'],
+  cilindro: ['cilindro', 'tubo', 'cano', 'lata', 'cylinder', 'tube'],
+  cone: ['cone', 'funil', 'casquinha'],
+  tetraedro: ['tetraedro', 'tetrahedron'],
+  octaedro: ['octaedro', 'diamante', 'losango', 'octahedron', 'diamond'],
+  icosaedro: ['icosaedro', 'icosahedron'],
+  dodecaedro: ['dodecaedro', 'dodecahedron'],
+  prisma: ['prisma', 'hexagono', 'prism', 'hexagon'],
+  estrela: ['estrela', 'star'],
+  helice: ['helice', 'espiral', 'mola', 'helix', 'spiral', 'spring'],
+  capsula: ['capsula', 'pilula', 'capsule', 'pill'],
+  disco: ['disco', 'circulo', 'prato', 'moeda', 'disc', 'disk', 'circle', 'coin'],
+  linha: ['linha', 'reta', 'line'],
 };
 
 /** Colours, as hues on the same wheel the field uses. */
 export const HUES = {
   azul: 205, ciano: 185, verde: 145, amarelo: 50, laranja: 25,
   vermelho: 0, rosa: 330, roxo: 275, branco: 200, dourado: 45,
+  marrom: 28, prata: 210,
 };
 
 /**
@@ -52,7 +65,31 @@ const COLOUR_WORDS = {
   roxo: ['roxo', 'roxa', 'purple'],
   branco: ['branco', 'branca', 'white'],
   dourado: ['dourado', 'dourada', 'gold'],
+  marrom: ['marrom', 'castanho', 'castanha', 'brown'],
+  prata: ['prata', 'prateado', 'prateada', 'cinza', 'silver', 'gray', 'grey'],
 };
+
+/**
+ * A colour as a hue, from a word in any agreement ("vermelha"), a hue number,
+ * or a hex code. Null when it is none of those -- never a guess.
+ */
+export function hueFor(value) {
+  if (Number.isFinite(value)) return ((Math.round(value) % 360) + 360) % 360;
+  const word = fold(String(value ?? '')).trim();
+  if (!word) return null;
+  const hex = word.match(/^#?([0-9a-f]{6}|[0-9a-f]{3})$/);
+  if (hex) {
+    const full = hex[1].length === 3 ? [...hex[1]].map((c) => c + c).join('') : hex[1];
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255);
+    const most = Math.max(r, g, b);
+    const span = most - Math.min(r, g, b);
+    if (!span) return HUES.branco;
+    const h = most === r ? ((g - b) / span) % 6 : most === g ? (b - r) / span + 2 : (r - g) / span + 4;
+    return Math.round(((h * 60) + 360) % 360);
+  }
+  const key = pick(COLOUR_WORDS, word.split(/\s+/));
+  return key ? HUES[key] : null;
+}
 
 /** How big, in metres. */
 export const SIZES = {
@@ -68,9 +105,9 @@ const SIZE_WORDS = {
   gigante: ['gigante', 'giant'],
 };
 
-/** Portuguese has genders and "Um esfera" reads as broken. */
-const FEMININE = new Set(['esfera', 'piramide']);
-const article = (shape) => (FEMININE.has(shape) ? 'Uma' : 'Um');
+/** Portuguese has genders and "Um esfera" reads as broken. `nounOf` knows them. */
+const a = (shape) => nounOf({ shape }, { definite: false, capital: true });
+const the = (shape) => nounOf({ shape });
 
 /** Where to put it, relative to where you are looking. Metres. */
 export const PLACES = {
@@ -99,6 +136,8 @@ const VERBS = [
   ['criar', ['cria', 'criar', 'faz', 'fazer', 'poe', 'poem', 'coloca', 'colocar', 'gera', 'gerar', 'desenha', 'add', 'create', 'make']],
   ['pintar', ['pinta', 'pintar', 'muda', 'mudar', 'troca', 'trocar', 'deixa', 'colour', 'color']],
   ['girar', ['gira', 'girar', 'roda', 'rodar', 'spin', 'rotate']],
+  ['virar', ['vira', 'virar', 'deita', 'deitar', 'inclina', 'inclinar', 'endireita', 'endireitar', 'flip', 'tilt']],
+  ['detalhar', ['detalhe', 'detalhes', 'detalhado', 'detalhada', 'detalhar', 'detail']],
   ['parar', ['para', 'parar', 'congela', 'stop', 'freeze']],
 ];
 
@@ -120,6 +159,9 @@ const FILLER = new Set([
   'forma', 'cor', 'tamanho', '3d', 'favor', 'jarvis', 'lado', 'vez',
   'an', 'please', 'that', 'this', 'all', 'everything', 'one', 'object', 'hologram',
   'on', 'at', 'my', 'now',
+  // Turning and detail: "gira 90 graus", "vira de cabeça para baixo", "menos detalhe".
+  'grau', 'graus', 'degrees', 'cabeca', 'menos', 'frente', 'tras', 'atras', 'lado', 'deitado',
+  'deitada', 'pe', 'volta', 'meia',
 ]);
 
 /** Every spelling any table knows, so leftovers can be counted. */
@@ -178,7 +220,9 @@ export function parse(text, { aliases = {} } = {}) {
   }
   // Words none of the tables know, taught aliases aside.
   const taught = new Set(Object.keys(aliases).map(fold));
-  const extra = words.filter((word) => !KNOWN.has(word) && !FILLER.has(word) && !taught.has(word));
+  const extra = words.filter((word) => !KNOWN.has(word) && !FILLER.has(word) && !taught.has(word)
+    && !/^\d+$/.test(word));
+  const degrees = said.match(/(\d+)\s*(?:graus?|degrees|º|°)/);
 
   // "um cubo" on its own is a request for a cube. Speech is clipped, and
   // demanding a verb would reject half of what anybody actually says.
@@ -194,6 +238,9 @@ export function parse(text, { aliases = {} } = {}) {
     all: /\b(tudo|todos|todas|all|everything)\b/.test(said),
     heard: String(text ?? '').trim(),
     extra,
+    // "gira 90 graus": a turn by an amount rather than a spin.
+    degrees: degrees ? Number(degrees[1]) : /meia volta/.test(said) ? 180 : null,
+    words,
     question: /\?/.test(said) ||
       /^\s*(o que|oque|que|qual|quais|quem|como|quando|onde|por ?que|quanto|what|how|why|which|who)\b/.test(said),
   };
@@ -244,6 +291,11 @@ export function teaching(text, { aliases = {} } = {}) {
  */
 export function conjure(scene, text, known = {}) {
   const said = parse(text, known);
+  // A figure the model built ("o carro") is named in the room, not in any
+  // table: its name is a known word here, and the thing it points at.
+  const named = new Set(scene.items.map((item) => item.name).filter((name) => !SOLIDS.includes(name)));
+  const called = said.extra.find((word) => named.has(word)) ?? null;
+  if (called) said.extra = said.extra.filter((word) => word !== called);
   if (!said.verb) return null;
   // The two guards below are the rules refusing to guess. `trust` is how
   // something that is *not* guessing gets past them: `app.js` sets it only
@@ -262,17 +314,22 @@ export function conjure(scene, text, known = {}) {
   }
 
   if (said.verb === 'limpar') {
+    if (called) {
+      const match = scene.find(called);
+      scene.remove(match.id);
+      return `Tirei ${nounOf(match)}.`;
+    }
     if (said.all || !said.shape) {
       const gone = scene.clear();
       return gone ? `Limpei ${gone} ${gone === 1 ? 'objeto' : 'objetos'}.` : 'Não havia nada.';
     }
-    const match = [...scene.items].reverse().find((item) => item.shape === said.shape);
-    if (!match) return `Não tem ${article(said.shape).toLowerCase()} ${said.shape} aí.`;
+    const match = scene.find(said.shape);
+    if (!match) return `Não tem ${a(said.shape).toLowerCase()} aí.`;
     scene.remove(match.id);
-    return `Tirei ${FEMININE.has(said.shape) ? 'a' : 'o'} ${said.shape}.`;
+    return `Tirei ${the(said.shape)}.`;
   }
 
-  if (said.verb === 'criar') {
+  if (said.verb === 'criar' && !called) {
     if (!said.shape) return null;
     scene.add({
       shape: said.shape,
@@ -281,13 +338,13 @@ export function conjure(scene, text, known = {}) {
       ...(said.where ?? PLACES.frente),
       label: said.heard,
     });
-    return `${article(said.shape)} ${said.shape}.`;
+    return `${a(said.shape)}.`;
   }
 
   // The rest act on something already there: the named one, else the last.
-  const target = said.shape
-    ? [...scene.items].reverse().find((item) => item.shape === said.shape)
-    : scene.last();
+  const target = called ? scene.find(called)
+    : said.shape ? scene.find(said.shape)
+      : scene.last();
   if (!target) return 'Não tem nada aí para mexer.';
 
   if (said.verb === 'pintar') {
@@ -299,15 +356,62 @@ export function conjure(scene, text, known = {}) {
     });
     return 'Pronto.';
   }
+  if (said.verb === 'girar' && said.degrees !== null) {
+    // "gira 90 graus (para a esquerda / para cima)": a turn by an amount,
+    // which stops the spin -- otherwise the angle asked for is gone in a second.
+    const rad = (said.degrees % 360) * (Math.PI / 180);
+    const w = said.words;
+    if (w.includes('cima') || w.includes('frente')) target.rx = (target.rx || 0) - rad;
+    else if (w.includes('baixo') || w.includes('tras') || w.includes('atras')) target.rx = (target.rx || 0) + rad;
+    else if (w.includes('esquerda')) target.angle -= rad;
+    else target.angle += rad;
+    target.spin = 0;
+    return `Girei ${said.degrees} graus.`;
+  }
   if (said.verb === 'girar') {
     scene.update(target.id, { spin: target.spin === 0 ? 0.8 : target.spin * 1.8 });
     return 'Girando.';
+  }
+  if (said.verb === 'virar') return tilt(target, said);
+  if (said.verb === 'detalhar') {
+    const before = target.detail;
+    const fewer = said.words.includes('menos');
+    scene.update(target.id, { detail: clampDetail(before + (fewer ? -1 : 1)) });
+    if (target.detail === before) return fewer ? 'Já está no mínimo de detalhe.' : 'Já está no máximo de detalhe.';
+    return fewer ? 'Menos detalhe.' : 'Mais detalhe.';
   }
   if (said.verb === 'parar') {
     scene.update(target.id, { spin: 0 });
     return 'Parado.';
   }
   return null;
+}
+
+/**
+ * "vira de cabeça para baixo", "deita", "inclina para frente", "endireita".
+ * Tilts are set, not spun, so they hold still while the object turns about Y.
+ */
+function tilt(target, said) {
+  const w = said.words;
+  const deg = Math.PI / 180;
+  if (w.includes('endireita') || w.includes('endireitar') || w.includes('pe')) {
+    Object.assign(target, { rx: 0, rz: 0, angle: 0 });
+    return 'Endireitei.';
+  }
+  if (w.includes('cabeca')) {
+    target.rx = (target.rx || 0) + Math.PI;
+    return 'De cabeça para baixo.';
+  }
+  if (w.includes('deita') || w.includes('deitar') || w.includes('lado')) {
+    target.rz = (w.includes('esquerda') ? 1 : -1) * 90 * deg;
+    return 'Deitei.';
+  }
+  const amount = (said.degrees ?? 30) * deg;
+  if (w.includes('tras') || w.includes('atras')) target.rx = (target.rx || 0) + amount;
+  else if (w.includes('direita')) target.rz = (target.rz || 0) - amount;
+  else if (w.includes('esquerda')) target.rz = (target.rz || 0) + amount;
+  else target.rx = (target.rx || 0) - amount;
+  return 'Inclinei.';
 }
 
 /** What the model may ask for through the `conjure` tool. */
@@ -344,10 +448,10 @@ export function perform(scene, args = {}) {
       const gone = scene.clear();
       return gone ? `Limpei ${gone} ${gone === 1 ? 'objeto' : 'objetos'}.` : 'Não havia nada.';
     }
-    const match = [...scene.items].reverse().find((item) => item.shape === shape);
+    const match = scene.find(shape);
     if (!match) return null;
     scene.remove(match.id);
-    return `Tirei ${FEMININE.has(shape) ? 'a' : 'o'} ${shape}.`;
+    return `Tirei ${the(shape)}.`;
   }
 
   if (action === 'criar') {
@@ -367,13 +471,11 @@ export function perform(scene, args = {}) {
         label: 'modelo',
       });
     }
-    const noun = count === 1 ? shape : `${shape}s`;
-    return count === 1 ? `${article(shape)} ${shape}.` : `${count} ${noun}.`;
+    const noun = `${LABELS[shape] ?? shape}s`;
+    return count === 1 ? `${a(shape)}.` : `${count} ${noun}.`;
   }
 
-  const target = shape
-    ? [...scene.items].reverse().find((item) => item.shape === shape)
-    : scene.last();
+  const target = shape ? scene.find(shape) : scene.last();
   if (!target) return null;
   if (action === 'mudar') {
     if (hue === null && size === null && !where) return null;

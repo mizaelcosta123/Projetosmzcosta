@@ -58,9 +58,9 @@ test('every solid fits in the unit box it claims', () => {
 });
 
 test('a shape nobody has heard of becomes something rather than nothing', () => {
-  // Driven by speech: a request for a dodecahedron should put *something* in
+  // Driven by speech: a request for a tesseract should put *something* in
   // the room while he says he does not know that one.
-  const made = solid('dodecaedro');
+  const made = solid('tesserato');
   assert.equal(made.name, 'cubo');
   assert.ok(made.points.length > 0);
 });
@@ -227,13 +227,13 @@ test('colours agree with the noun, and still count as known words', () => {
   const scene = new Scene();
   assert.equal(conjure(scene, 'uma bola vermelha'), 'Uma esfera.');
   assert.equal(scene.last().hue, HUES.vermelho);
-  assert.equal(conjure(scene, 'uma pirâmide amarela minúscula'), 'Uma piramide.');
+  assert.equal(conjure(scene, 'uma pirâmide amarela minúscula'), 'Uma pirâmide.');
   assert.equal(scene.last().hue, HUES.amarelo);
 });
 
 test('a shape he cannot build is handed on too', () => {
   const scene = new Scene();
-  assert.equal(conjure(scene, 'me faz um dodecaedro'), null);
+  assert.equal(conjure(scene, 'me faz um tesserato'), null);
   assert.equal(scene.items.length, 0, 'melhor nada do que a forma errada');
 });
 
@@ -381,7 +381,7 @@ test('names the browser does not know do nothing, rather than something else', (
   /* The tool refuses these server-side. One arriving here means the two
      tables drifted apart, and a silent wrong object would hide that. */
   const scene = new Scene();
-  assert.equal(perform(scene, { shape: 'dodecaedro' }), null);
+  assert.equal(perform(scene, { shape: 'tesserato' }), null);
   assert.equal(perform(scene, { action: 'explodir', shape: 'cubo' }), null);
   assert.equal(scene.items.length, 0);
   perform(scene, { shape: 'cubo', color: 'toString' });
@@ -401,4 +401,174 @@ test('changing, spinning, stopping and clearing through the tool', () => {
   assert.ok(scene.last().spin > 0);
   assert.equal(perform(scene, { action: 'limpar', shape: 'toro' }), 'Tirei o toro.');
   assert.equal(perform(scene, { action: 'limpar' }), 'Limpei 1 objeto.');
+});
+
+// -- any figure: detail, composition, three axes ------------------------------
+
+import { DETAIL, LIMITS, compose, nounOf, rebuild } from '../web/holo.js';
+
+test('the regular solids have the faces geometry says they have', () => {
+  /* Wired by nearest distance, so a wrong constant shows up as the wrong
+     number of edges rather than as a shape that merely looks odd. */
+  for (const [name, points, edges] of [
+    ['tetraedro', 4, 6], ['octaedro', 6, 12], ['icosaedro', 12, 30], ['dodecaedro', 20, 30],
+  ]) {
+    const made = solid(name);
+    assert.deepEqual([made.points.length, made.edges.length], [points, edges], name);
+  }
+});
+
+test('more detail is more segments, and the default is what the six always drew', () => {
+  assert.ok(solid('esfera', { detail: 5 }).edges.length > solid('esfera', { detail: 1 }).edges.length);
+  assert.ok(solid('cilindro', { detail: 4 }).edges.length > solid('cilindro', { detail: 2 }).edges.length);
+  assert.equal(DETAIL, 3);
+  assert.equal(solid('esfera').points.length, 60, 'a esfera antiga: 5 anéis de 12');
+  assert.equal(solid('esfera', { detail: 99 }).edges.length, solid('esfera', { detail: 5 }).edges.length, 'limitado a 5');
+});
+
+test('a composed figure fits the unit box and keeps each part\'s colour', () => {
+  const built = compose([
+    { shape: 'cubo', scale: [4, 1, 2], hue: 0 },
+    { shape: 'cilindro', pos: [1.5, -0.6, 1], scale: [0.6, 0.2, 0.6], rot: [90, 0, 0], hue: 200 },
+  ]);
+  assert.equal(built.parts, 2);
+  for (const p of built.points) {
+    for (const axis of ['x', 'y', 'z']) assert.ok(Math.abs(p[axis]) <= 0.5001, `${axis} = ${p[axis]}`);
+  }
+  const hues = new Set(built.edges.map((edge) => edge[2]));
+  assert.deepEqual([...hues].sort(), [0, 200]);
+});
+
+test('parts nobody can build are skipped, not turned into cubes', () => {
+  const built = compose([{ shape: 'roda' }, { shape: 'esfera' }]);
+  assert.equal(built.parts, 1);
+  assert.equal(compose([{ shape: 'roda' }]), null);
+  assert.equal(compose('nada'), null);
+});
+
+test('the lathe, the extrusion and free lines build from their data', () => {
+  const vase = compose([{ shape: 'torno', profile: [[0.2, 0], [0.5, 0.5], [0.15, 1], [0.25, 1.3]] }]);
+  assert.ok(vase.edges.length > 30);
+  const letter = compose([{ shape: 'extrusao', outline: [[0, 0], [1, 0], [1, 1], [0, 1]], height: 0.2 }]);
+  assert.equal(letter.edges.length, 12, 'um contorno de 4 levantado é uma caixa');
+  const zigzag = compose([{ shape: 'linhas', points: [[0, 0, 0], [1, 1, 0], [2, 0, 0]] }]);
+  assert.equal(zigzag.edges.length, 2, 'sem arestas, liga os pontos em ordem');
+  const bad = compose([{ shape: 'linhas', points: [[0, 0, 0], [1, 0, 0]], edges: [[0, 9], [0, 0]] }]);
+  assert.equal(bad.edges.length, 1, 'arestas inválidas caem para a polilinha');
+});
+
+test('a figure is capped in edges, so a phone stays at sixty frames', () => {
+  const many = Array.from({ length: 200 }, () => ({ shape: 'esfera' }));
+  const built = compose(many, 5);
+  assert.ok(built.edges.length <= LIMITS.edges, `${built.edges.length}`);
+  assert.ok(built.parts <= LIMITS.parts);
+});
+
+test('a quarter turn about X takes up to towards you', () => {
+  const item = hologram({ shape: 'linha', x: 0, y: 0, z: 0, size: 1, spin: 0 });
+  item.rx = Math.PI / 2;
+  const top = place({ x: 0, y: 1, z: 0 }, item);
+  assert.ok(Math.abs(top.y) < 1e-9 && Math.abs(top.z - 1) < 1e-9, JSON.stringify(top));
+});
+
+test('it can spin about any axis', () => {
+  const scene = new Scene();
+  const item = scene.add({ shape: 'cubo', spin: 1, spinAxis: 'x' });
+  scene.frame(0.05);
+  assert.ok(item.rx > 0);
+  assert.equal(item.angle, 0);
+});
+
+test('the scene drops the oldest when the edges, not just the count, run out', () => {
+  const scene = new Scene();
+  const heavy = Array.from({ length: 23 }, () => ({ shape: 'esfera' }));
+  for (let i = 0; i < 6; i += 1) scene.add({ spec: { parts: heavy }, detail: 5, name: `n${i}` });
+  assert.ok(scene.weight() <= LIMITS.scene, `${scene.weight()}`);
+  assert.equal(scene.last().name, 'n5');
+});
+
+test('more detail rebuilds the same object in place', () => {
+  const scene = new Scene();
+  const item = scene.add({ shape: 'esfera', x: 0.3 });
+  const before = item.edges.length;
+  scene.update(item.id, { detail: 5 });
+  assert.ok(item.edges.length > before);
+  assert.equal(item.x, 0.3);
+  item.detail = 1;
+  rebuild(item);
+  assert.ok(item.edges.length < before);
+});
+
+test('figures are found by the name people call them', () => {
+  const scene = new Scene();
+  scene.add({ spec: { parts: [{ shape: 'cubo' }] }, name: 'casa' });
+  scene.add({ shape: 'esfera' });
+  assert.equal(scene.find('casa').shape, 'composto');
+  assert.equal(scene.find('esfera').shape, 'esfera');
+  assert.equal(scene.find('carro'), null);
+});
+
+test('the article agrees with what it is', () => {
+  assert.equal(nounOf({ name: 'casa' }), 'a casa');
+  assert.equal(nounOf({ name: 'carro' }, { definite: false, capital: true }), 'Um carro');
+  assert.equal(nounOf({ name: 'planeta' }), 'o planeta');
+  assert.equal(nounOf({ shape: 'helice' }), 'a hélice');
+  assert.equal(nounOf({ name: 'robo', gender: 'f' }), 'a robo', 'o modelo pode dizer o gênero');
+});
+
+// -- turning and detail by voice -----------------------------------------------
+
+test('turning by a number of degrees, without the network', () => {
+  const scene = new Scene();
+  conjure(scene, 'um cubo');
+  assert.equal(conjure(scene, 'gira 90 graus'), 'Girei 90 graus.');
+  assert.ok(Math.abs(scene.last().angle - Math.PI / 2) < 1e-9);
+  assert.equal(scene.last().spin, 0, 'parado no ângulo pedido');
+  conjure(scene, 'gira 45 graus para a esquerda');
+  assert.ok(Math.abs(scene.last().angle - Math.PI / 4) < 1e-9);
+  conjure(scene, 'gira 90 graus para cima');
+  assert.ok(Math.abs(scene.last().rx + Math.PI / 2) < 1e-9);
+});
+
+test('upside down, on its side, tilted and straightened', () => {
+  const scene = new Scene();
+  conjure(scene, 'um cone');
+  assert.equal(conjure(scene, 'vira de cabeça para baixo'), 'De cabeça para baixo.');
+  assert.ok(Math.abs(scene.last().rx - Math.PI) < 1e-9);
+  assert.equal(conjure(scene, 'deita ele'), 'Deitei.');
+  assert.ok(Math.abs(Math.abs(scene.last().rz) - Math.PI / 2) < 1e-9);
+  assert.equal(conjure(scene, 'endireita'), 'Endireitei.');
+  assert.deepEqual([scene.last().rx, scene.last().rz], [0, 0]);
+  assert.equal(conjure(scene, 'inclina para trás'), 'Inclinei.');
+  assert.ok(scene.last().rx > 0);
+});
+
+test('more and less detail, held to its range', () => {
+  const scene = new Scene();
+  conjure(scene, 'uma esfera');
+  const before = scene.last().edges.length;
+  assert.equal(conjure(scene, 'mais detalhe'), 'Mais detalhe.');
+  assert.ok(scene.last().edges.length > before);
+  conjure(scene, 'mais detalhe');
+  assert.equal(conjure(scene, 'mais detalhe'), 'Já está no máximo de detalhe.');
+  assert.equal(conjure(scene, 'menos detalhe'), 'Menos detalhe.');
+});
+
+test('the new shapes are made by voice, with the articles right', () => {
+  const scene = new Scene();
+  assert.equal(conjure(scene, 'um cilindro azul'), 'Um cilindro.');
+  assert.equal(conjure(scene, 'uma estrela dourada'), 'Uma estrela.');
+  assert.equal(conjure(scene, 'uma mola'), 'Uma hélice.');
+  assert.equal(conjure(scene, 'tira a estrela'), 'Tirei a estrela.');
+});
+
+test('a figure the model built answers to its name in the fast path', () => {
+  const scene = new Scene();
+  scene.add({ spec: { parts: [{ shape: 'cubo' }] }, name: 'carro' });
+  scene.add({ shape: 'esfera' });
+  assert.equal(conjure(scene, 'gira o carro 90 graus'), 'Girei 90 graus.');
+  assert.ok(scene.find('carro').angle > 1);
+  assert.equal(scene.find('esfera').angle, 0, 'só o carro girou');
+  assert.equal(conjure(scene, 'apaga o carro'), 'Tirei o carro.');
+  assert.equal(scene.find('carro'), null);
 });

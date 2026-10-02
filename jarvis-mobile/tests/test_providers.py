@@ -198,3 +198,22 @@ def test_discovery_leaves_out_every_preset_without_a_key(monkeypatch):
     monkeypatch.setattr(_discovery, "_make_engine", make)
     found = [key for key, _ in _discovery.discover_engines(JarvisConfig())]
     assert found == ["openrouter"]
+
+
+def test_openrouter_is_told_who_is_calling_beside_the_key():
+    engine = providers.build_engine("openrouter", api_key="sk-or")
+    assert engine._client.headers["Authorization"] == "Bearer sk-or"
+    assert engine._client.headers["X-Title"] == "Jarvis"
+    assert engine._client.headers["HTTP-Referer"].startswith("https://")
+    # The async streaming path builds its own client from `_headers`.
+    assert engine._headers["X-Title"] == "Jarvis"
+    assert engine._headers["Authorization"] == "Bearer sk-or"
+
+
+def test_no_other_preset_sends_the_identifying_headers():
+    for provider_id in providers.PROVIDERS:
+        if provider_id == "openrouter":
+            continue
+        engine = providers.build_engine(provider_id, api_key="k")
+        assert "X-Title" not in engine._client.headers, provider_id
+        assert "X-Title" not in (engine._headers or {}), provider_id
