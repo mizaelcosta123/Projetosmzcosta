@@ -23,7 +23,6 @@ def test_base_url_excludes_the_api_prefix():
     ("provider_id", "endpoint"),
     [
         ("openrouter", "https://openrouter.ai/api/v1"),
-        ("xai", "https://api.x.ai/v1"),
         ("nous", "https://inference-api.nousresearch.com/v1"),
         ("huggingface", "https://router.huggingface.co/v1"),
         ("opencode", "https://opencode.ai/zen/v1"),

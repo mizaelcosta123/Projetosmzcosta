@@ -17,7 +17,7 @@ registries, so this package registers into them and leaves upstream untouched �
 | **Live voice** | Press the bars in the composer, or say his name, and it listens: your speech is transcribed and sent, and he stops mid-sentence when you cut in. A noise only ducks him; words are what interrupt |
 | **Device bridge** | The same tools from a backend that is *not* on the phone: a one-file runner in Termux dials out over a WebSocket and the agent's calls travel down it. Works behind NAT, opens no port, and the phone decides what it will run |
 | **Decision model** | Optional, local: a Jev-style typed classifier (Ollaya) settles the sentences the instant rules only half understood, in milliseconds instead of a chat round trip. Off unless the image is built with it |
-| **Provider presets** | xAI (Grok), OpenRouter, Nous Portal (Hermes), Hugging Face, OpenCode Zen — endpoints pre-filled, you supply only a key. Any other OpenAI-compatible URL still works |
+| **Provider presets** | OpenRouter, Nous Portal (Hermes), Hugging Face, OpenCode Zen — endpoints pre-filled, you supply only a key. Any other OpenAI-compatible URL still works |
 | **Shell** | Inside Termux, OpenJarvis's own `shell_exec` already *is* your phone's shell. From anywhere else, `device_shell` is — over the bridge |
 | **Holograms** | 3D wireframe solids made by voice ("um cubo vermelho à direita") or by the model through the `conjure` tool. On the screen a finger moves, pinches, twists and deletes them |
 | **A synthesizer in the air** | In the camera mode the hand plays a Web Audio synth, airsynth-style: left–right is the note (snapped to a scale), up–down the filter, opening the hand the volume; the second hand is echo and vibrato. The hologram under the hand picks the waveform, and every hologram swells with the sound |
@@ -94,7 +94,6 @@ Endpoints verified against each provider's own docs (2026-09):
 | Preset | Endpoint | Key from |
 |---|---|---|
 | `openrouter` | `https://openrouter.ai/api/v1` | <https://openrouter.ai/keys> |
-| `xai` | `https://api.x.ai/v1` | <https://console.x.ai> — o motor padrão do deploy na nuvem (Grok) |
 | `nous` | `https://inference-api.nousresearch.com/v1` | <https://portal.nousresearch.com> |
 | `huggingface` | `https://router.huggingface.co/v1` | <https://huggingface.co/settings/tokens> (needs the *Providers* permission) |
 | `opencode` | `https://opencode.ai/zen/v1` | <https://opencode.ai/auth> |

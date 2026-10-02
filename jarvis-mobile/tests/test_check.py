@@ -45,7 +45,7 @@ def test_a_missing_key_stops_before_the_other_probes():
 
 def test_the_key_is_never_printed_in_full(reachable, capsys, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", KEY)
-    check.main(["--provider", "openrouter", "--model", "openrouter/auto"])
+    check.main([])
     printed = capsys.readouterr().out
     assert KEY not in printed
     assert "…" in printed
@@ -134,17 +134,8 @@ def test_the_exit_code_reports_failure(monkeypatch):
 
 def test_the_exit_code_reports_success(reachable, monkeypatch, capsys):
     monkeypatch.setenv("OPENROUTER_API_KEY", KEY)
-    assert check.main(["--provider", "openrouter", "--model", "openrouter/auto"]) == 0
-    assert "jarvis serve --engine openrouter" in capsys.readouterr().out
-
-
-def test_a_bare_run_checks_the_engine_the_cloud_runs_on(reachable, monkeypatch, capsys):
-    """deploy/config.toml runs on Grok, so that is what a plain check tests."""
-    monkeypatch.setenv("XAI_API_KEY", "xai-abcdefghijklmnop")
     assert check.main([]) == 0
-    out = capsys.readouterr().out
-    assert "jarvis serve --engine xai --model grok-4.7" in out
-    assert "xai-abcdefghijklmnop" not in out
+    assert "jarvis serve --engine openrouter" in capsys.readouterr().out
 
 
 def test_an_unknown_provider_exits_without_a_traceback(capsys):

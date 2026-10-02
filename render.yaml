@@ -28,13 +28,6 @@ services:
       - key: JARVIS_HOST
         value: "0.0.0.0"
       # sync:false = você digita no painel, nunca fica no repositório.
-      #
-      # O motor: Grok, pela API da xAI (https://api.x.ai/v1). A chave sai de
-      # https://console.x.ai, e a conta precisa ter crédito.
-      - key: XAI_API_KEY
-        sync: false
-      # A alternativa, e a voz: o `speak` usa o openrouter_tts. Sem ela o Grok
-      # conversa igual, só a voz fica com o navegador.
       - key: OPENROUTER_API_KEY
         sync: false
       # Sem esta chave o servidor recusa escutar fora do loopback — o

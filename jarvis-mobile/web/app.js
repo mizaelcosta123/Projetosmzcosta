@@ -40,7 +40,6 @@ import {
   listModels,
   relearn,
   termuxOllama,
-  grok,
 } from './providers.js';
 import {
   PERMISSIONS,
@@ -77,7 +76,6 @@ const el = {
   providerRemove: document.getElementById('provider-remove'),
   providerAdd: document.getElementById('provider-add'),
   providerOllama: document.getElementById('provider-ollama'),
-  providerGrok: document.getElementById('provider-grok'),
   providerStatus: document.getElementById('provider-status'),
   more: document.getElementById('more'),
   moreMenu: document.getElementById('more-menu'),
@@ -2016,9 +2014,9 @@ el.providerAdd.addEventListener('click', () => {
   el.providerUrl.focus();
 });
 
-/** Select a preset, adding it the first time. Returns the entry in use. */
-function usePreset(entry) {
+el.providerOllama.addEventListener('click', () => {
   collectProvider();
+  const entry = termuxOllama();
   const already = settings.providers.find((row) => row.url === entry.url);
   if (already) {
     settings.active = already.id;
@@ -2027,24 +2025,6 @@ function usePreset(entry) {
     settings.active = entry.id;
   }
   renderProviders();
-  return already ?? entry;
-}
-
-el.providerOllama.addEventListener('click', () => {
-  usePreset(termuxOllama());
-  loadModels();
-});
-
-// The address is known; the key is the one thing only its owner has. Without
-// it the models request is a 401 that says nothing new, so ask for the key
-// first and load once there is one.
-el.providerGrok.addEventListener('click', () => {
-  const entry = usePreset(grok());
-  if (!entry.key) {
-    setProviderStatus('Cole a chave do console.x.ai no campo Chave e toque em Testar.');
-    el.providerKey.focus();
-    return;
-  }
   loadModels();
 });
 
