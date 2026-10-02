@@ -1,0 +1,126 @@
+[
+ {
+  "id": "orcamento",
+  "nome": "Orçamento pessoal",
+  "categoria": "financas",
+  "quando": "organizar orçamento, gastos do mês, controle financeiro ou economizar dinheiro",
+  "exemplos": [
+   "me ajuda a organizar meus gastos",
+   "como montar um orçamento",
+   "quero economizar"
+  ],
+  "instrucoes": "Use a regra 50-30-20 como ponto de partida (necessidades, desejos, poupança/dívidas), ajustada à renda real. Peça renda e gastos fixos; monte uma tabela por categoria; aponte os 2-3 maiores cortes possíveis. Sem julgamento."
+ },
+ {
+  "id": "juros",
+  "nome": "Juros e financiamento",
+  "categoria": "financas",
+  "quando": "calcular juros simples, compostos, parcelas, financiamento, Price, SAC ou rendimento",
+  "exemplos": [
+   "quanto rende 1000 reais a 1% ao mês",
+   "calcula a parcela do financiamento",
+   "juros compostos de 12 meses",
+   "quanto rende na poupança",
+   "rendimento da poupança",
+   "quanto rende no cdb"
+  ],
+  "instrucoes": "Mostre a fórmula (juros compostos: M = C·(1+i)^n; parcela Price: P = C·i/(1−(1+i)^−n)), substitua os valores, e dê o resultado arredondado em reais. Compare o total pago com o valor à vista. Converta taxa anual/mensal corretamente."
+ },
+ {
+  "id": "dividas",
+  "nome": "Sair das dívidas",
+  "categoria": "financas",
+  "quando": "sair das dívidas, renegociar, cartão de crédito, cheque especial ou nome sujo",
+  "exemplos": [
+   "estou endividado",
+   "como renegociar dívida",
+   "pagar o cartão de crédito atrasado"
+  ],
+  "instrucoes": "Liste as dívidas por taxa de juros (cartão e cheque especial primeiro). Sugira trocar dívida cara por barata, renegociar (Desenrola, Serasa Limpa Nome, mutirões), e montar reserva mínima. Seja prático e acolhedor; não prometa resultados."
+ },
+ {
+  "id": "investimentos",
+  "nome": "Investimentos básicos",
+  "categoria": "financas",
+  "quando": "começar a investir, reserva de emergência, Tesouro Direto, CDB, poupança ou renda fixa",
+  "exemplos": [
+   "onde investir 500 reais",
+   "tesouro selic ou cdb",
+   "como montar reserva de emergência"
+  ],
+  "instrucoes": "Explique em ordem: reserva de emergência (3-6 meses de gastos, em liquidez diária como Tesouro Selic ou CDB 100% CDI), depois objetivos. Compare rendimento líquido com a poupança. Não recomende ativo específico como certeza; lembre que rentabilidade passada não garante futura."
+ },
+ {
+  "id": "cambio",
+  "nome": "Câmbio e moedas",
+  "categoria": "financas",
+  "quando": "converter moeda, cotação do dólar, euro, real ou criptomoeda",
+  "exemplos": [
+   "quanto está o dólar",
+   "converte 100 euros para reais",
+   "cotação do bitcoin"
+  ],
+  "instrucoes": "Use a API de câmbio (AwesomeAPI ou Frankfurter; CoinGecko para cripto) para o valor atual. Mostre a cotação, a hora e a conversão pedida. Lembre que bancos e casas de câmbio cobram spread e IOF."
+ },
+ {
+  "id": "imposto-renda",
+  "nome": "Imposto de Renda",
+  "categoria": "financas",
+  "quando": "dúvidas sobre Imposto de Renda, declaração, restituição, MEI ou deduções",
+  "exemplos": [
+   "preciso declarar imposto de renda",
+   "o que posso deduzir",
+   "como declarar mei"
+  ],
+  "instrucoes": "Explique as regras gerais (obrigatoriedade, deduções com saúde/educação/dependentes, modelo simplificado × completo) e diga que valores-limite mudam todo ano: confirme no site da Receita Federal. Não substitui contador em casos complexos."
+ },
+ {
+  "id": "precificar",
+  "nome": "Calcular preço de venda",
+  "categoria": "financas",
+  "quando": "calcular preço de venda, margem de lucro, markup ou custo de produto",
+  "exemplos": [
+   "quanto cobrar pelo meu bolo",
+   "calcula a margem de lucro",
+   "preço de venda com markup",
+   "quanto cobrar pelo meu trabalho"
+  ],
+  "instrucoes": "Some custos diretos (insumos), indiretos rateados (gás, luz, embalagem) e mão de obra por hora. Aplique markup ou margem desejada e mostre a diferença entre os dois. Compare com preço de mercado. Entregue uma tabela."
+ },
+ {
+  "id": "aposentadoria",
+  "nome": "Planejar aposentadoria",
+  "categoria": "financas",
+  "quando": "planejar aposentadoria, INSS, previdência privada ou independência financeira",
+  "exemplos": [
+   "quanto juntar para aposentar",
+   "como funciona o inss",
+   "previdência privada vale a pena"
+  ],
+  "instrucoes": "Estime com a regra dos 4% (patrimônio ≈ gasto anual × 25) e mostre quanto aportar por mês com juros compostos reais. Para INSS, explique as regras gerais pós-reforma e indique o Meu INSS para simular. PGBL × VGBL em uma linha cada."
+ },
+ {
+  "id": "compra-grande",
+  "nome": "Vale a pena comprar?",
+  "categoria": "financas",
+  "quando": "decidir compra grande, carro, celular, à vista ou parcelado, alugar ou comprar",
+  "exemplos": [
+   "compro à vista ou parcelado",
+   "vale a pena comprar carro",
+   "alugar ou comprar casa"
+  ],
+  "instrucoes": "Compare o custo total das opções (incluindo o rendimento que o dinheiro teria se aplicado, manutenção, seguro, depreciação). Mostre o número e uma recomendação condicionada à situação da pessoa."
+ },
+ {
+  "id": "pix-golpes",
+  "nome": "Segurança financeira e golpes",
+  "categoria": "financas",
+  "quando": "golpe do Pix, mensagem suspeita, boleto falso, clonagem de WhatsApp ou fraude",
+  "exemplos": [
+   "recebi uma mensagem pedindo pix",
+   "esse boleto é golpe",
+   "clonaram meu whatsapp"
+  ],
+  "instrucoes": "Diga os sinais de golpe presentes, o que fazer agora (não pagar, bloquear, avisar contatos, contestar no banco pelo MED do Pix em até 80 dias, B.O. online) e como prevenir (verificação em duas etapas). Calmo e direto."
+ }
+]

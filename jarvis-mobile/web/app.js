@@ -26,6 +26,9 @@ import { intent as decideIntent } from './systemone.js';
 import { Memory, fold } from './memory.js';
 import { contextFor as placeContext } from './place.js';
 import { applyAll as forgeAll, hasBlock as hasHologram, hideBlocks, roomPrompt, sceneContext } from './forge.js';
+import { Knowledge, learning } from './knowledge.js';
+import { PACKS as SKILL_PACKS, Skills, teachingSkill } from './skills.js';
+import { Apis, asksForCall, resultsMessage } from './apis.js';
 import { notifyReply, registerWorker } from './pwa.js';
 import { download as downloadNote, fromMarkdown, toMarkdown } from './vault.js';
 import { Decider } from './decide.js';
@@ -94,6 +97,21 @@ const el = {
   memoryImport: document.getElementById('memory-import'),
   memoryForget: document.getElementById('memory-forget'),
   memoryFile: document.getElementById('memory-file'),
+  knowledgeState: document.getElementById('knowledge-state'),
+  knowledgeSearch: document.getElementById('knowledge-search'),
+  knowledgeList: document.getElementById('knowledge-list'),
+  knowledgePaste: document.getElementById('knowledge-paste'),
+  knowledgeSave: document.getElementById('knowledge-save'),
+  knowledgeImport: document.getElementById('knowledge-import'),
+  knowledgeFolder: document.getElementById('knowledge-folder'),
+  knowledgeExport: document.getElementById('knowledge-export'),
+  knowledgeForget: document.getElementById('knowledge-forget'),
+  knowledgeFile: document.getElementById('knowledge-file'),
+  knowledgeDir: document.getElementById('knowledge-dir'),
+  skillsState: document.getElementById('skills-state'),
+  skillsImport: document.getElementById('skills-import'),
+  skillsExport: document.getElementById('skills-export'),
+  skillsFile: document.getElementById('skills-file'),
   lens: document.getElementById('lens'),
   lensVideo: document.getElementById('lens-video'),
   lensHands: document.getElementById('lens-hands'),
@@ -281,6 +299,54 @@ function replay(node) {
 /** Episodes, and the attention that finds them again. Opened at load so the
  *  first message of a session already has context behind it. */
 const memory = new Memory().open();
+
+/**
+ * What he can look up and how he does things well: the vault, the skills
+ * catalogue and the free APIs (knowledge.js, skills.js, apis.js). Loaded in
+ * the background -- the first message never waits for them, it just goes
+ * without until they are in.
+ */
+const knowledge = new Knowledge();
+const skills = new Skills();
+let apis = new Apis([]);
+const library = loadLibrary();
+
+async function loadLibrary() {
+  const json = (path) => fetch(path).then((response) => (response.ok ? response.json() : [])).catch(() => []);
+  await Promise.all([knowledge.open(), skills.open()]);
+  const [manual, catalogue, ...packs] = await Promise.all([
+    json('knowledge/jarvis.json'),
+    json('apis.json'),
+    ...SKILL_PACKS.map((name) => json(`skills/${name}.json`)),
+  ]);
+  knowledge.seed(manual.map((doc) => ({ title: doc.titulo, text: doc.texto, source: 'manual do Jarvis' })));
+  for (const pack of packs) skills.add(Array.isArray(pack) ? pack : []);
+  apis = new Apis(Array.isArray(catalogue) ? catalogue : []);
+}
+
+/** The block languages the app acts on, hidden from captions. */
+const ACTED_ON = new Set(['api', 'consulta', 'chamada']);
+const shownText = (text) => hideBlocks(hideBlocks(text), ACTED_ON);
+
+/**
+ * At most this much system context per message, about 2,500 tokens. The
+ * format instructions (voice, holograms) always go; the rest is added in
+ * priority order -- vault, skill, APIs, memory, place -- until it is full,
+ * whole messages at a time.
+ */
+const SYSTEM_BUDGET = 10000;
+
+function withinBudget(required, optional) {
+  const out = [...required];
+  let used = required.reduce((sum, text) => sum + text.length, 0);
+  for (const text of optional) {
+    if (!text) continue;
+    if (used + text.length > SYSTEM_BUDGET) continue;
+    out.push(text);
+    used += text.length;
+  }
+  return out;
+}
 
 /** Which model to send this through, and what it has learned about each.
  *
@@ -787,7 +853,7 @@ async function modelFor(base, headers) {
  * @param {(chunk: string) => void} onChunk Called with each delta.
  * @returns {Promise<string>} The full reply.
  */
-async function streamReply(text, onChunk, { voice: byVoice = false, signal } = {}) {
+async function streamReply(text, onChunk, { voice: byVoice = false, signal, followUp = [] } = {}) {
   const base = serverOf(settings);
   if (!base) throw new Error('Nenhum servidor configurado.');
 
@@ -809,34 +875,38 @@ async function streamReply(text, onChunk, { voice: byVoice = false, signal } = {
   // lines. A context window filled with old chatter is worse than an empty
   // one, because it crowds out the thing actually being asked.
   const recalled = text ? memory.recall(text, { count: 5 }) : [];
-  const messages = [];
-  if (recalled.length) {
-    messages.push({
-      role: 'system',
-      content:
-        'Coisas que esta pessoa já disse ou pediu antes, das mais relevantes ' +
-        'para a mensagem atual. Use se ajudar; ignore se não vier ao caso.\n' +
-        recalled.map(({ row }) => `- (${row.kind}) ${row.text}`).join('\n'),
-    });
-  }
+  const remembered = recalled.length
+    ? 'Coisas que esta pessoa já disse ou pediu antes, das mais relevantes ' +
+      'para a mensagem atual. Use se ajudar; ignore se não vier ao caso.\n' +
+      recalled.map(({ row }) => `- (${row.kind}) ${row.text}`).join('\n')
+    : '';
   // Where you are and the weather there -- only for a question about either,
   // only when location was already granted, and rounded to a kilometre. See
   // place.js for why each of those three is there.
   const situated = text ? await placeContext(text).catch(() => '') : '';
-  if (situated) messages.push({ role: 'system', content: situated });
-  // A spoken turn is answered out loud while it is written, so ask for what
-  // sounds like speech -- and a short first sentence, because that is how
-  // long the silence lasts before he starts.
-  if (byVoice) messages.push({ role: 'system', content: VOICE_PROMPT });
-  // How to build a figure, and what is already built -- only when the room is
-  // part of this: a conversation about the weather should not pay ~500 tokens
-  // for a hologram format it will not use.
+
+  // Format instructions: a spoken turn asks for what sounds like speech, and
+  // the room, when it is involved, needs the hologram format and what is
+  // already built. A conversation about the weather pays for neither.
+  const required = [];
+  if (byVoice) required.push(VOICE_PROMPT);
   if (wantsRoom(text)) {
-    messages.push({ role: 'system', content: roomPrompt() });
+    required.push(roomPrompt());
     const present = sceneContext(scene);
-    if (present) messages.push({ role: 'system', content: present });
+    if (present) required.push(present);
   }
+  // What he can look up and how to do this kind of task, each only when it
+  // matches: most messages get none of the three. A follow-up round already
+  // has its API results and must not be offered the APIs again.
+  const looked = text ? [
+    knowledge.contextFor(text),
+    skills.contextFor(text),
+    followUp.length ? '' : apis.contextFor(text),
+  ] : [];
+  const messages = withinBudget(required, [...looked, remembered, situated])
+    .map((content) => ({ role: 'system', content }));
   messages.push({ role: 'user', content });
+  messages.push(...followUp);
 
   const body = {
     model: await modelFor(base, headers),
@@ -954,6 +1024,28 @@ syncReady();
  */
 function handleHere(text) {
   if (!text) return false;
+
+  // A recipe taught by voice: "aprenda a habilidade: quando eu pedir X, faça Y".
+  const recipe = teachingSkill(text);
+  if (recipe) {
+    skills.learn(recipe).then((skill) => {
+      const said = skill ? `Aprendi a habilidade: ${skill.nome}.` : 'Não consegui entender a habilidade.';
+      setCaption(said);
+      say(said).catch(() => {});
+    });
+    return true;
+  }
+
+  // A fact for the vault: "aprenda isso: …", "guarde que …".
+  const fact = learning(text);
+  if (fact) {
+    knowledge.add(fact, { title: fact.slice(0, 60), source: 'você disse' }).then(({ added }) => {
+      const said = added ? 'Guardado no vault de conhecimento.' : 'Eu já sabia disso.';
+      setCaption(said);
+      say(said).catch(() => {});
+    });
+    return true;
+  }
 
   // Being taught a name. Stored, so it survives the session.
   const taught = teaching(text, { aliases: learnedNames(memory) });
@@ -1139,15 +1231,42 @@ async function ask(text, { byVoice = false } = {}) {
   try {
     let shown = '';
     const sent = attached;
-    const reply = await streamReply(text, (chunk) => {
+    // The vault, the skills and the APIs are loaded in the background; a
+    // message sent in the first second waits for them rather than going
+    // without (they are local files and an IndexedDB read).
+    await Promise.race([library, new Promise((done) => setTimeout(done, 1500))]).catch(() => {});
+    let reply = await streamReply(text, (chunk) => {
       shown += chunk;
-      // The ```holograma block is for the app, not for reading.
-      setCaption(hideBlocks(shown));
+      // The ```holograma and ```api blocks are for the app, not for reading.
+      setCaption(shownText(shown));
       // Out loud as it arrives, a sentence at a time -- not after the model
       // has finished, which on a free model was seconds of silence.
       talk?.push(chunk);
     }, { voice: byVoice, signal: controller.signal });
     clearTimeout(thinking);
+    // The model asked for data instead of guessing: fetch it, and ask again
+    // with the results. One round -- a reply that asks a second time is
+    // answered with what it has.
+    if (asksForCall(reply)) {
+      const results = await apis.run(reply, {
+        onCall: (name) => setCaption(`Consultando ${name}…`),
+      });
+      if (results.length) {
+        shown = '';
+        reply = await streamReply(text, (chunk) => {
+          shown += chunk;
+          setCaption(shownText(shown));
+          talk?.push(chunk);
+        }, {
+          voice: byVoice,
+          signal: controller.signal,
+          followUp: [
+            { role: 'assistant', content: reply },
+            { role: 'user', content: resultsMessage(results) },
+          ],
+        });
+      }
+    }
     // The outcome, filed against whatever was routed to. An empty reply counts
     // as a failure: a model that answers with nothing has not answered.
     if (routedTo) decider.learn(routedTo, { ok: reply.trim().length > 0, ms: performance.now() - began });
@@ -1161,7 +1280,7 @@ async function ask(text, { byVoice = false } = {}) {
     const forged = forgeFrom(reply);
     if (forged) {
       // A reply that was only a block still says what it did.
-      const words = hideBlocks(reply);
+      const words = shownText(reply);
       setCaption(words ? `${words}\n${forged}` : forged);
       if (talk && !words) talk.push(` ${forged}`);
     }
@@ -2429,6 +2548,137 @@ el.memoryForget.addEventListener('click', () => {
   renderMemory(`Esqueci ${gone}.`);
 });
 
+// -- knowledge -----------------------------------------------------------------
+
+const kb = (bytes) => (bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`);
+
+/** Redraw the vault section: counts, then your documents or what a search found. */
+function renderKnowledge(note = '') {
+  const stats = knowledge.stats();
+  const summary = stats.passages
+    ? `${stats.documents} ${stats.documents === 1 ? 'documento' : 'documentos'}, ${stats.passages} ${stats.passages === 1 ? 'trecho' : 'trechos'}, ${kb(stats.bytes)} — mais o manual do Jarvis.`
+    : 'Vazio, fora o manual do Jarvis. Diga "aprenda isso: …" ou importe notas, PDFs convertidos em texto, planilhas .csv ou uma pasta do Obsidian.';
+  el.knowledgeState.textContent = note ? `${note} ${summary}` : summary;
+
+  const query = el.knowledgeSearch.value.trim();
+  const fragment = document.createDocumentFragment();
+  if (query) {
+    const found = knowledge.search(query, { count: 8, floor: 0.1 });
+    for (const { row, score } of found) {
+      const item = document.createElement('li');
+      const text = document.createElement('span');
+      text.textContent = row.text;
+      text.title = row.text;
+      const where = document.createElement('small');
+      where.textContent = `${row.source} · ${Math.round(score * 100)}%`;
+      item.append(text, where);
+      fragment.append(item);
+    }
+    if (!found.length) {
+      const item = document.createElement('li');
+      item.textContent = 'Nada sobre isso no vault.';
+      fragment.append(item);
+    }
+  } else {
+    for (const doc of knowledge.documents().slice(0, 12)) {
+      const item = document.createElement('li');
+      const text = document.createElement('span');
+      text.textContent = doc.title || doc.source;
+      text.title = doc.source;
+      const size = document.createElement('small');
+      size.textContent = `${doc.passages} ${doc.passages === 1 ? 'trecho' : 'trechos'}`;
+      const forget = document.createElement('button');
+      forget.type = 'button';
+      forget.textContent = '×';
+      forget.setAttribute('aria-label', `Esquecer o documento ${doc.title || doc.source}`);
+      forget.addEventListener('click', async () => {
+        await knowledge.forget(doc.doc);
+        renderKnowledge('Documento esquecido.');
+      });
+      item.append(text, size, forget);
+      fragment.append(item);
+    }
+  }
+  el.knowledgeList.replaceChildren(fragment);
+  el.knowledgeExport.disabled = stats.passages === 0;
+  el.knowledgeForget.disabled = stats.passages === 0;
+
+  const counts = skills.stats();
+  el.skillsState.textContent = `${counts.total} habilidades em ${counts.categories} categorias` +
+    (counts.mine ? `, ${counts.mine} ensinadas por você.` : '. Ensine uma: "aprenda a habilidade: quando eu pedir X, faça Y".');
+  el.skillsExport.disabled = counts.mine === 0;
+}
+
+/** Read every chosen file into the vault, one bad file not losing the rest. */
+async function importKnowledge(files) {
+  let added = 0;
+  let read = 0;
+  el.knowledgeState.textContent = `Lendo ${files.length} ${files.length === 1 ? 'arquivo' : 'arquivos'}…`;
+  for (const file of files) {
+    if (!/\.(md|markdown|txt|json|csv|tsv)$/i.test(file.name)) continue;
+    // A note bigger than this is almost certainly not a note.
+    if (file.size > 5 * 1048576) continue;
+    try {
+      const result = await knowledge.importFile(file.webkitRelativePath || file.name, await file.text());
+      added += result.added;
+      read += 1;
+    } catch {
+      /* One unreadable file should not lose the others. */
+    }
+  }
+  renderKnowledge(`${read} ${read === 1 ? 'arquivo lido' : 'arquivos lidos'}, ${added} ${added === 1 ? 'trecho novo' : 'trechos novos'}.`);
+}
+
+el.knowledgeSearch.addEventListener('input', () => renderKnowledge());
+el.knowledgeSave.addEventListener('click', async () => {
+  const text = el.knowledgePaste.value.trim();
+  if (!text) return;
+  const { added } = await knowledge.add(text, { title: text.slice(0, 60), source: 'colado' });
+  el.knowledgePaste.value = '';
+  renderKnowledge(added ? `Guardei ${added} ${added === 1 ? 'trecho' : 'trechos'}.` : 'Isso já estava no vault.');
+});
+el.knowledgeImport.addEventListener('click', () => el.knowledgeFile.click());
+el.knowledgeFolder.addEventListener('click', () => el.knowledgeDir.click());
+for (const input of [el.knowledgeFile, el.knowledgeDir]) {
+  input.addEventListener('change', async () => {
+    const files = [...input.files];
+    input.value = '';
+    await importKnowledge(files);
+  });
+}
+el.knowledgeExport.addEventListener('click', () => {
+  const name = downloadNote(knowledge.toMarkdown(), { name: `jarvis-conhecimento-${new Date().toISOString().slice(0, 10)}.md` });
+  renderKnowledge(`Salvei ${name}. Coloque na pasta do seu vault.`);
+});
+el.knowledgeForget.addEventListener('click', async () => {
+  if (!window.confirm('Esquecer tudo o que você guardou no vault? O manual do Jarvis fica. Não dá para desfazer — exporte antes se quiser guardar.')) return;
+  const gone = await knowledge.clear();
+  renderKnowledge(`Esqueci ${gone} trechos.`);
+});
+el.skillsImport.addEventListener('click', () => el.skillsFile.click());
+el.skillsFile.addEventListener('change', async () => {
+  const files = [...el.skillsFile.files];
+  el.skillsFile.value = '';
+  let taken = 0;
+  for (const file of files) {
+    try {
+      const rows = JSON.parse(await file.text());
+      for (const row of Array.isArray(rows) ? rows : [rows]) if (await skills.learn(row)) taken += 1;
+    } catch {
+      /* Not JSON: skip it, keep the others. */
+    }
+  }
+  renderKnowledge(`${taken} ${taken === 1 ? 'habilidade importada' : 'habilidades importadas'}.`);
+});
+el.skillsExport.addEventListener('click', () => {
+  const blob = new Blob([skills.export()], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'jarvis-habilidades.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+});
+
 /** Open the sheet with everything in it already refreshed. */
 function openSettings() {
   if (el.settings.open) return;
@@ -2442,6 +2692,7 @@ function openSettings() {
   // never told when that happens.
   refreshPerms();
   renderMemory();
+  library.then(() => renderKnowledge()).catch(() => {});
   renderModels();
   el.speak.checked = settings.speak;
   el.wake.checked = settings.wake;

@@ -1,0 +1,93 @@
+[
+ {
+  "id": "receita",
+  "nome": "Receita",
+  "categoria": "culinaria",
+  "quando": "receita de comida, prato, doce, bolo ou como fazer algo na cozinha",
+  "exemplos": [
+   "receita de bolo de cenoura",
+   "como fazer arroz soltinho",
+   "receita de feijoada",
+   "como fazer bolo",
+   "receita de bolo",
+   "como fazer pão",
+   "receita de lasanha"
+  ],
+  "instrucoes": "Formato: rendimento e tempo; ingredientes com medidas caseiras (xícara, colher) e em gramas quando fizer diferença; modo de preparo em passos numerados; uma dica que evita o erro mais comum. Pergunte sobre restrições se a pessoa mencionar."
+ },
+ {
+  "id": "o-que-cozinhar",
+  "nome": "O que cozinhar com o que tenho",
+  "categoria": "culinaria",
+  "quando": "o que fazer com os ingredientes que tenho na geladeira ou despensa",
+  "exemplos": [
+   "tenho ovo, tomate e arroz, o que faço",
+   "o que cozinhar com frango e batata",
+   "ideia de janta com o que tem em casa"
+  ],
+  "instrucoes": "Sugira 3 opções usando só (ou quase só) os ingredientes citados, da mais rápida à mais elaborada. Para a escolhida, dê a receita resumida. Diga o que faltaria comprar, se algo."
+ },
+ {
+  "id": "cardapio-semana",
+  "nome": "Cardápio da semana e lista de compras",
+  "categoria": "culinaria",
+  "quando": "planejar cardápio semanal, marmitas ou lista de compras do mercado",
+  "exemplos": [
+   "cardápio da semana barato",
+   "marmitas para a semana",
+   "lista de compras do mês"
+  ],
+  "instrucoes": "Monte o cardápio em tabela (dias × refeições), reaproveitando ingredientes entre pratos para gastar menos. Gere a lista de compras agrupada por seção do mercado com quantidades. Indique o que dá para congelar."
+ },
+ {
+  "id": "substituicao",
+  "nome": "Substituir ingrediente",
+  "categoria": "culinaria",
+  "quando": "substituir ingrediente, adaptar receita sem glúten, sem lactose, vegana ou sem ovo",
+  "exemplos": [
+   "posso trocar manteiga por óleo",
+   "bolo sem ovo",
+   "receita sem lactose"
+  ],
+  "instrucoes": "Dê a substituição com proporção (ex.: 1 ovo = 1 colher de sopa de linhaça + 3 de água) e o efeito no resultado. Avise quando a troca muda muito a receita."
+ },
+ {
+  "id": "conversao-medidas",
+  "nome": "Converter medidas",
+  "categoria": "culinaria",
+  "quando": "converter medidas de receita, xícara para gramas, temperatura do forno ou porções",
+  "exemplos": [
+   "quantos gramas tem uma xícara de farinha",
+   "350 graus fahrenheit em celsius",
+   "dobrar a receita"
+  ],
+  "instrucoes": "Converta com a tabela padrão (1 xícara de farinha ≈ 120 g; de açúcar ≈ 180 g; de líquido = 240 ml; °C = (°F − 32) × 5/9). Para multiplicar porções, recalcule todos os ingredientes e avise que o tempo de forno pode mudar."
+ },
+ {
+  "id": "conservacao",
+  "nome": "Conservar e congelar alimentos",
+  "categoria": "culinaria",
+  "quando": "guardar, congelar, descongelar alimento, validade ou se ainda dá para comer",
+  "exemplos": [
+   "quanto tempo dura frango na geladeira",
+   "posso congelar feijão",
+   "como descongelar carne"
+  ],
+  "instrucoes": "Dê prazos seguros gerais (geladeira e freezer), o jeito certo de congelar e descongelar (na geladeira, nunca na pia em temperatura ambiente). Na dúvida sobre algo estragado, a regra é descartar."
+ },
+ {
+  "id": "info-nutricional",
+  "nome": "Informação nutricional de produto",
+  "categoria": "culinaria",
+  "quando": "calorias, ingredientes, nutrientes ou informação nutricional de um produto industrializado",
+  "exemplos": [
+   "quantas calorias tem esse biscoito",
+   "informação nutricional do código de barras",
+   "esse produto tem glúten"
+  ],
+  "instrucoes": "Se houver código de barras, use a API Open Food Facts. Mostre por 100 g: calorias, açúcares, gorduras, sódio e alérgenos, e diga que os dados vêm de uma base colaborativa e podem estar incompletos.",
+  "apis": [
+   "alimento"
+  ]
+ }
+]

@@ -1105,6 +1105,8 @@ body[data-mode="lens"][data-tracking] .composer:not(:focus-within) { opacity: 0.
 
 .sheet input[type="url"],
 .sheet input[type="password"],
+.sheet input[type="search"],
+.sheet textarea,
 .sheet input[type="text"] {
   width: 100%;
   margin-bottom: 16px;
@@ -1116,7 +1118,9 @@ body[data-mode="lens"][data-tracking] .composer:not(:focus-within) { opacity: 0.
   border-radius: 12px;
   transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
-.sheet input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(92, 225, 255, 0.15); }
+#skills-state { margin-top: 14px; }
+.sheet textarea { resize: vertical; min-height: 72px; margin: 10px 0 8px; }
+.sheet input:focus-visible, .sheet textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(92, 225, 255, 0.15); }
 
 .sheet label.switch {
   display: flex;

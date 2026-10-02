@@ -1,0 +1,146 @@
+[
+ {
+  "id": "explicar-codigo",
+  "nome": "Explicar código",
+  "categoria": "codigo",
+  "quando": "explicar o que um código, script, função ou trecho de programa faz",
+  "exemplos": [
+   "o que esse código faz",
+   "explica essa função",
+   "me explica esse script python"
+  ],
+  "instrucoes": "Explique em camadas: uma frase com o propósito geral; depois bloco por bloco o que acontece; por fim pontos de atenção (bugs, casos de borda, desempenho). Use a linguagem do código, sem reescrever tudo."
+ },
+ {
+  "id": "depurar",
+  "nome": "Encontrar e corrigir bug",
+  "categoria": "codigo",
+  "quando": "depurar erro, exceção, stack trace, bug ou código que não funciona",
+  "exemplos": [
+   "deu esse erro, o que é",
+   "meu código não funciona",
+   "traceback do python"
+  ],
+  "instrucoes": "Leia a mensagem de erro e diga em uma frase a causa provável. Mostre a correção mínima (só as linhas que mudam) e explique por quê. Se faltar contexto para ter certeza, diga o que verificar primeiro e como (print, log, versão)."
+ },
+ {
+  "id": "regex",
+  "nome": "Expressão regular",
+  "categoria": "codigo",
+  "quando": "criar ou explicar expressão regular, regex ou padrão de busca",
+  "exemplos": [
+   "regex para validar email",
+   "cria uma regex de cpf",
+   "explica essa regex"
+  ],
+  "instrucoes": "Dê a regex, explique cada parte numa lista, e mostre 2 exemplos que casam e 2 que não casam. Avise sobre limitações (ex.: regex de e-mail nunca é perfeita) e diferenças entre linguagens (JS, Python)."
+ },
+ {
+  "id": "script-python",
+  "nome": "Script em Python",
+  "categoria": "codigo",
+  "quando": "escrever script ou programa em Python para automatizar algo",
+  "exemplos": [
+   "faz um script python que renomeia arquivos",
+   "automatizar planilha com python",
+   "python para baixar arquivos"
+  ],
+  "instrucoes": "Escreva código completo e executável, com imports, funções pequenas e comentários curtos. Diga como instalar dependências (pip) e como rodar. Prefira a biblioteca padrão quando der. Trate erros óbvios (arquivo inexistente)."
+ },
+ {
+  "id": "sql",
+  "nome": "Consulta SQL",
+  "categoria": "codigo",
+  "quando": "escrever, otimizar ou explicar consulta SQL ou modelagem de banco de dados",
+  "exemplos": [
+   "consulta sql para somar vendas por mês",
+   "como fazer join",
+   "otimiza essa query"
+  ],
+  "instrucoes": "Escreva a consulta formatada, uma cláusula por linha. Explique joins e agrupamentos usados. Se for otimização, sugira índices e mostre o porquê. Pergunte o banco (PostgreSQL, MySQL, SQLite) se a sintaxe mudar."
+ },
+ {
+  "id": "web-html",
+  "nome": "Página web (HTML/CSS/JS)",
+  "categoria": "codigo",
+  "quando": "criar página web, site simples, HTML, CSS, botão, formulário ou layout",
+  "exemplos": [
+   "faz uma página html",
+   "cria um site simples de portfólio",
+   "um formulário bonito em html"
+  ],
+  "instrucoes": "Entregue um único arquivo HTML completo em bloco ```html (o app mostra a prévia), com CSS e JS embutidos, responsivo e acessível (labels, contraste). Sem bibliotecas externas a menos que pedido."
+ },
+ {
+  "id": "git",
+  "nome": "Git e GitHub",
+  "categoria": "codigo",
+  "quando": "usar git, commit, branch, merge, conflito, GitHub ou desfazer alteração",
+  "exemplos": [
+   "como desfazer o último commit",
+   "resolver conflito de merge",
+   "criar branch no git"
+  ],
+  "instrucoes": "Dê os comandos exatos em ordem, cada um com uma linha do que faz. Avise antes de comandos destrutivos (reset --hard, push --force) e ofereça a alternativa segura (revert, stash)."
+ },
+ {
+  "id": "termux",
+  "nome": "Termux e terminal Android",
+  "categoria": "codigo",
+  "quando": "usar Termux, comandos de terminal no Android, pkg, ollama no celular ou servidor local",
+  "exemplos": [
+   "como instalar ollama no termux",
+   "comandos básicos do termux",
+   "rodar python no android"
+  ],
+  "instrucoes": "Use comandos do Termux (pkg install, termux-setup-storage, termux-wake-lock). Para Ollama: pkg install ollama; ollama serve em uma sessão; ollama pull de um modelo pequeno (1–3B) em outra; no Jarvis use http://127.0.0.1:11434. Avise sobre bateria e memória."
+ },
+ {
+  "id": "planilha-formula",
+  "nome": "Fórmulas de planilha",
+  "categoria": "codigo",
+  "quando": "fórmula de Excel, Google Sheets, PROCV, SOMASE, tabela dinâmica ou planilha",
+  "exemplos": [
+   "fórmula para somar se",
+   "procv no excel",
+   "como fazer tabela dinâmica"
+  ],
+  "instrucoes": "Dê a fórmula pronta em português (Sheets/Excel PT-BR usam ; como separador), explique os argumentos e mostre um exemplo com células. Mencione a versão em inglês se a pessoa usar planilha em inglês."
+ },
+ {
+  "id": "arquitetura",
+  "nome": "Arquitetura e boas práticas",
+  "categoria": "codigo",
+  "quando": "decidir arquitetura, estrutura de projeto, padrões, revisão de código ou boas práticas",
+  "exemplos": [
+   "como estruturar esse projeto",
+   "revisa meu código",
+   "qual banco de dados usar"
+  ],
+  "instrucoes": "Recomende uma opção, com 2-3 razões ligadas ao caso da pessoa, e diga quando a escolha mudaria. Em revisão de código, priorize: bugs, segurança, legibilidade, desempenho — nessa ordem, com exemplos de correção."
+ },
+ {
+  "id": "automacao-android",
+  "nome": "Automação no Android",
+  "categoria": "codigo",
+  "quando": "automatizar tarefas no celular, Tasker, atalhos, scripts no Termux ou rotinas",
+  "exemplos": [
+   "automatizar meu celular",
+   "rotina quando chego em casa",
+   "script no termux que roda sozinho"
+  ],
+  "instrucoes": "Sugira o caminho mais simples primeiro (Rotinas do Google/Modos do Android), depois Tasker ou Termux:API com termux-job-scheduler. Dê o passo a passo e avise sobre permissões e bateria."
+ },
+ {
+  "id": "api-rest",
+  "nome": "Usar uma API REST",
+  "categoria": "codigo",
+  "quando": "chamar API, fazer requisição HTTP, fetch, curl, JSON ou integrar serviço",
+  "exemplos": [
+   "como chamar essa api",
+   "fazer requisição com fetch",
+   "exemplo de curl"
+  ],
+  "instrucoes": "Mostre o exemplo mínimo (curl e fetch/JS ou requests/Python), com cabeçalhos, tratamento de erro e leitura do JSON. Nunca coloque chaves de API no código do front-end: explique variáveis de ambiente."
+ }
+]

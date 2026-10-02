@@ -1,0 +1,122 @@
+[
+ {
+  "id": "planejar-dia",
+  "nome": "Planejar o dia",
+  "categoria": "produtividade",
+  "quando": "organizar o dia, agenda, rotina ou o que fazer hoje",
+  "exemplos": [
+   "organiza meu dia",
+   "tenho muitas coisas para fazer hoje",
+   "monta minha rotina"
+  ],
+  "instrucoes": "Peça (ou use) a lista de tarefas e compromissos. Separe o que tem hora marcada, escolha as 3 prioridades do dia, distribua em blocos de tempo com pausas, e deixe uma folga. Entregue como lista com horários."
+ },
+ {
+  "id": "priorizar",
+  "nome": "Priorizar tarefas",
+  "categoria": "produtividade",
+  "quando": "priorizar tarefas, o que fazer primeiro, matriz de Eisenhower ou excesso de trabalho",
+  "exemplos": [
+   "o que faço primeiro",
+   "estou sobrecarregado",
+   "prioriza essa lista"
+  ],
+  "instrucoes": "Classifique na matriz de Eisenhower (urgente × importante) em uma tabela. Sugira o que fazer, agendar, delegar e eliminar. Termine com a única próxima ação concreta."
+ },
+ {
+  "id": "metas",
+  "nome": "Definir metas",
+  "categoria": "produtividade",
+  "quando": "definir metas, objetivos, resoluções de ano novo ou plano pessoal",
+  "exemplos": [
+   "minhas metas para o ano",
+   "como atingir um objetivo",
+   "quero criar um hábito"
+  ],
+  "instrucoes": "Transforme em metas SMART (específica, mensurável, atingível, relevante, com prazo). Quebre cada uma em marcos mensais e um primeiro passo para hoje. Para hábitos, use gatilho → ação pequena → recompensa."
+ },
+ {
+  "id": "decisao",
+  "nome": "Ajudar a decidir",
+  "categoria": "produtividade",
+  "quando": "tomar decisão, prós e contras, escolher entre opções ou dilema",
+  "exemplos": [
+   "não sei se aceito a proposta",
+   "prós e contras de mudar de cidade",
+   "me ajuda a decidir"
+  ],
+  "instrucoes": "Liste os critérios que importam para a pessoa, compare as opções numa tabela com pesos, e dê uma recomendação clara com a ressalva do que mudaria a decisão. Pergunte o que mais pesa se não estiver claro."
+ },
+ {
+  "id": "pomodoro-foco",
+  "nome": "Foco e procrastinação",
+  "categoria": "produtividade",
+  "quando": "concentrar, parar de procrastinar, técnica Pomodoro ou estudar com foco",
+  "exemplos": [
+   "não consigo me concentrar",
+   "como parar de procrastinar",
+   "técnica pomodoro"
+  ],
+  "instrucoes": "Sugira começar com 25 minutos de foco e 5 de pausa (Pomodoro), a tarefa quebrada no menor passo possível, celular longe, e uma lista para anotar distrações. Proponha começar agora com uma tarefa específica."
+ },
+ {
+  "id": "brainstorm",
+  "nome": "Gerar ideias",
+  "categoria": "produtividade",
+  "quando": "brainstorm, ideias criativas, nome para empresa, presente ou tema",
+  "exemplos": [
+   "ideias de presente para minha mãe",
+   "nome para minha loja",
+   "ideias de conteúdo"
+  ],
+  "instrucoes": "Gere 10 ideias variadas (do óbvio ao ousado), curtas, numeradas. Depois aponte as 2 melhores para o contexto e por quê. Pergunte o que filtrar numa segunda rodada."
+ },
+ {
+  "id": "negociacao",
+  "nome": "Negociar",
+  "categoria": "produtividade",
+  "quando": "negociar salário, preço, aluguel, prazo ou acordo",
+  "exemplos": [
+   "como pedir aumento",
+   "negociar o aluguel",
+   "pedir desconto"
+  ],
+  "instrucoes": "Prepare: objetivo, limite mínimo aceitável e alternativa se não fechar. Sugira abrir com dados (mercado, resultados), um roteiro de fala curto e respostas para as objeções prováveis. Tom colaborativo."
+ },
+ {
+  "id": "checklist",
+  "nome": "Checklist",
+  "categoria": "produtividade",
+  "quando": "criar checklist, lista de verificação ou passo a passo para não esquecer nada",
+  "exemplos": [
+   "checklist de mudança",
+   "lista para abrir uma empresa",
+   "checklist de festa"
+  ],
+  "instrucoes": "Entregue em itens marcáveis (- [ ]) agrupados por fase ou prazo, do primeiro ao último. Destaque os itens que costumam ser esquecidos. Ofereça guardar no vault ('aprenda isso')."
+ },
+ {
+  "id": "apresentacao",
+  "nome": "Apresentação e slides",
+  "categoria": "produtividade",
+  "quando": "montar apresentação, slides, roteiro de fala ou pitch",
+  "exemplos": [
+   "monta uma apresentação sobre",
+   "roteiro de slides",
+   "como apresentar meu projeto"
+  ],
+  "instrucoes": "Proponha a estrutura: título, problema, 3 pontos principais (um por slide, pouco texto), dados/visual, conclusão com chamada para ação. Para cada slide, dê título, 3 tópicos e a fala sugerida."
+ },
+ {
+  "id": "email-triagem",
+  "nome": "Responder mensagens rápido",
+  "categoria": "produtividade",
+  "quando": "responder mensagem, e-mail, WhatsApp difícil ou dizer não com educação",
+  "exemplos": [
+   "como responder essa mensagem",
+   "dizer não sem ser grosso",
+   "responder cliente irritado"
+  ],
+  "instrucoes": "Ofereça uma resposta pronta, curta e cordial; reconheça o ponto da outra pessoa, diga a posição com clareza e proponha um próximo passo. Se for um 'não', ofereça uma alternativa quando houver."
+ }
+]

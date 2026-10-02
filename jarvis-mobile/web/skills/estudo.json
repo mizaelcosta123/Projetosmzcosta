@@ -1,0 +1,148 @@
+[
+ {
+  "id": "explicar-simples",
+  "nome": "Explicar de forma simples",
+  "categoria": "estudo",
+  "quando": "explicar um conceito, assunto ou matéria de forma simples, para leigo ou criança",
+  "exemplos": [
+   "me explica como funciona a inflação",
+   "explica como se eu tivesse 10 anos",
+   "o que é fotossíntese de um jeito simples"
+  ],
+  "instrucoes": "Comece com uma analogia do dia a dia. Depois a explicação em 3 a 5 frases sem jargão (ou com o jargão explicado). Termine com um exemplo concreto e, se couber, uma pergunta curta para verificar se ficou claro."
+ },
+ {
+  "id": "quiz",
+  "nome": "Quiz e perguntas de revisão",
+  "categoria": "estudo",
+  "quando": "fazer quiz, prova, simulado, perguntas de múltipla escolha ou testar conhecimento",
+  "exemplos": [
+   "faz um quiz de história",
+   "me testa sobre biologia",
+   "simulado de matemática"
+  ],
+  "instrucoes": "Faça 5 perguntas por vez, de dificuldade crescente, múltipla escolha com 4 alternativas (A-D). Não dê as respostas junto: espere a pessoa responder, então corrija explicando o porquê de cada uma. Se ela errar, faça uma pergunta parecida depois."
+ },
+ {
+  "id": "flashcards",
+  "nome": "Flashcards",
+  "categoria": "estudo",
+  "quando": "criar flashcards, cartões de memorização ou material para Anki",
+  "exemplos": [
+   "cria flashcards sobre verbos irregulares",
+   "cartões para decorar fórmulas",
+   "flashcards para anki"
+  ],
+  "instrucoes": "Gere cartões no formato 'Frente: … | Verso: …', um por linha, curtos (um fato por cartão). Prefira perguntas ativas a definições. Se pedirem Anki, ofereça em CSV com ponto e vírgula."
+ },
+ {
+  "id": "plano-estudos",
+  "nome": "Plano de estudos",
+  "categoria": "estudo",
+  "quando": "montar cronograma ou plano de estudos para prova, concurso, ENEM ou aprender algo",
+  "exemplos": [
+   "monta um plano de estudo pro enem",
+   "cronograma para concurso em 3 meses",
+   "como estudar inglês sozinho"
+  ],
+  "instrucoes": "Pergunte (ou assuma e diga) o prazo, horas por dia e nível atual. Divida em semanas, com matérias por peso, revisão espaçada (1, 7, 30 dias) e simulados. Inclua descanso. Entregue uma tabela semanal enxuta."
+ },
+ {
+  "id": "matematica",
+  "nome": "Resolver matemática passo a passo",
+  "categoria": "estudo",
+  "quando": "resolver conta, equação, problema de matemática, física ou química passo a passo",
+  "exemplos": [
+   "resolve essa equação",
+   "como calcular a porcentagem",
+   "problema de física de velocidade média"
+  ],
+  "instrucoes": "Resolva passo a passo, numerando os passos, mostrando a fórmula antes de substituir os valores e as unidades em cada etapa. Confira o resultado no fim (substituindo ou estimando). Se houver erro no enunciado, aponte."
+ },
+ {
+  "id": "historia",
+  "nome": "Contexto histórico",
+  "categoria": "estudo",
+  "quando": "explicar fato histórico, época, guerra, personagem ou linha do tempo",
+  "exemplos": [
+   "me fala da revolução francesa",
+   "linha do tempo da segunda guerra",
+   "quem foi dom pedro II"
+  ],
+  "instrucoes": "Situe quando e onde, as causas, os acontecimentos principais em ordem e as consequências. Mencione onde há debate entre historiadores. Se a pessoa pedir data ou número exato e você não tiver certeza, diga e sugira consultar a Wikipédia (API disponível)."
+ },
+ {
+  "id": "tecnica-feynman",
+  "nome": "Aprender de verdade (Feynman)",
+  "categoria": "estudo",
+  "quando": "entender um assunto difícil, aprender rápido ou fixar matéria",
+  "exemplos": [
+   "não estou entendendo derivada",
+   "como aprender mais rápido",
+   "me ajuda a fixar esse conteúdo"
+  ],
+  "instrucoes": "Use a técnica de Feynman: peça para a pessoa explicar com as palavras dela, identifique as lacunas, explique só essas lacunas com exemplo simples, e peça de novo. Seja paciente e encorajador."
+ },
+ {
+  "id": "citacao-abnt",
+  "nome": "Referências e ABNT",
+  "categoria": "estudo",
+  "quando": "formatar referência bibliográfica, citação ou trabalho nas normas da ABNT",
+  "exemplos": [
+   "como citar esse livro na abnt",
+   "formata essa referência",
+   "normas abnt para tcc"
+  ],
+  "instrucoes": "Use a NBR 6023 para referências (SOBRENOME, Nome. Título em destaque. Edição. Local: Editora, ano.) e NBR 10520 para citações (até 3 linhas entre aspas; mais de 3 com recuo de 4 cm, fonte menor). Dê o exemplo já formatado com os dados fornecidos."
+ },
+ {
+  "id": "redacao-tcc",
+  "nome": "Estrutura de trabalho acadêmico",
+  "categoria": "estudo",
+  "quando": "organizar TCC, artigo, monografia, introdução, metodologia ou projeto de pesquisa",
+  "exemplos": [
+   "como estruturar meu tcc",
+   "me ajuda com a metodologia",
+   "escreve a introdução do artigo"
+  ],
+  "instrucoes": "Estrutura: introdução (tema, problema, objetivos, justificativa), referencial teórico, metodologia (tipo de pesquisa, coleta, análise), resultados, discussão, conclusão. Ajude seção por seção, sem inventar fontes: se precisar de citação, indique onde e peça a referência real."
+ },
+ {
+  "id": "mapa-mental",
+  "nome": "Mapa mental e esquema",
+  "categoria": "estudo",
+  "quando": "fazer mapa mental, esquema, resumo visual ou tópicos para estudar",
+  "exemplos": [
+   "faz um mapa mental de",
+   "esquema da matéria",
+   "resumo em tópicos para estudar"
+  ],
+  "instrucoes": "Use uma hierarquia em tópicos indentados (tema central → ramos → detalhes), palavras-chave curtas. Ofereça também em formato Mermaid (mindmap) se a pessoa quiser desenhar."
+ },
+ {
+  "id": "vestibular-dicas",
+  "nome": "Dicas de prova",
+  "categoria": "estudo",
+  "quando": "dicas para prova, concurso, ansiedade na prova ou como resolver questões",
+  "exemplos": [
+   "dicas para a prova amanhã",
+   "como chutar questão",
+   "estou nervoso para o enem"
+  ],
+  "instrucoes": "Dicas práticas: dormir bem, ler o enunciado até o fim, eliminar alternativas, administrar o tempo (pular e voltar), revisar só o essencial na véspera. Acolha a ansiedade com uma técnica de respiração."
+ },
+ {
+  "id": "idiomas",
+  "nome": "Praticar idioma",
+  "categoria": "estudo",
+  "quando": "praticar conversação, gramática ou vocabulário em inglês, espanhol ou outra língua, ou aprender um idioma",
+  "exemplos": [
+   "vamos conversar em inglês",
+   "me corrige em espanhol",
+   "quero praticar francês",
+   "quero aprender inglês",
+   "aprender espanhol sozinho"
+  ],
+  "instrucoes": "Converse na língua-alvo em frases simples do nível da pessoa. Após cada resposta dela, corrija os erros de forma breve (entre parênteses, em português) e continue a conversa com uma pergunta. Introduza 1-2 palavras novas por vez. Para quem está começando, proponha um plano curto diário."
+ }
+]

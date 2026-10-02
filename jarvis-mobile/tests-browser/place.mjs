@@ -89,7 +89,7 @@ console.log('\ncom a localização liberada');
   check('e o Open-Meteo recebeu só dois decimais',
     weatherCalls.every((u) => u.includes('latitude=-23.55&') && u.includes('longitude=-46.63&')), true);
   const joke = await ask('me conta uma piada');
-  check('numa pergunta sobre outra coisa, nada de posição', /latitude/.test(joke), false);
+  check('numa pergunta sobre outra coisa, nada de posição', /latitude -?\d/.test(joke), false);
   const near = await ask('farmácia aqui perto');
   check('"aqui perto" leva a posição', /latitude -23\.55/.test(near), true);
   check('mas não busca o tempo', /Open-Meteo/.test(near), false);
@@ -100,7 +100,7 @@ console.log('\nsem a localização liberada');
 {
   const { browser, ask, weatherCalls } = await session({ granted: false });
   const rain = await ask('vai chover hoje?');
-  check('nenhuma posição saiu', /latitude/.test(rain), false);
+  check('nenhuma posição saiu', /latitude -?\d/.test(rain), false);
   check('o modelo foi avisado para não inventar', /Não invente um lugar/.test(rain), true);
   check('e ninguém perguntou ao Open-Meteo', weatherCalls.length, 0);
   await browser.close();

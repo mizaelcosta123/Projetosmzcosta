@@ -350,6 +350,30 @@
       </menu>
       <input id="memory-file" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" multiple hidden>
 
+      <h2 id="knowledge-heading">Conhecimento</h2>
+      <!-- The vault he looks things up in, and the skills he follows. Kept on
+           this phone; only the passages about a question go to the model. -->
+      <p class="hint" id="knowledge-state" aria-live="polite"></p>
+      <input id="knowledge-search" type="search" placeholder="buscar no vault" aria-label="Buscar no vault"
+             autocapitalize="off" spellcheck="false">
+      <ul id="knowledge-list" class="memory-list" aria-labelledby="knowledge-heading"></ul>
+      <textarea id="knowledge-paste" rows="3" placeholder="Cole um texto para ele guardar" aria-label="Texto para guardar no vault"></textarea>
+      <menu class="row wrap">
+        <button type="button" id="knowledge-save" class="quiet">Guardar texto</button>
+        <button type="button" id="knowledge-import" class="quiet">Importar arquivos</button>
+        <button type="button" id="knowledge-folder" class="quiet">Importar pasta</button>
+        <button type="button" id="knowledge-export" class="quiet">Exportar para o Obsidian</button>
+        <button type="button" id="knowledge-forget" class="quiet danger">Esquecer o vault</button>
+      </menu>
+      <p class="hint" id="skills-state" aria-live="polite"></p>
+      <menu class="row wrap">
+        <button type="button" id="skills-import" class="quiet">Importar habilidades</button>
+        <button type="button" id="skills-export" class="quiet">Exportar as minhas</button>
+      </menu>
+      <input id="knowledge-file" type="file" accept=".md,.markdown,.txt,.json,.csv,.tsv,text/plain,text/markdown,application/json,text/csv" multiple hidden>
+      <input id="knowledge-dir" type="file" webkitdirectory multiple hidden>
+      <input id="skills-file" type="file" accept=".json,application/json" multiple hidden>
+
       <h2 id="effects-heading">Efeitos</h2>
       <!-- The HUD's cost, chosen here: a phone that drops frames with the
            dust on can still have the rings. -->

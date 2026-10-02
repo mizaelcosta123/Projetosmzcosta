@@ -1,0 +1,158 @@
+[
+ {
+  "id": "email-formal",
+  "nome": "E-mail formal",
+  "categoria": "escrita",
+  "quando": "escrever um e-mail profissional, formal ou para empresa, chefe, cliente ou órgão público",
+  "exemplos": [
+   "escreve um email pro meu chefe pedindo folga",
+   "redige um e-mail formal para o RH",
+   "email para cliente cobrando pagamento"
+  ],
+  "instrucoes": "Escreva: linha de Assunto curta e específica; saudação adequada; no primeiro parágrafo o motivo; um pedido claro por e-mail; prazo se houver; despedida cordial e espaço para assinatura. Tom educado e direto, sem rodeios. Se faltar dado essencial (nome, data, valor), deixe entre colchetes [assim] em vez de inventar."
+ },
+ {
+  "id": "email-reclamacao",
+  "nome": "Reclamação e pedido de reembolso",
+  "categoria": "escrita",
+  "quando": "reclamar de produto, serviço, cobrança indevida ou pedir reembolso, troca ou cancelamento",
+  "exemplos": [
+   "quero reclamar de uma cobrança indevida",
+   "escreve uma reclamação pro consumidor.gov",
+   "pedir reembolso de produto com defeito"
+  ],
+  "instrucoes": "Estruture: fatos em ordem (data, número do pedido/protocolo, o que aconteceu), o direito envolvido (no Brasil, cite o Código de Defesa do Consumidor quando couber, ex.: art. 18 para vício do produto, art. 49 para arrependimento em 7 dias em compra online), o pedido exato e um prazo razoável. Firme, sem ofensas. Sugira guardar protocolo e prints."
+ },
+ {
+  "id": "resumo",
+  "nome": "Resumo de texto",
+  "categoria": "escrita",
+  "quando": "resumir, sintetizar ou fazer o resumo de um texto, artigo, livro, vídeo ou reunião",
+  "exemplos": [
+   "resume esse texto",
+   "faz um resumo desse artigo",
+   "me dá os pontos principais"
+  ],
+  "instrucoes": "Comece com uma frase que diga a ideia central. Depois 3 a 7 tópicos com os pontos principais, na ordem de importância. Termine com conclusões ou próximos passos se houver. Não acrescente informação que não está no original; se algo estiver ambíguo, diga."
+ },
+ {
+  "id": "revisao-texto",
+  "nome": "Revisão e correção",
+  "categoria": "escrita",
+  "quando": "revisar, corrigir gramática, ortografia, pontuação ou melhorar a escrita de um texto",
+  "exemplos": [
+   "corrige esse texto",
+   "revisa a gramática",
+   "melhora a redação desse parágrafo"
+  ],
+  "instrucoes": "Devolva primeiro o texto corrigido completo. Depois liste as mudanças mais importantes e o porquê (concordância, crase, vírgula, clareza), em poucas linhas. Preserve a voz e o sentido do autor; não reescreva o que já está bom."
+ },
+ {
+  "id": "reescrever-tom",
+  "nome": "Reescrever em outro tom",
+  "categoria": "escrita",
+  "quando": "reescrever um texto mais formal, mais informal, mais curto, mais educado, mais persuasivo ou mais simples",
+  "exemplos": [
+   "deixa isso mais formal",
+   "reescreve mais curto",
+   "fala isso de um jeito mais educado"
+  ],
+  "instrucoes": "Reescreva mantendo o conteúdo e mudando só o que foi pedido (tom, tamanho, formalidade). Se pedirem 'mais curto', corte pela metade ou mais. Ofereça uma única versão, a melhor; só dê alternativas se pedirem."
+ },
+ {
+  "id": "redacao-enem",
+  "nome": "Redação dissertativa (ENEM)",
+  "categoria": "escrita",
+  "quando": "escrever ou corrigir redação dissertativa-argumentativa, redação do ENEM ou de vestibular",
+  "exemplos": [
+   "me ajuda com a redação do enem",
+   "corrige minha redação",
+   "escreve uma dissertação sobre desigualdade"
+  ],
+  "instrucoes": "Siga a estrutura do ENEM: introdução com tese, dois parágrafos de desenvolvimento com repertório sociocultural legitimado e argumentação, conclusão com proposta de intervenção completa (agente, ação, meio, finalidade, detalhamento). Ao corrigir, avalie pelas 5 competências com nota de 0 a 200 cada e diga o que subir."
+ },
+ {
+  "id": "mensagem-social",
+  "nome": "Mensagem pessoal",
+  "categoria": "escrita",
+  "quando": "escrever mensagem de aniversário, parabéns, condolências, agradecimento, desculpas ou convite",
+  "exemplos": [
+   "mensagem de aniversário pra minha mãe",
+   "escreve um pedido de desculpas",
+   "mensagem de condolências"
+  ],
+  "instrucoes": "Escreva curto, caloroso e específico; evite clichês vazios. Pergunte (ou deixe entre colchetes) um detalhe pessoal que torne a mensagem única. Ajuste o tom: carinho para família, respeito para condolências, leveza para convites."
+ },
+ {
+  "id": "post-redes",
+  "nome": "Post para redes sociais",
+  "categoria": "escrita",
+  "quando": "criar post, legenda, bio ou texto para Instagram, LinkedIn, TikTok, X ou WhatsApp",
+  "exemplos": [
+   "legenda pro instagram",
+   "post pro linkedin sobre minha promoção",
+   "bio para o perfil"
+  ],
+  "instrucoes": "Adapte à rede: Instagram com gancho na primeira linha e hashtags no fim; LinkedIn profissional, parágrafos curtos, uma lição; X até 280 caracteres. Uma chamada para ação no fim. Ofereça 2 opções de gancho."
+ },
+ {
+  "id": "curriculo",
+  "nome": "Currículo e carta de apresentação",
+  "categoria": "escrita",
+  "quando": "fazer ou melhorar currículo, CV, carta de apresentação ou perfil profissional",
+  "exemplos": [
+   "monta meu currículo",
+   "melhora meu cv",
+   "carta de apresentação para vaga"
+  ],
+  "instrucoes": "Currículo: resumo de 2-3 linhas, experiências em ordem inversa com verbos de ação e resultados mensuráveis, formação, habilidades relevantes para a vaga. Uma página se possível. Carta: por que a vaga, o que você entrega, fecho com disponibilidade. Peça a descrição da vaga se não tiver."
+ },
+ {
+  "id": "traducao",
+  "nome": "Tradução",
+  "categoria": "escrita",
+  "quando": "traduzir texto entre português, inglês, espanhol ou outra língua",
+  "exemplos": [
+   "traduz isso pro inglês",
+   "como se diz em espanhol",
+   "tradução para português"
+  ],
+  "instrucoes": "Traduza o sentido, não palavra por palavra, mantendo o tom e o registro. Para expressões idiomáticas, use o equivalente natural e, se útil, explique em uma linha. Se o texto for ambíguo, dê a tradução mais provável e aponte a ambiguidade."
+ },
+ {
+  "id": "ata-reuniao",
+  "nome": "Ata de reunião",
+  "categoria": "escrita",
+  "quando": "fazer ata, registro ou resumo de reunião com decisões e tarefas",
+  "exemplos": [
+   "faz a ata da reunião",
+   "resume a reunião com as tarefas",
+   "organiza essas anotações da reunião"
+  ],
+  "instrucoes": "Formato: data e participantes; pauta; decisões tomadas; tarefas em tabela (o quê, quem, prazo); pendências. Seja objetivo, use o que foi dito, marque [definir] onde faltar responsável ou prazo."
+ },
+ {
+  "id": "historia-criativa",
+  "nome": "Conto e escrita criativa",
+  "categoria": "escrita",
+  "quando": "escrever história, conto, poema, letra de música ou texto criativo",
+  "exemplos": [
+   "escreve um conto de terror",
+   "faz um poema de amor",
+   "letra de música sobre saudade"
+  ],
+  "instrucoes": "Pergunte (ou escolha e diga) tom, tamanho e público. Comece com uma imagem forte, mostre em vez de explicar, e termine com uma virada ou imagem que fique. Para poema, cuide do ritmo; rima só se pedirem."
+ },
+ {
+  "id": "argumentar",
+  "nome": "Texto argumentativo e persuasivo",
+  "categoria": "escrita",
+  "quando": "escrever texto para convencer, argumentar, discurso, pitch ou proposta",
+  "exemplos": [
+   "me ajuda a convencer meu chefe",
+   "escreve um discurso",
+   "pitch para investidor"
+  ],
+  "instrucoes": "Estrutura: gancho, problema, proposta, 2-3 argumentos com evidência, resposta à principal objeção, chamada para ação. Frases curtas. Adapte ao público."
+ }
+]
